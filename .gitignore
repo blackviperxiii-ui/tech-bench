@@ -1,0 +1,10 @@
+*.exe
+*.pdb
+*.user
+bin/
+obj/
+Smoke.exe
+MakeIco.exe
+TechBench.exe
+.vs/
+*.log
