@@ -5,6 +5,7 @@ bin/
 obj/
 Smoke.exe
 MakeIco.exe
+SelfTest.exe
 TechBench.exe
 .vs/
 *.log
