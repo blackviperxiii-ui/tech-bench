@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace J1939Reader
 {
@@ -23,6 +24,12 @@ namespace J1939Reader
         {
             if (d == null || i + 1 >= d.Length) return 0xFFFF;
             return (ushort)(d[i] | (d[i + 1] << 8));
+        }
+
+        public static uint U32(byte[] d, int i)
+        {
+            if (d == null || i + 3 >= d.Length) return 0xFFFFFFFF;
+            return (uint)(d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24));
         }
 
         public static string SpnName(int spn)
@@ -100,11 +107,20 @@ namespace J1939Reader
 
         public static void ParseDm(byte[] d, List<Dtc> list, out bool red, out bool amber)
         {
-            red = false; amber = false;
+            bool protect, mil;
+            ParseDm(d, list, out red, out amber, out protect, out mil);
+        }
+
+        /// <summary>DM1/DM2 byte 0 carries four lamps: MIL 7-6, red stop 5-4, amber 3-2, protect 1-0.</summary>
+        public static void ParseDm(byte[] d, List<Dtc> list, out bool red, out bool amber, out bool protect, out bool mil)
+        {
+            red = false; amber = false; protect = false; mil = false;
             if (d == null || d.Length < 2) return;
             int b0 = d[0];
+            protect = (b0 & 3) == 1;
             amber = ((b0 >> 2) & 3) == 1;
             red = ((b0 >> 4) & 3) == 1;
+            mil = ((b0 >> 6) & 3) == 1;
             for (int i = 2; i + 3 < d.Length; i += 4)
             {
                 if (d[i] == 0xFF && d[i + 1] == 0xFF) continue;
@@ -172,18 +188,40 @@ namespace J1939Reader
             return (raw * 0.05).ToString("0.00") + " L/h";
         }
 
+        /// <summary>PGN 0xFEE5 total engine hours, 0.05 h/bit in bytes 1-4.</summary>
+        public static string Hours(byte[] d)
+        {
+            if (d == null || d.Length < 4) return null;
+            uint raw = U32(d, 0);
+            if (raw >= 0xFAFFFFFF) return null;
+            return (raw * 0.05).ToString("0.0") + " h";
+        }
+
         public static string Ascii(byte[] d)
         {
+            return Ascii(d, false);
+        }
+
+        /// <summary>
+        /// J1939 ASCII strings are '*'-delimited. VIN is one field so the star is noise; component ID
+        /// packs make/model/serial/unit and needs the fields kept apart.
+        /// </summary>
+        public static string Ascii(byte[] d, bool keepFields)
+        {
             if (d == null || d.Length == 0) return "";
-            var chars = new char[d.Length];
-            int n = 0;
+            var sb = new StringBuilder(d.Length + 8);
             for (int i = 0; i < d.Length; i++)
             {
                 byte b = d[i];
-                if (b == 0 || b == 0xFF || b == '*') continue;
-                if (b >= 32 && b < 127) chars[n++] = (char)b;
+                if (b == '*')
+                {
+                    if (keepFields && sb.Length > 0) sb.Append("  ·  ");
+                    continue;
+                }
+                if (b == 0 || b == 0xFF) continue;
+                if (b >= 32 && b < 127) sb.Append((char)b);
             }
-            return new string(chars, 0, n).Trim();
+            return sb.ToString().Trim().Trim('·').Trim();
         }
     }
 }
