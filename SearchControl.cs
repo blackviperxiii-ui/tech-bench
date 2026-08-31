@@ -8,65 +8,114 @@ namespace TechBench
 {
     internal sealed class SearchControl : UserControl
     {
-        readonly KbIndex _kb;
         readonly TextBox _q;
         readonly ComboBox _kind;
         readonly ListBox _list;
         readonly TextBox _detail;
         readonly Label _status;
         readonly Button _open;
+        readonly Timer _debounce = new Timer();
+        KbIndex _kb;
         Hit _sel;
+
+        /// <summary>Currently highlighted entry, so the shell can seed the code editor from it.</summary>
+        public Hit Selected { get { return _sel; } }
 
         public SearchControl(KbIndex kb)
         {
             _kb = kb;
             Dock = DockStyle.Fill;
+            AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
+            Padding = new Padding(8);
 
-            _q = new TextBox { Left = 8, Top = 8, Width = 520, Height = 26, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            _kind = new ComboBox { Left = 536, Top = 8, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            // Docked/flow containers rather than absolute coordinates plus a hand-written Resize
+            // handler: the two used to fight each other, and neither survived DPI scaling.
+            var bar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = true
+            };
+            _q = new TextBox { Width = 420, Margin = new Padding(0, 2, 8, 4) };
+            _kind = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 130,
+                Margin = new Padding(0, 2, 8, 4)
+            };
             foreach (string k in new[] { "ALL", "CODE", "PASSWORD", "MANUAL", "FILTER", "EQUIP" })
                 _kind.Items.Add(k);
             _kind.SelectedIndex = 0;
-            var go = new Button { Left = 684, Top = 7, Width = 80, Height = 28, Text = "Search", Anchor = AnchorStyles.Top | AnchorStyles.Right };
-            _open = new Button { Left = 770, Top = 7, Width = 100, Height = 28, Text = "Open PDF", Enabled = false, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            var go = new Button { Text = "Search", AutoSize = true, Margin = new Padding(0, 1, 8, 4) };
+            _open = new Button { Text = "Open PDF", AutoSize = true, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
+            bar.Controls.Add(_q);
+            bar.Controls.Add(_kind);
+            bar.Controls.Add(go);
+            bar.Controls.Add(_open);
 
-            _status = new Label { Left = 8, Top = 40, Width = 860, Height = 18, ForeColor = Color.DimGray, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            _list = new ListBox { Left = 8, Top = 62, Width = 420, Height = 480, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
+            _status = new Label { Dock = DockStyle.Top, AutoSize = false, Height = 20, ForeColor = Color.DimGray };
+
+            _list = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
             _detail = new TextBox
             {
-                Left = 436, Top = 62, Width = 434, Height = 480,
-                Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true,
-                Font = new Font("Consolas", 9.5f),
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical,
+                ReadOnly = true,
+                MaxLength = 0,
+                Font = new Font("Consolas", 9.5f)
             };
-
-            go.Click += (s, e) => RunSearch();
-            _q.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; RunSearch(); } };
-            _kind.SelectedIndexChanged += (s, e) => RunSearch();
-            _list.SelectedIndexChanged += (s, e) => ShowSel();
-            _list.DoubleClick += (s, e) => OpenSel();
-            _open.Click += (s, e) => OpenSel();
-
-            Controls.AddRange(new Control[] { _q, _kind, go, _open, _status, _list, _detail });
-            _status.Text = kb.Status;
-            Resize += (s, e) =>
+            var split = new SplitContainer
             {
-                _q.Width = Math.Max(200, Width - 400);
-                _kind.Left = _q.Right + 8;
-                go.Left = _kind.Right + 8;
-                _open.Left = go.Right + 8;
-                _list.Height = Math.Max(100, Height - 70);
-                _list.Width = Math.Max(200, (Width - 24) / 2);
-                _detail.Left = _list.Right + 8;
-                _detail.Width = Math.Max(100, Width - _detail.Left - 8);
-                _detail.Height = _list.Height;
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Vertical,
+                SplitterDistance = 420,
+                SplitterWidth = 6
             };
+            split.Panel1.Controls.Add(_list);
+            split.Panel2.Controls.Add(_detail);
+
+            Controls.Add(split);
+            Controls.Add(_status);
+            Controls.Add(bar);
+
+            go.Click += delegate { RunSearch(); };
+            _q.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; RunSearch(); }
+                else if (e.KeyCode == Keys.Down && _list.Items.Count > 0)
+                {
+                    e.SuppressKeyPress = true;
+                    _list.Focus();
+                    if (_list.SelectedIndex < 0) _list.SelectedIndex = 0;
+                }
+            };
+            // Search as you type, but only after a short pause: a tech typing a serial should not
+            // trigger a full scan per keystroke.
+            _debounce.Interval = 220;
+            _debounce.Tick += delegate { _debounce.Stop(); RunSearch(); };
+            _q.TextChanged += delegate { _debounce.Stop(); _debounce.Start(); };
+            _kind.SelectedIndexChanged += delegate { RunSearch(); };
+            _list.SelectedIndexChanged += delegate { ShowSel(); };
+            _list.DoubleClick += delegate { OpenSel(); };
+            _open.Click += delegate { OpenSel(); };
+            Disposed += delegate { _debounce.Dispose(); };
+
+            _status.Text = kb == null ? "" : kb.Status;
+        }
+
+        public void Rebind(KbIndex kb)
+        {
+            _kb = kb;
+            RunSearch();
         }
 
         public void Prefill(string q)
         {
             if (string.IsNullOrWhiteSpace(q)) return;
+            _debounce.Stop();
             _q.Text = q;
             RunSearch();
         }
@@ -79,6 +128,8 @@ namespace TechBench
 
         void RunSearch()
         {
+            _debounce.Stop();
+            if (_kb == null) return;
             string kind = _kind.SelectedItem == null ? "ALL" : _kind.SelectedItem.ToString();
             int total;
             var hits = _kb.Search(_q.Text, kind, KbIndex.MaxResults, out total);
@@ -93,6 +144,7 @@ namespace TechBench
             if (hits.Count > 0) { _list.SelectedIndex = 0; ShowSel(); }
             else
             {
+                _sel = null;
                 _open.Enabled = false;
                 _detail.Text = _kb.All.Count == 0
                     ? "The knowledge base is empty.\r\n\r\nExpected data\\kb.json under:\r\n" + _kb.Root +

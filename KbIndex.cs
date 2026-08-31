@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
@@ -130,9 +131,11 @@ namespace TechBench
             int nMan = Try("usb-manuals.json", delegate { return LoadManuals(ser, Path.Combine(root, "data", "usb-manuals.json")); });
             int nFil = Try("rental-portable-filters-oil.json", delegate { return LoadFilters(ser, Path.Combine(root, "data", "rental-portable-filters-oil.json")); });
             int nEq = Try("rental-equipment-info.json", delegate { return LoadEquipment(ser, Path.Combine(root, "data", "rental-equipment-info.json")); });
+            int nNames = Try("j1939-names.json", delegate { return LoadJ1939Names(ser, Path.Combine(root, "data", "j1939-names.json")); });
 
             Status = string.Format("Codes {0}  ·  Passwords {1}  ·  Manuals {2}  ·  Filters {3}  ·  Equipment {4}",
                 nCode, nPwd, nMan, nFil, nEq);
+            if (nNames > 0) Status += "  ·  J1939 names " + nNames;
             if (All.Count == 0)
                 Status += "  ·  nothing loaded from " + root;
             if (Errors.Count > 0)
@@ -310,6 +313,90 @@ namespace TechBench
                 n++;
             }
             return n;
+        }
+
+        /// <summary>
+        /// Optional data\j1939-names.json extends the built-in SPN/PGN/SA labels, so a new SPN gets a
+        /// name without a rebuild. Keys may be decimal or 0x-prefixed hex.
+        /// </summary>
+        int LoadJ1939Names(JavaScriptSerializer ser, string path)
+        {
+            var rootObj = ReadRoot(ser, path);
+            if (rootObj == null) return 0;
+            Dictionary<int, string> spn = NameMap(Get(rootObj, "spn"));
+            Dictionary<int, string> pgn = NameMap(Get(rootObj, "pgn"));
+            Dictionary<int, string> sa = NameMap(Get(rootObj, "sa"));
+            J1939Reader.Names.Load(spn, pgn, sa);
+            return spn.Count + pgn.Count + sa.Count;
+        }
+
+        static Dictionary<int, string> NameMap(object o)
+        {
+            var map = new Dictionary<int, string>();
+            var d = o as Dictionary<string, object>;
+            if (d == null) return map;
+            foreach (KeyValuePair<string, object> kv in d)
+            {
+                int key;
+                if (!ParseKey(kv.Key, out key)) continue;
+                string v = kv.Value == null ? "" : Convert.ToString(kv.Value).Trim();
+                if (v.Length > 0) map[key] = v;
+            }
+            return map;
+        }
+
+        static bool ParseKey(string s, out int value)
+        {
+            value = 0;
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            s = s.Trim();
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                return int.TryParse(s.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
+            return int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+        }
+
+        /// <summary>
+        /// KB entries that look relevant to a live J1939 fault, so the INLINE 7 tab can show shop
+        /// knowledge next to the built-in CodeBook text.
+        /// </summary>
+        public List<Hit> SpnHits(int spn, int fmi, int max)
+        {
+            var seen = new Dictionary<string, bool>();
+            var hits = new List<Hit>();
+            string spnName = J1939Reader.Names.Spn(spn);
+            string[] queries = spnName.Length > 0
+                ? new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture), spnName }
+                : new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture) };
+            foreach (string q in queries)
+            {
+                int total;
+                foreach (Hit h in Search(q, "ALL", max, out total))
+                {
+                    string key = h.Kind + "\u0001" + h.Title;
+                    if (seen.ContainsKey(key)) continue;
+                    seen[key] = true;
+                    hits.Add(h);
+                    if (hits.Count >= max) return hits;
+                }
+            }
+            return hits;
+        }
+
+        public string SpnText(int spn, int fmi)
+        {
+            List<Hit> hits = SpnHits(spn, fmi, 3);
+            if (hits.Count == 0) return null;
+            var sb = new StringBuilder();
+            foreach (Hit h in hits)
+            {
+                sb.AppendLine("[" + h.Kind + "] " + h.Title);
+                if (h.Subtitle.Trim().Length > 0) sb.AppendLine(h.Subtitle);
+                string body = (h.Body ?? "").Trim();
+                if (body.Length > 900) body = body.Substring(0, 900) + "…";
+                if (body.Length > 0) sb.AppendLine(body);
+                sb.AppendLine();
+            }
+            return sb.ToString();
         }
 
         void Add(Hit h, string key)
