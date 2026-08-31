@@ -77,6 +77,7 @@ namespace J1939Reader
         const int ReconnectEveryMs = 5000;
         const double StaleAfterSeconds = 3.0;
         const int MaxLogQueued = 500;
+        const int DisposeJoinMs = 30000;
 
         readonly Rp1210 _rp = new Rp1210();
         readonly BusMonitor _mon = new BusMonitor();
@@ -133,14 +134,12 @@ namespace J1939Reader
             _thread = null;
             if (t != null)
             {
-                try { t.Join(1500); }
+                try { t.Join(DisposeJoinMs); }
                 catch { }
             }
-            try
-            {
-                if (_rp.IsConnected && _tscRpm > 0) _rp.SendTsc1(0);
-            }
-            catch { }
+            // ResetAll blocks in the native DLL well past 1.5 s. Unload only after the
+            // worker has left those calls; Loop already disconnects and disposes.
+            if (t != null && t.IsAlive) return;
             _rp.Dispose();
         }
 
@@ -210,6 +209,8 @@ namespace J1939Reader
                     _rp.Disconnect();
                 }
             }
+            catch { }
+            try { _rp.Dispose(); }
             catch { }
         }
 
@@ -452,8 +453,19 @@ namespace J1939Reader
             }
             if (!s.Connected)
             {
+                s.Rpm = double.NaN;
+                s.CoolantC = double.NaN;
+                s.OilKpa = double.NaN;
+                s.BatteryV = double.NaN;
+                s.FuelLph = double.NaN;
                 s.DefText = "—";
                 s.OilText = "—";
+                s.Vin = "";
+                s.Sw = "";
+                s.CompId = "";
+                s.Hours = "";
+                s.Red = s.Amber = s.Protect = s.Mil = false;
+                s.HasSpn5246 = s.HasTankFmi9 = s.Has1569 = false;
             }
             return s;
         }
