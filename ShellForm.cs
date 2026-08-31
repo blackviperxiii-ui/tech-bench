@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -13,14 +14,17 @@ namespace TechBench
         readonly Inline7Control _inline;
         readonly SearchControl _search;
         readonly TabControl _tabs;
+        readonly TabPage _pSearch;
+        KbIndex _kb;
 
         public ShellForm(KbIndex kb)
         {
+            _kb = kb;
             Text = "Tech Bench";
-            Width = 1180;
-            Height = 800;
-            MinimumSize = new Size(960, 640);
+            ClientSize = new Size(1180, 800);
+            MinimumSize = new Size(900, 600);
             StartPosition = FormStartPosition.CenterScreen;
+            AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
             string assets = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
             try
@@ -30,29 +34,32 @@ namespace TechBench
             }
             catch { }
 
-            var job = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Color.FromArgb(22, 32, 48) };
-            var l1 = new Label { Text = "Model", ForeColor = Color.WhiteSmoke, Left = 10, Top = 12, Width = 48, AutoSize = false };
-            _model = new TextBox { Left = 58, Top = 9, Width = 180, Height = 24 };
-            var l2 = new Label { Text = "Serial", ForeColor = Color.WhiteSmoke, Left = 250, Top = 12, Width = 48, AutoSize = false };
-            _serial = new TextBox { Left = 298, Top = 9, Width = 260, Height = 24 };
-            var useJob = new Button { Text = "Search this job", Left = 570, Top = 8, Width = 130, Height = 26 };
-            var hint = new Label
+            var job = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.FromArgb(22, 32, 48) };
+            var jobFlow = new FlowLayoutPanel
             {
-                Text = "Service passwords in Search are for trained use. INLINE 7: close USB-Link Explorer first.",
-                ForeColor = Color.Silver, Left = 710, Top = 13, Width = 440, AutoSize = false
+                Dock = DockStyle.Fill,
+                WrapContents = false,
+                Padding = new Padding(10, 9, 10, 6),
+                BackColor = Color.Transparent
             };
-            useJob.Click += (s, e) =>
+            jobFlow.Controls.Add(JobLabel("Model"));
+            _model = new TextBox { Width = 170, Margin = new Padding(0, 0, 12, 0) };
+            jobFlow.Controls.Add(_model);
+            jobFlow.Controls.Add(JobLabel("Serial"));
+            _serial = new TextBox { Width = 230, Margin = new Padding(0, 0, 12, 0) };
+            jobFlow.Controls.Add(_serial);
+            var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
+            jobFlow.Controls.Add(useJob);
+            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
+            jobFlow.Controls.Add(addCode);
+            jobFlow.Controls.Add(new Label
             {
-                string q = (_model.Text + " " + _serial.Text).Trim();
-                _tabs.SelectedIndex = 0;
-                _search.Prefill(q);
-                SyncJob();
-            };
-            // TextChanged, not Leave: saving a session straight after typing the serial used to write the
-            // file without the job tag because focus had never left the box.
-            _model.TextChanged += (s, e) => SyncJob();
-            _serial.TextChanged += (s, e) => SyncJob();
-            job.Controls.AddRange(new Control[] { l1, _model, l2, _serial, useJob, hint });
+                Text = "Service passwords are for trained use. INLINE 7: close USB-Link Explorer first.",
+                ForeColor = Color.Silver,
+                AutoSize = true,
+                Margin = new Padding(0, 4, 0, 0)
+            });
+            job.Controls.Add(jobFlow);
 
             _tabs = new TabControl { Dock = DockStyle.Fill };
             try
@@ -67,41 +74,198 @@ namespace TechBench
                 if (il.Images.Count > 0) _tabs.ImageList = il;
             }
             catch { }
+
             _search = new SearchControl(kb);
             _inline = new Inline7Control();
 
-            var pSearch = new TabPage("Search");
-            pSearch.Controls.Add(_search);
-            if (_tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey("search")) pSearch.ImageKey = "search";
+            _pSearch = new TabPage("Search");
+            _pSearch.Controls.Add(_search);
+            if (HasImage("search")) _pSearch.ImageKey = "search";
             var pInline = new TabPage("INLINE 7");
             pInline.Controls.Add(_inline);
-            if (_tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey("inline")) pInline.ImageKey = "inline";
-            var pMore = new TabPage("More adapters");
-            if (_tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey("app")) pMore.ImageKey = "app";
-            pMore.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("Segoe UI", 12f),
-                Text = "Sullair / IR Xe / other datalinks come later.\r\nThis tab is a placeholder so the app can grow without a rewrite."
-            });
-            _tabs.TabPages.Add(pSearch);
+            if (HasImage("inline")) pInline.ImageKey = "inline";
+            var pAdapters = new TabPage("Adapters");
+            if (HasImage("app")) pAdapters.ImageKey = "app";
+            pAdapters.Controls.Add(BuildAdaptersPanel());
+
+            _tabs.TabPages.Add(_pSearch);
             _tabs.TabPages.Add(pInline);
-            _tabs.TabPages.Add(pMore);
+            _tabs.TabPages.Add(pAdapters);
 
             Controls.Add(_tabs);
             Controls.Add(job);
 
+            useJob.Click += delegate
+            {
+                string q = (_model.Text + " " + _serial.Text).Trim();
+                _tabs.SelectedTab = _pSearch;
+                _search.Prefill(q);
+                SyncJob();
+            };
+            addCode.Click += delegate { AddOrEditCode(); };
+
+            // TextChanged, not Leave: saving a session straight after typing the serial used to write
+            // the file without the job tag because focus had never left the box.
+            _model.TextChanged += delegate { SyncJob(); };
+            _serial.TextChanged += delegate { SyncJob(); };
+
+            // The INLINE 7 tab knows SPNs; the knowledge base knows the shop's own write-ups on them.
+            _inline.OpenInSearch = delegate(string query)
+            {
+                _tabs.SelectedTab = _pSearch;
+                _search.Prefill(query);
+            };
+            _inline.LookupCode = delegate(int spn, int fmi)
+            {
+                return _kb == null ? null : _kb.SpnText(spn, fmi);
+            };
+
             KeyPreview = true;
-            KeyDown += (s, e) =>
+            KeyDown += delegate(object s, KeyEventArgs e)
             {
                 if ((e.Control && e.KeyCode == Keys.F) || e.KeyCode == Keys.F3)
                 {
-                    _tabs.SelectedIndex = 0;
+                    _tabs.SelectedTab = _pSearch;
                     _search.FocusQuery();
                     e.Handled = true;
                 }
+                else if (e.Control && e.KeyCode == Keys.N)
+                {
+                    AddOrEditCode();
+                    e.Handled = true;
+                }
             };
+        }
+
+        static Label JobLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                ForeColor = Color.WhiteSmoke,
+                AutoSize = true,
+                Margin = new Padding(0, 4, 6, 0)
+            };
+        }
+
+        bool HasImage(string key)
+        {
+            return _tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey(key);
+        }
+
+        Control BuildAdaptersPanel()
+        {
+            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12) };
+            var box = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Both,
+                MaxLength = 0,
+                WordWrap = false,
+                Font = new Font("Consolas", 9.5f)
+            };
+            var bar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(0, 0, 0, 8)
+            };
+            var rescan = new Button { Text = "Rescan", AutoSize = true };
+            bar.Controls.Add(rescan);
+            rescan.Click += delegate { box.Text = DescribeAdapters(); };
+            box.Text = DescribeAdapters();
+            host.Controls.Add(box);
+            host.Controls.Add(bar);
+            return host;
+        }
+
+        static string DescribeAdapters()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("RP1210 adapters installed on this PC");
+            sb.AppendLine("(read from " + Path.Combine(Rp1210Api.WindowsDir(), "RP121032.INI") + ")");
+            sb.AppendLine();
+            sb.AppendLine("Process: " + (Rp1210.HostIs32Bit ? "32-bit — correct for RP1210" : "64-bit — RP1210 drivers will NOT load; rebuild with build.bat"));
+            sb.AppendLine();
+            List<Rp1210Api> apis = Rp1210.Adapters();
+            if (apis.Count == 0)
+            {
+                sb.AppendLine("None found.");
+                sb.AppendLine();
+                sb.AppendLine("Install the adapter vendor's RP1210 drivers (for the INLINE 7 that is the");
+                sb.AppendLine("Cummins CIL7 package), then press Rescan.");
+                return sb.ToString();
+            }
+            foreach (Rp1210Api a in apis)
+            {
+                sb.AppendLine(a.Describe());
+                sb.AppendLine();
+            }
+            sb.AppendLine("The INLINE 7 tab connects with whichever adapter is picked in its Adapter box.");
+            sb.AppendLine("Sullair / IR Xe datalinks appear here automatically once their drivers are installed.");
+            return sb.ToString();
+        }
+
+        void AddOrEditCode()
+        {
+            if (_kb == null || string.IsNullOrEmpty(_kb.Root))
+            {
+                MessageBox.Show(this, "No knowledge base folder is configured, so there is nowhere to save.",
+                    "Add code", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var seed = new UserCode();
+            Hit sel = _search.Selected;
+            if (sel != null && sel.Kind == "CODE")
+            {
+                // Pre-fill from the highlighted entry so editing an existing code is one click.
+                foreach (UserCode existing in UserCodes.Load(_kb.Root))
+                {
+                    string title = (existing.Brand + "  " + existing.Code + "  —  " + existing.Title);
+                    if (string.Equals(title, sel.Title, StringComparison.OrdinalIgnoreCase)) { seed = existing; break; }
+                }
+                if (!seed.IsUsable())
+                {
+                    seed.Title = sel.Title;
+                }
+            }
+            using (var dlg = new CodeEditForm(seed))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result == null) return;
+                try
+                {
+                    List<UserCode> all = UserCodes.Upsert(UserCodes.Load(_kb.Root), dlg.Result);
+                    UserCodes.Save(_kb.Root, all);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not write user-codes.json.\n\n" + ex.Message,
+                        "Add code", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                ReloadKb();
+                _tabs.SelectedTab = _pSearch;
+                _search.Prefill((dlg.Result.Code + " " + dlg.Result.Title).Trim());
+            }
+        }
+
+        void ReloadKb()
+        {
+            try
+            {
+                var fresh = new KbIndex();
+                fresh.Load(_kb.Root);
+                _kb = fresh;
+                _search.Rebind(fresh);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Saved, but reloading the index failed.\n\n" + ex.Message,
+                    "Add code", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         void SyncJob()

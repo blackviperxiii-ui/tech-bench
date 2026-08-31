@@ -34,46 +34,7 @@ namespace J1939Reader
 
         public static string SpnName(int spn)
         {
-            switch (spn)
-            {
-                case 91: return "Accelerator pedal";
-                case 94: return "Fuel delivery pressure";
-                case 97: return "Water in fuel";
-                case 98: return "Oil level";
-                case 100: return "Oil pressure";
-                case 102: return "Boost / MAP";
-                case 105: return "Intake manifold temp";
-                case 110: return "Coolant temp";
-                case 157: return "Fuel rail pressure";
-                case 168: return "Battery voltage";
-                case 190: return "Engine speed";
-                case 611: return "System diagnostic";
-                case 629: return "Controller";
-                case 639: return "J1939 network";
-                case 651: return "Injector cylinder 1";
-                case 677: return "Starter motor relay";
-                case 723: return "Camshaft speed/position";
-                case 1079: return "Sensor supply 1";
-                case 1080: return "Sensor supply 2";
-                case 1569: return "Engine protection / DEF empty derate";
-                case 1761: return "DEF tank level";
-                case 2791: return "EGR valve";
-                case 3031: return "DEF tank temp";
-                case 3216: return "AT1 intake NOx";
-                case 3226: return "AT1 outlet NOx";
-                case 3361: return "DEF dosing unit";
-                case 3363: return "DEF tank heater";
-                case 3364: return "DEF tank quality";
-                case 3515: return "DEF line heater";
-                case 3516: return "DEF tank temp";
-                case 4331: return "DEF pressure";
-                case 4334: return "DEF doser pressure";
-                case 5245: return "SCR inducement time";
-                case 5246: return "SCR operator inducement severity";
-                case 5392: return "DEF pump";
-                case 5394: return "DEF pump state";
-                default: return "";
-            }
+            return Names.Spn(spn);
         }
 
         public static string FmiName(int fmi)

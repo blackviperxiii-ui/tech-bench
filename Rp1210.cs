@@ -1,100 +1,189 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace J1939Reader
 {
+    /// <summary>
+    /// RP1210 client. The DLL is resolved and loaded at runtime rather than bound by DllImport so
+    /// that (a) a bench PC without the drivers gets a message instead of a DllNotFoundException, and
+    /// (b) any installed vendor adapter can be selected, not just the one hardcoded Cummins path.
+    /// </summary>
     internal sealed class Rp1210 : IDisposable
     {
-        const string Dll = @"C:\Windows\SysWOW64\CIL7R32.DLL";
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+        delegate short DClientConnect(IntPtr hwnd, short nDeviceId, string proto, int tx, int rx, short pkt);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate short DClientDisconnect(short id);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate short DSendMessage(short id, byte[] m, short n, short notify, short block);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate short DReadMessage(short id, byte[] buf, short n, short block);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate short DSendCommand(short cmd, short id, byte[] d, short n);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+        delegate short DGetErrorMsg(short e, StringBuilder s);
 
-        [DllImport(Dll, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-        static extern short RP1210_ClientConnect(IntPtr hwnd, short nDeviceId, string proto, int tx, int rx, short pkt);
-
-        [DllImport(Dll, CallingConvention = CallingConvention.StdCall)]
-        static extern short RP1210_ClientDisconnect(short id);
-
-        [DllImport(Dll, CallingConvention = CallingConvention.StdCall)]
-        static extern short RP1210_SendMessage(short id, byte[] m, short n, short notify, short block);
-
-        [DllImport(Dll, CallingConvention = CallingConvention.StdCall)]
-        static extern short RP1210_ReadMessage(short id, byte[] buf, short n, short block);
-
-        [DllImport(Dll, CallingConvention = CallingConvention.StdCall)]
-        static extern short RP1210_SendCommand(short cmd, short id, byte[] d, short n);
-
-        [DllImport(Dll, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-        static extern short RP1210_GetErrorMsg(short e, StringBuilder s);
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true, BestFitMapping = false)]
+        static extern IntPtr LoadLibrary(string path);
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true, BestFitMapping = false)]
+        static extern IntPtr GetProcAddress(IntPtr module, string name);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool FreeLibrary(IntPtr module);
 
         public const short CmdFiltersPass = 3;
         public const short CmdProtectAddr = 19;
         const byte OurSa = 0xF9;
 
+        IntPtr _module = IntPtr.Zero;
+        DClientConnect _connect;
+        DClientDisconnect _disconnect;
+        DSendMessage _send;
+        DReadMessage _read;
+        DSendCommand _command;
+        DGetErrorMsg _errMsg;
+
         short _client = -1;
         readonly byte[] _rx = new byte[2048];
+        readonly object _gate = new object();
 
+        public Rp1210Api Api { get; private set; }
         public bool IsConnected { get { return _client >= 0 && _client < 128; } }
+        public bool IsLoaded { get { return _module != IntPtr.Zero; } }
         public string LastError { get; private set; }
         public short DeviceId { get; private set; }
         public string Protocol { get; private set; }
 
-        public static string ErrorText(short code)
+        /// <summary>Adapters this PC actually has installed, INLINE 7 first.</summary>
+        public static List<Rp1210Api> Adapters()
+        {
+            List<Rp1210Api> apis = Rp1210Api.Installed();
+            if (apis.Count == 0)
+            {
+                Rp1210Api legacy = Rp1210Api.LegacyInline7();
+                if (legacy.DllPath.Length > 0) apis.Add(legacy);
+            }
+            apis.Sort(delegate(Rp1210Api a, Rp1210Api b)
+            {
+                int ra = a.LooksLikeInline7() ? 0 : 1;
+                int rb = b.LooksLikeInline7() ? 0 : 1;
+                if (ra != rb) return ra - rb;
+                return string.Compare(a.ToString(), b.ToString(), StringComparison.OrdinalIgnoreCase);
+            });
+            return apis;
+        }
+
+        public static bool HostIs32Bit { get { return IntPtr.Size == 4; } }
+
+        public string ErrorText(short code)
         {
             if (code >= 0 && code < 128) return "OK";
             short e = code < 0 ? (short)(-code) : code;
-            var sb = new StringBuilder(256);
-            try { RP1210_GetErrorMsg(e, sb); } catch { }
-            string m = sb.ToString();
-            return string.IsNullOrWhiteSpace(m) ? ("error " + e) : m + " (" + e + ")";
+            if (_errMsg != null)
+            {
+                var sb = new StringBuilder(256);
+                try
+                {
+                    _errMsg(e, sb);
+                    string m = sb.ToString();
+                    if (!string.IsNullOrWhiteSpace(m)) return m + " (" + e + ")";
+                }
+                catch { }
+            }
+            return "error " + e;
         }
 
-        /// <summary>
-        /// The RP1210 DLL is bound by absolute path, so any P/Invoke throws DllNotFoundException on a
-        /// bench PC without the Cummins drivers. Check before touching the adapter so the app can
-        /// report it instead of dying on the first call.
-        /// </summary>
-        public static bool DriverPresent(out string why)
+        public bool Load(Rp1210Api api, out string why)
         {
+            Unload();
             why = null;
-            if (IntPtr.Size != 4)
+            if (api == null) { why = "No RP1210 adapter selected."; return false; }
+            if (!HostIs32Bit)
             {
-                why = "This build is 64-bit. The INLINE 7 RP1210 driver is 32-bit only — rebuild with /platform:x86 (build.bat already does).";
+                why = "This build is 64-bit. RP1210 drivers are 32-bit only — rebuild with /platform:x86 (build.bat already does).";
                 return false;
             }
-            bool exists;
-            try { exists = File.Exists(Dll); }
-            catch { exists = false; }
-            if (!exists)
+            string dll = api.DllPath;
+            if (string.IsNullOrEmpty(dll) || !SafeExists(dll))
             {
-                why = "RP1210 driver not found at " + Dll + ".\n\nInstall the Cummins INLINE 7 (CIL7) drivers on this PC, then try again.";
+                why = "Driver DLL for " + api.Id + " not found.\n\nLooked in " +
+                      string.Join(", ", Rp1210Api.DllSearchDirs().ToArray()) +
+                      ".\n\nInstall the adapter's RP1210 drivers on this PC.";
                 return false;
             }
+            IntPtr h = LoadLibrary(dll);
+            if (h == IntPtr.Zero)
+            {
+                why = "Windows could not load " + dll + " (error " + Marshal.GetLastWin32Error() +
+                      "). Its own dependencies may be missing — reinstall the adapter drivers.";
+                return false;
+            }
+            _module = h;
+            _connect = (DClientConnect)Bind("RP1210_ClientConnect", typeof(DClientConnect));
+            _disconnect = (DClientDisconnect)Bind("RP1210_ClientDisconnect", typeof(DClientDisconnect));
+            _send = (DSendMessage)Bind("RP1210_SendMessage", typeof(DSendMessage));
+            _read = (DReadMessage)Bind("RP1210_ReadMessage", typeof(DReadMessage));
+            _command = (DSendCommand)Bind("RP1210_SendCommand", typeof(DSendCommand));
+            _errMsg = (DGetErrorMsg)Bind("RP1210_GetErrorMsg", typeof(DGetErrorMsg));
+            if (_connect == null || _disconnect == null || _send == null || _read == null)
+            {
+                why = dll + " loaded but is missing the RP1210 entry points. It may not be an RP1210 driver.";
+                Unload();
+                return false;
+            }
+            Api = api;
             return true;
         }
 
-        public bool Connect()
+        static bool SafeExists(string path)
+        {
+            try { return File.Exists(path); }
+            catch { return false; }
+        }
+
+        Delegate Bind(string name, Type type)
+        {
+            IntPtr p = GetProcAddress(_module, name);
+            if (p == IntPtr.Zero) return null;
+            try { return Marshal.GetDelegateForFunctionPointer(p, type); }
+            catch { return null; }
+        }
+
+        void Unload()
+        {
+            _connect = null; _disconnect = null; _send = null;
+            _read = null; _command = null; _errMsg = null;
+            if (_module != IntPtr.Zero)
+            {
+                try { FreeLibrary(_module); } catch { }
+                _module = IntPtr.Zero;
+            }
+        }
+
+        public bool Connect(Rp1210Api api)
         {
             Disconnect();
             string why;
-            if (!DriverPresent(out why)) { LastError = why; return false; }
-            // Device 2 (BT/virtual) worked with Explorer still running; 1 is USB INLINE 7
-            short[] devices = { 2, 1, 111 };
-            string[] protos = { "J1939:Baud=250", "J1939" };
+            if (api != Api || !IsLoaded)
+            {
+                if (!Load(api, out why)) { LastError = why; return false; }
+            }
             var fails = new StringBuilder();
             try
             {
-                foreach (short dev in devices)
+                foreach (int dev in Api.DeviceIds())
                 {
-                    foreach (string proto in protos)
+                    foreach (string proto in Api.J1939Protocols)
                     {
-                        short id = RP1210_ClientConnect(IntPtr.Zero, dev, proto, 0, 0, 0);
+                        short id = _connect(IntPtr.Zero, (short)dev, proto, 0, 0, 0);
                         if (id >= 0 && id < 128)
                         {
                             _client = id;
-                            DeviceId = dev;
+                            DeviceId = (short)dev;
                             Protocol = proto;
-                            RP1210_SendCommand(CmdFiltersPass, _client, null, 0);
+                            SafeCommand(CmdFiltersPass, null, 0);
                             ClaimToolAddress();
                             LastError = null;
                             return true;
@@ -108,20 +197,31 @@ namespace J1939Reader
                 LastError = "RP1210 driver call failed: " + ex.Message;
                 return false;
             }
-            LastError = fails.ToString();
+            LastError = fails.Length > 0 ? fails.ToString() : "No device on this adapter accepted a J1939 connection.";
             return false;
         }
 
         public void Disconnect()
         {
-            if (IsConnected)
+            if (IsConnected && _disconnect != null)
             {
-                try { RP1210_ClientDisconnect(_client); } catch { }
+                try { _disconnect(_client); } catch { }
             }
             _client = -1;
         }
 
-        public void Dispose() { Disconnect(); }
+        public void Dispose()
+        {
+            Disconnect();
+            Unload();
+        }
+
+        void SafeCommand(short cmd, byte[] data, short len)
+        {
+            if (_command == null) return;
+            try { _command(cmd, _client, data, len); }
+            catch (Exception ex) { LastError = "command " + cmd + " failed: " + ex.Message; }
+        }
 
         public bool SendJ1939(int pgn, byte dest, byte[] data)
         {
@@ -130,7 +230,7 @@ namespace J1939Reader
 
         public bool SendJ1939(int pgn, byte dest, byte[] data, byte priority)
         {
-            if (!IsConnected) return false;
+            if (!IsConnected || _send == null) return false;
             int dlen = data == null ? 0 : data.Length;
             byte[] m = new byte[6 + dlen];
             m[0] = (byte)(pgn & 0xFF);
@@ -141,7 +241,7 @@ namespace J1939Reader
             m[5] = dest;
             if (dlen > 0) Buffer.BlockCopy(data, 0, m, 6, dlen);
             short rc;
-            try { rc = RP1210_SendMessage(_client, m, (short)m.Length, 0, 1); }
+            try { rc = _send(_client, m, (short)m.Length, 0, 1); }
             catch (Exception ex) { LastError = "send failed: " + ex.Message; return false; }
             if (rc != 0) { LastError = ErrorText(rc); return false; }
             return true;
@@ -178,8 +278,7 @@ namespace J1939Reader
             cmd[0] = OurSa;
             Buffer.BlockCopy(ToolName, 0, cmd, 1, 8);
             cmd[9] = 0;
-            try { RP1210_SendCommand(CmdProtectAddr, _client, cmd, 10); }
-            catch (Exception ex) { LastError = "address claim failed: " + ex.Message; }
+            SafeCommand(CmdProtectAddr, cmd, 10);
             SendJ1939(0xEE00, 255, ToolName, 6);
         }
 
@@ -192,7 +291,8 @@ namespace J1939Reader
         }
 
         /// <summary>
-        /// Full J1939 DM11/DM3 plus best-effort UDS 0x14. Active faults whose condition is still true will come back immediately.
+        /// Full J1939 DM11/DM3 plus best-effort UDS 0x14. Active faults whose condition is still true
+        /// will come back immediately. Blocking — call from the bus worker, never the UI thread.
         /// </summary>
         public string ResetAllFaults()
         {
@@ -234,29 +334,66 @@ namespace J1939Reader
 
         string TryUdsClearCore()
         {
-            // ISO 15765-2 / UDS service 0x14 ClearDiagnosticInformation (all groups)
-            short[] devices = { DeviceId, 2, 1, 141 };
-            string[] protos = { "ISO15765:Baud=250", "ISO15765:Baud=250,Target=Cummins", "ISO15765" };
+            if (_connect == null) return "";
+            // Opening a second client while the J1939 session is live is what many adapters refuse,
+            // so skip it unless the vendor INI actually advertises ISO15765.
+            if (Api != null && !Api.SupportsIso15765)
+                return "UDS 0x14 skipped (" + Api.Id + " does not advertise ISO15765) — J1939 clear still sent.";
+
+            // ISO 15765-2 / UDS service 0x14 ClearDiagnosticInformation (all groups). The J1939
+            // session is closed first: holding two clients on one device is what upsets the adapter.
+            short savedClient = _client;
+            short savedDevice = DeviceId;
+            string savedProto = Protocol;
+            _client = -1;
+            if (savedClient >= 0 && _disconnect != null)
+            {
+                try { _disconnect(savedClient); } catch { }
+            }
+
+            string result;
             short iso = -1;
             string used = null;
-            foreach (short dev in devices)
+            try
             {
+                string[] protos = { "ISO15765:Baud=250", "ISO15765" };
                 foreach (string proto in protos)
                 {
-                    short id = RP1210_ClientConnect(IntPtr.Zero, dev, proto, 0, 0, 0);
-                    if (id >= 0 && id < 128)
-                    {
-                        iso = id;
-                        used = "dev " + dev + " " + proto;
-                        break;
-                    }
+                    short id = _connect(IntPtr.Zero, savedDevice, proto, 0, 0, 0);
+                    if (id >= 0 && id < 128) { iso = id; used = "dev " + savedDevice + " " + proto; break; }
                 }
-                if (iso >= 0) break;
+                if (iso < 0)
+                {
+                    result = "UDS 0x14 not sent (ISO15765 did not open on this adapter — J1939 clear still sent).";
+                }
+                else
+                {
+                    if (_command != null) { try { _command(CmdFiltersPass, iso, null, 0); } catch { } }
+                    SendUdsClear(iso);
+                    System.Threading.Thread.Sleep(250);
+                    try { _disconnect(iso); } catch { }
+                    result = "Also sent UDS ClearDiagnosticInformation (0x14) on ISO15765 (" + used + ").";
+                }
             }
-            if (iso < 0 || iso >= 128)
-                return "UDS 0x14 not sent (ISO15765 did not open on this adapter — J1939 clear still sent).";
+            finally
+            {
+                // Always put the J1939 session back, successful UDS or not.
+                short re = _connect(IntPtr.Zero, savedDevice, savedProto, 0, 0, 0);
+                if (re >= 0 && re < 128)
+                {
+                    _client = re;
+                    SafeCommand(CmdFiltersPass, null, 0);
+                    ClaimToolAddress();
+                }
+            }
+            if (!IsConnected)
+                result += " NOTE: the J1939 session did not come back — press Connect again.";
+            return result;
+        }
 
-            RP1210_SendCommand(CmdFiltersPass, iso, null, 0);
+        void SendUdsClear(short iso)
+        {
+            if (_send == null) return;
             // Physical request to ECM 0 from tool F9, and functional 0x33
             uint[] ids = { 0x18DA00F9, 0x18DB33F9 };
             foreach (uint canId in ids)
@@ -272,18 +409,15 @@ namespace J1939Reader
                 msg[7] = 0xFF;
                 msg[8] = 0xFF;
                 msg[9] = 0xFF;
-                RP1210_SendMessage(iso, msg, 10, 0, 1);
+                try { _send(iso, msg, 10, 0, 1); } catch { }
                 // also PCI single-frame form
                 msg[6] = 0x04;
                 msg[7] = 0x14;
                 msg[8] = 0xFF;
                 msg[9] = 0xFF;
                 msg[10] = 0xFF;
-                RP1210_SendMessage(iso, msg, 11, 0, 1);
+                try { _send(iso, msg, 11, 0, 1); } catch { }
             }
-            System.Threading.Thread.Sleep(250);
-            try { RP1210_ClientDisconnect(iso); } catch { }
-            return "Also sent UDS ClearDiagnosticInformation (0x14) on ISO15765 (" + used + ").";
         }
 
         public bool RequestPgn(int pgn, byte dest)
@@ -299,19 +433,22 @@ namespace J1939Reader
         public bool Read(out J1939Frame frame)
         {
             frame = null;
-            if (!IsConnected) return false;
+            if (!IsConnected || _read == null) return false;
             short r;
-            try { r = RP1210_ReadMessage(_client, _rx, (short)_rx.Length, 0); }
-            catch (Exception ex) { LastError = "read failed: " + ex.Message; return false; }
-            if (r < 0) { LastError = ErrorText(r); return false; }
-            if (r < 10) return false;
-            int pgn = _rx[4] | (_rx[5] << 8) | (_rx[6] << 16);
-            int sa = _rx[8];
-            int da = _rx[9];
-            int dlen = r - 10;
-            byte[] data = new byte[dlen];
-            if (dlen > 0) Buffer.BlockCopy(_rx, 10, data, 0, dlen);
-            frame = new J1939Frame { Pgn = pgn & 0x3FFFF, Sa = sa, Da = da, Data = data };
+            lock (_gate)
+            {
+                try { r = _read(_client, _rx, (short)_rx.Length, 0); }
+                catch (Exception ex) { LastError = "read failed: " + ex.Message; return false; }
+                if (r < 0) { LastError = ErrorText(r); return false; }
+                if (r < 10) return false;
+                int pgn = _rx[4] | (_rx[5] << 8) | (_rx[6] << 16);
+                int sa = _rx[8];
+                int da = _rx[9];
+                int dlen = r - 10;
+                byte[] data = new byte[dlen];
+                if (dlen > 0) Buffer.BlockCopy(_rx, 10, data, 0, dlen);
+                frame = new J1939Frame { Pgn = pgn & 0x3FFFF, Sa = sa, Da = da, Data = data };
+            }
             return true;
         }
     }
