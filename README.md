@@ -22,10 +22,25 @@ build.bat
 
 That produces `TechBench.exe`. Desktop shortcut can point at it.
 
+## Test
+
+```bat
+test.bat
+```
+
+Offline checks for J1939 decoding, BAM reassembly, and KB load/search. No adapter or knowledge base needed — it builds its own sample data in `%TEMP%`.
+
 ## Knowledge base
 
-Expected at `C:\Users\<you>\Documents\air-compressor-kb` (or OneDrive Documents).  
+Expected at `Documents\air-compressor-kb` (OneDrive Documents also works).  
 The app looks for `data\kb.json` and the rest of that tree. It never copies the KB into this repo.
+
+If it lives somewhere else, point at it either way:
+
+- `kb-path.txt` next to `TechBench.exe`, one path per line (`#` comments allowed)
+- a `TECHBENCH_KB` environment variable
+
+A malformed file in `data\` only costs that section — the status line under the search box names the file that failed.
 
 ## INLINE 7
 

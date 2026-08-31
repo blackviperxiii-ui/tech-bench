@@ -48,8 +48,10 @@ namespace TechBench
                 _search.Prefill(q);
                 SyncJob();
             };
-            _model.Leave += (s, e) => SyncJob();
-            _serial.Leave += (s, e) => SyncJob();
+            // TextChanged, not Leave: saving a session straight after typing the serial used to write the
+            // file without the job tag because focus had never left the box.
+            _model.TextChanged += (s, e) => SyncJob();
+            _serial.TextChanged += (s, e) => SyncJob();
             job.Controls.AddRange(new Control[] { l1, _model, l2, _serial, useJob, hint });
 
             _tabs = new TabControl { Dock = DockStyle.Fill };
@@ -89,6 +91,17 @@ namespace TechBench
 
             Controls.Add(_tabs);
             Controls.Add(job);
+
+            KeyPreview = true;
+            KeyDown += (s, e) =>
+            {
+                if ((e.Control && e.KeyCode == Keys.F) || e.KeyCode == Keys.F3)
+                {
+                    _tabs.SelectedIndex = 0;
+                    _search.FocusQuery();
+                    e.Handled = true;
+                }
+            };
         }
 
         void SyncJob()

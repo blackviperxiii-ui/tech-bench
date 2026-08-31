@@ -71,30 +71,70 @@ namespace TechBench
             RunSearch();
         }
 
+        public void FocusQuery()
+        {
+            _q.Focus();
+            _q.SelectAll();
+        }
+
         void RunSearch()
         {
             string kind = _kind.SelectedItem == null ? "ALL" : _kind.SelectedItem.ToString();
-            var hits = _kb.Search(_q.Text, kind);
+            int total;
+            var hits = _kb.Search(_q.Text, kind, KbIndex.MaxResults, out total);
             _list.BeginUpdate();
             _list.Items.Clear();
             foreach (Hit h in hits) _list.Items.Add(h);
             _list.EndUpdate();
-            _status.Text = hits.Count + " hits  ·  " + _kb.Status;
+            string count = total > hits.Count
+                ? total + " hits (showing best " + hits.Count + ")"
+                : total + " hits";
+            _status.Text = count + "  ·  " + _kb.Status;
             if (hits.Count > 0) { _list.SelectedIndex = 0; ShowSel(); }
-            else { _detail.Text = "No hits."; _open.Enabled = false; }
+            else
+            {
+                _open.Enabled = false;
+                _detail.Text = _kb.All.Count == 0
+                    ? "The knowledge base is empty.\r\n\r\nExpected data\\kb.json under:\r\n" + _kb.Root +
+                      "\r\n\r\nPoint at it with a kb-path.txt next to TechBench.exe or the TECHBENCH_KB environment variable."
+                    : "No hits.";
+            }
         }
 
         void ShowSel()
         {
             _sel = _list.SelectedItem as Hit;
             if (_sel == null) { _detail.Text = ""; _open.Enabled = false; return; }
-            _detail.Text = _sel.Title + "\r\n" + _sel.Subtitle + "\r\n\r\n" + _sel.Body;
-            _open.Enabled = _sel.Kind == "MANUAL" && !string.IsNullOrEmpty(_sel.Path) && File.Exists(_sel.Path);
+            string extra = "";
+            bool canOpen = false;
+            if (_sel.Kind == "MANUAL")
+            {
+                if (string.IsNullOrEmpty(_sel.Path))
+                    extra = "\r\n\r\n(No file path recorded for this document.)";
+                else if (Exists(_sel.Path))
+                    canOpen = true;
+                else
+                    extra = "\r\n\r\n(File not reachable right now — is the USB drive plugged in?)";
+            }
+            _detail.Text = _sel.Title + "\r\n" + _sel.Subtitle + "\r\n\r\n" + _sel.Body + extra;
+            _open.Enabled = canOpen;
+        }
+
+        static bool Exists(string path)
+        {
+            try { return File.Exists(path); }
+            catch { return false; }
         }
 
         void OpenSel()
         {
-            if (_sel == null || string.IsNullOrEmpty(_sel.Path) || !File.Exists(_sel.Path)) return;
+            if (_sel == null || string.IsNullOrEmpty(_sel.Path)) return;
+            if (!Exists(_sel.Path))
+            {
+                MessageBox.Show(this, "Cannot reach:\n" + _sel.Path + "\n\nCheck that the USB drive or network share is connected.",
+                    "Open PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             try { Process.Start(_sel.Path); }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open PDF"); }
         }

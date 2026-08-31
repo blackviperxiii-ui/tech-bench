@@ -78,6 +78,7 @@ namespace J1939Reader
                 case 0xFECC: return "DM3 clear previous";
                 case 0xFED3: return "DM11 clear active";
                 case 0xFEDA: return "Software ID";
+                case 0xFEE5: return "Engine hours";
                 case 0xFEEB: return "Component ID";
                 case 0xFEEC: return "VIN";
                 case 0xFEED: return "Reference weight";
@@ -96,11 +97,36 @@ namespace J1939Reader
 
     internal static class SessionIo
     {
+        static string _folder;
+
+        /// <summary>
+        /// Desktop first because that is where a tech will look, but a redirected or read-only Desktop
+        /// must not take the Save button down with it.
+        /// </summary>
         public static string Folder()
         {
-            string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "TechBench-sessions");
-            Directory.CreateDirectory(d);
-            return d;
+            if (_folder != null) return _folder;
+            Environment.SpecialFolder[] bases =
+            {
+                Environment.SpecialFolder.DesktopDirectory,
+                Environment.SpecialFolder.MyDocuments,
+                Environment.SpecialFolder.LocalApplicationData
+            };
+            foreach (Environment.SpecialFolder b in bases)
+            {
+                try
+                {
+                    string root = Environment.GetFolderPath(b);
+                    if (string.IsNullOrEmpty(root)) continue;
+                    string d = Path.Combine(root, "TechBench-sessions");
+                    Directory.CreateDirectory(d);
+                    _folder = d;
+                    return d;
+                }
+                catch { }
+            }
+            _folder = Path.GetTempPath();
+            return _folder;
         }
 
         public static string Stamp()
@@ -108,23 +134,31 @@ namespace J1939Reader
             return DateTime.Now.ToString("yyyyMMdd_HHmmss");
         }
 
-        public static string SaveTextCsv(string body, string csv, string jobTag)
+        public static string BaseName(string jobTag)
+        {
+            string baseName = "session_" + Stamp();
+            if (string.IsNullOrWhiteSpace(jobTag)) return baseName;
+            var sb = new StringBuilder();
+            foreach (char c in jobTag.Trim())
+                sb.Append(char.IsLetterOrDigit(c) ? c : '_');
+            string tag = sb.ToString().Trim('_');
+            if (tag.Length > 40) tag = tag.Substring(0, 40);
+            return tag.Length > 0 ? tag + "_" + baseName : baseName;
+        }
+
+        /// <summary>
+        /// Readings and DTCs go to separate CSVs. One file with two different column layouts is not a
+        /// CSV any spreadsheet can open.
+        /// </summary>
+        public static string SaveSession(string body, string readingsCsv, string dtcCsv, string jobTag)
         {
             string dir = Folder();
-            string baseName = "session_" + Stamp();
-            if (!string.IsNullOrWhiteSpace(jobTag))
-            {
-                var sb = new StringBuilder();
-                foreach (char c in jobTag.Trim())
-                    sb.Append(char.IsLetterOrDigit(c) ? c : '_');
-                string tag = sb.ToString().Trim('_');
-                if (tag.Length > 40) tag = tag.Substring(0, 40);
-                if (tag.Length > 0) baseName = tag + "_" + baseName;
-            }
+            string baseName = BaseName(jobTag);
             string txt = Path.Combine(dir, baseName + ".txt");
-            string csvPath = Path.Combine(dir, baseName + ".csv");
             File.WriteAllText(txt, body, Encoding.UTF8);
-            File.WriteAllText(csvPath, csv, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(dir, baseName + "_readings.csv"), readingsCsv, Encoding.UTF8);
+            if (!string.IsNullOrEmpty(dtcCsv))
+                File.WriteAllText(Path.Combine(dir, baseName + "_dtcs.csv"), dtcCsv, Encoding.UTF8);
             return txt;
         }
 
@@ -138,6 +172,21 @@ namespace J1939Reader
                 bmp.Save(path, ImageFormat.Png);
             }
             return path;
+        }
+
+        public static string LogError(string where, Exception ex)
+        {
+            try
+            {
+                string path = Path.Combine(Folder(), "techbench-errors.log");
+                var sb = new StringBuilder();
+                sb.AppendLine("=== " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + where + " ===");
+                sb.AppendLine(ex == null ? "(no exception object)" : ex.ToString());
+                sb.AppendLine();
+                File.AppendAllText(path, sb.ToString(), Encoding.UTF8);
+                return path;
+            }
+            catch { return null; }
         }
 
         public static string Diff(Snap a, Snap b)
@@ -157,8 +206,10 @@ namespace J1939Reader
             sb.AppendLine("Codes new (in B, not A):");
             AppendMissing(sb, b.Active, a.Active);
             sb.AppendLine("Unchanged active:");
+            int same = 0;
             foreach (string s in a.Active)
-                if (b.Active.Contains(s)) sb.AppendLine("  " + s);
+                if (b.Active.Contains(s)) { sb.AppendLine("  " + s); same++; }
+            if (same == 0) sb.AppendLine("  (none)");
             return sb.ToString();
         }
 
