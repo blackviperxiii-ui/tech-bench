@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -48,30 +49,64 @@ namespace J1939Reader
             return string.IsNullOrWhiteSpace(m) ? ("error " + e) : m + " (" + e + ")";
         }
 
+        /// <summary>
+        /// The RP1210 DLL is bound by absolute path, so any P/Invoke throws DllNotFoundException on a
+        /// bench PC without the Cummins drivers. Check before touching the adapter so the app can
+        /// report it instead of dying on the first call.
+        /// </summary>
+        public static bool DriverPresent(out string why)
+        {
+            why = null;
+            if (IntPtr.Size != 4)
+            {
+                why = "This build is 64-bit. The INLINE 7 RP1210 driver is 32-bit only — rebuild with /platform:x86 (build.bat already does).";
+                return false;
+            }
+            bool exists;
+            try { exists = File.Exists(Dll); }
+            catch { exists = false; }
+            if (!exists)
+            {
+                why = "RP1210 driver not found at " + Dll + ".\n\nInstall the Cummins INLINE 7 (CIL7) drivers on this PC, then try again.";
+                return false;
+            }
+            return true;
+        }
+
         public bool Connect()
         {
             Disconnect();
+            string why;
+            if (!DriverPresent(out why)) { LastError = why; return false; }
             // Device 2 (BT/virtual) worked with Explorer still running; 1 is USB INLINE 7
             short[] devices = { 2, 1, 111 };
             string[] protos = { "J1939:Baud=250", "J1939" };
             var fails = new StringBuilder();
-            foreach (short dev in devices)
+            try
             {
-                foreach (string proto in protos)
+                foreach (short dev in devices)
                 {
-                    short id = RP1210_ClientConnect(IntPtr.Zero, dev, proto, 0, 0, 0);
-                    if (id >= 0 && id < 128)
+                    foreach (string proto in protos)
                     {
-                        _client = id;
-                        DeviceId = dev;
-                        Protocol = proto;
-                        RP1210_SendCommand(CmdFiltersPass, _client, null, 0);
-                        ClaimToolAddress();
-                        LastError = null;
-                        return true;
+                        short id = RP1210_ClientConnect(IntPtr.Zero, dev, proto, 0, 0, 0);
+                        if (id >= 0 && id < 128)
+                        {
+                            _client = id;
+                            DeviceId = dev;
+                            Protocol = proto;
+                            RP1210_SendCommand(CmdFiltersPass, _client, null, 0);
+                            ClaimToolAddress();
+                            LastError = null;
+                            return true;
+                        }
+                        fails.Append(ErrorText(id) + " [dev " + dev + " " + proto + "]; ");
                     }
-                    fails.Append(ErrorText(id) + " [dev " + dev + " " + proto + "]; ");
                 }
+            }
+            catch (Exception ex)
+            {
+                LastError = "RP1210 driver call failed: " + ex.Message;
+                return false;
             }
             LastError = fails.ToString();
             return false;
@@ -105,7 +140,9 @@ namespace J1939Reader
             m[4] = OurSa;
             m[5] = dest;
             if (dlen > 0) Buffer.BlockCopy(data, 0, m, 6, dlen);
-            short rc = RP1210_SendMessage(_client, m, (short)m.Length, 0, 1);
+            short rc;
+            try { rc = RP1210_SendMessage(_client, m, (short)m.Length, 0, 1); }
+            catch (Exception ex) { LastError = "send failed: " + ex.Message; return false; }
             if (rc != 0) { LastError = ErrorText(rc); return false; }
             return true;
         }
@@ -141,7 +178,8 @@ namespace J1939Reader
             cmd[0] = OurSa;
             Buffer.BlockCopy(ToolName, 0, cmd, 1, 8);
             cmd[9] = 0;
-            RP1210_SendCommand(CmdProtectAddr, _client, cmd, 10);
+            try { RP1210_SendCommand(CmdProtectAddr, _client, cmd, 10); }
+            catch (Exception ex) { LastError = "address claim failed: " + ex.Message; }
             SendJ1939(0xEE00, 255, ToolName, 6);
         }
 
@@ -189,6 +227,12 @@ namespace J1939Reader
         }
 
         string TryUdsClear()
+        {
+            try { return TryUdsClearCore(); }
+            catch (Exception ex) { return "UDS 0x14 not sent (" + ex.Message + ") — J1939 clear still sent."; }
+        }
+
+        string TryUdsClearCore()
         {
             // ISO 15765-2 / UDS service 0x14 ClearDiagnosticInformation (all groups)
             short[] devices = { DeviceId, 2, 1, 141 };
@@ -256,7 +300,9 @@ namespace J1939Reader
         {
             frame = null;
             if (!IsConnected) return false;
-            short r = RP1210_ReadMessage(_client, _rx, (short)_rx.Length, 0);
+            short r;
+            try { r = RP1210_ReadMessage(_client, _rx, (short)_rx.Length, 0); }
+            catch (Exception ex) { LastError = "read failed: " + ex.Message; return false; }
             if (r < 0) { LastError = ErrorText(r); return false; }
             if (r < 10) return false;
             int pgn = _rx[4] | (_rx[5] << 8) | (_rx[6] << 16);

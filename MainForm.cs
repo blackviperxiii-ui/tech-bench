@@ -25,10 +25,10 @@ namespace J1939Reader
         Label _mon;
         DateTime _lastReq = DateTime.MinValue;
         double _rpmVal = -1;
-        bool _red, _amber;
+        bool _red, _amber, _protect, _mil;
         string _defTxt = "—";
         string _coolant = "—", _oil = "—", _batt = "—", _fuelRate = "—";
-        string _vin = "", _sw = "";
+        string _vin = "", _sw = "", _hours = "", _compId = "";
         int _tscRpm; // 0 = released
         List<SwitchRow> _liveRows = new List<SwitchRow>();
         readonly BamAssembler _bam = new BamAssembler();
@@ -47,6 +47,7 @@ namespace J1939Reader
         DateTime _lastGood = DateTime.UtcNow;
         DateTime _lastRe = DateTime.MinValue;
         DateTime _lastBusUi = DateTime.MinValue;
+        string _sigActive = "", _sigPrev = "";
 
         public string JobTag { get; set; }
 
@@ -59,6 +60,8 @@ namespace J1939Reader
                 _timer.Stop();
                 try { if (_rp.IsConnected) _rp.SendTsc1(0); } catch { }
                 _rp.Dispose();
+                _timer.Dispose();
+                if (_tip != null) _tip.Dispose();
             };
 
             _btnConnect = MkBtn("Connect", 12, 12, 110);
@@ -89,7 +92,7 @@ namespace J1939Reader
 
             _status = new Label { Left = 12, Top = 48, Width = 1000, Height = 20, Text = "Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect." };
             _rpm = new Label { Left = 12, Top = 70, Width = 200, Height = 22, Text = "RPM: —", Font = new Font(Font, FontStyle.Bold) };
-            _lamps = new Label { Left = 220, Top = 70, Width = 300, Height = 22, Text = "Lamps: —" };
+            _lamps = new Label { Left = 220, Top = 70, Width = 306, Height = 22, Text = "Lamps: —" };
             _def = new Label { Left = 530, Top = 70, Width = 480, Height = 22, Text = "DEF: —" };
 
             _tabs = new TabControl
@@ -151,6 +154,8 @@ namespace J1939Reader
                 Left = 8, Top = 412, Width = 952, Height = 140,
                 Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true,
                 Font = new Font("Consolas", 9f),
+                // Default MaxLength is 32767, after which AppendText silently drops everything.
+                MaxLength = 0,
                 Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
             };
 
@@ -309,6 +314,14 @@ namespace J1939Reader
         void Log(string s)
         {
             if (_log == null) return;
+            if (_log.TextLength > 80000)
+            {
+                string[] lines = _log.Lines;
+                int drop = lines.Length / 2;
+                var keep = new string[lines.Length - drop];
+                Array.Copy(lines, drop, keep, 0, keep.Length);
+                _log.Lines = keep;
+            }
             _log.AppendText(DateTime.Now.ToString("HH:mm:ss") + "  " + s + Environment.NewLine);
         }
 
@@ -341,7 +354,10 @@ namespace J1939Reader
                         explorer = true;
             }
             catch { }
-            if (!_rp.Connect())
+            bool ok;
+            try { ok = _rp.Connect(); }
+            catch (Exception ex) { ok = false; Log("Connect threw: " + ex.Message); }
+            if (!ok)
             {
                 _status.Text = "Connect failed: " + _rp.LastError;
                 Log(_status.Text);
@@ -374,7 +390,31 @@ namespace J1939Reader
             _status.Text = "Disconnected";
             Log("Disconnected");
             _tscRpm = 0;
+            ClearLiveData();
             RefreshLiveList();
+        }
+
+        /// <summary>
+        /// Blank the readouts instead of leaving the last values on screen. A frozen RPM that still looks
+        /// live is how someone diagnoses a machine off numbers from ten minutes ago.
+        /// </summary>
+        void ClearLiveData()
+        {
+            _rpmVal = -1;
+            _red = _amber = _protect = _mil = false;
+            _defTxt = "—";
+            _coolant = _oil = _batt = _fuelRate = "—";
+            _active.Clear();
+            _prev.Clear();
+            _sigActive = _sigPrev = "";
+            _rpm.Text = "RPM: —";
+            _rpm.ForeColor = Color.Black;
+            _lamps.Text = "Lamps: —";
+            _lamps.ForeColor = Color.Black;
+            _def.Text = "DEF: —";
+            if (_mon != null) _mon.Text = "Coolant: —    Oil: —    Battery: —    Fuel rate: —";
+            FillList(_lstActive, _active, ref _sigActive);
+            FillList(_lstPrev, _prev, ref _sigPrev);
         }
 
         void RequestCodes(bool log)
@@ -419,12 +459,16 @@ namespace J1939Reader
             Log("Reset all codes…");
             _timer.Stop();
             Cursor = Cursors.WaitCursor;
-            string result = "";
+            string result;
             try { result = _rp.ResetAllFaults(); }
-            finally { Cursor = Cursors.Default; _timer.Start(); }
+            catch (Exception ex) { result = "Reset failed: " + ex.Message; }
+            finally { Cursor = Cursors.Default; }
             Log(result.Replace("\r\n", " | "));
+            // Give the ECM time to answer, but restart the timer only after the wait: DoEvents would
+            // otherwise let a tick re-enter this method mid-reset.
             var until = DateTime.Now.AddMilliseconds(800);
             while (DateTime.Now < until) { Application.DoEvents(); System.Threading.Thread.Sleep(20); }
+            _timer.Start();
             RequestCodes(true);
             string remain = LampHolders();
             if (_idBox != null)
@@ -474,7 +518,7 @@ namespace J1939Reader
         void PingEcm()
         {
             if (!_rp.IsConnected) return;
-            _vin = ""; _sw = "";
+            _vin = ""; _sw = ""; _hours = ""; _compId = "";
             _rp.RequestPgn(0xFEEC, 0);
             _rp.RequestPgn(0xFEEC, 255);
             _rp.RequestPgn(0xFEDA, 0);
@@ -537,10 +581,20 @@ namespace J1939Reader
                 string v = J1939Decode.Ascii(f.Data);
                 if (v.Length > 0) { _sw = v; UpdateIdBox(); }
             }
+            else if (f.Pgn == 0xFEEB && f.Sa == 0)
+            {
+                string v = J1939Decode.Ascii(f.Data, true);
+                if (v.Length > 0) { _compId = v; UpdateIdBox(); }
+            }
+            else if (f.Pgn == 0xFEE5 && f.Sa == 0)
+            {
+                string v = J1939Decode.Hours(f.Data);
+                if (v != null) { _hours = v; UpdateIdBox(); }
+            }
             else if (f.Pgn == 0xFECA && f.Sa == 0)
             {
                 _active.Clear();
-                J1939Decode.ParseDm(f.Data, _active, out _red, out _amber);
+                J1939Decode.ParseDm(f.Data, _active, out _red, out _amber, out _protect, out _mil);
                 dm1hit = true;
             }
             else if (f.Pgn == 0xFECB && f.Sa == 0)
@@ -571,25 +625,30 @@ namespace J1939Reader
                 if (!_bam.Feed(f, out assembled)) continue;
                 HandleFrame(assembled, ref dm1hit, ref dm2hit);
             }
+            double quiet = (DateTime.UtcNow - _lastGood).TotalSeconds;
+            bool stale = quiet > 3;
             if ((DateTime.UtcNow - _frameT0).TotalSeconds >= 1)
             {
                 _fps = _frameCount;
                 _frameCount = 0;
                 _frameT0 = DateTime.UtcNow;
                 if (_rp.IsConnected)
-                    _status.Text = "Connected  device " + _rp.DeviceId + "  " + _rp.Protocol + "  " + _fps + " frames/s";
+                    _status.Text = "Connected  device " + _rp.DeviceId + "  " + _rp.Protocol + "  " + _fps + " frames/s"
+                        + (stale ? "  —  NO FRAMES for " + quiet.ToString("0") + "s, readings below are stale" : "");
             }
 
-            _rpm.Text = _rpmVal < 0 ? "RPM: —" : ("RPM: " + _rpmVal.ToString("0"));
-            _lamps.Text = "Red Stop: " + (_red ? "ON" : "off") + "     Amber: " + (_amber ? "ON" : "off");
+            _rpm.ForeColor = stale ? Color.DimGray : Color.Black;
+            _rpm.Text = _rpmVal < 0 ? "RPM: —" : ("RPM: " + _rpmVal.ToString("0") + (stale ? " (stale)" : ""));
+            _lamps.Text = "Red Stop: " + (_red ? "ON" : "off") + "   Amber: " + (_amber ? "ON" : "off")
+                + (_protect ? "   Protect: ON" : "") + (_mil ? "   MIL: ON" : "");
             _lamps.ForeColor = _red ? Color.Firebrick : Color.Black;
             _def.Text = "DEF: " + _defTxt;
             if (_mon != null)
                 _mon.Text = "Coolant: " + _coolant + "    Oil: " + _oil + "    Battery: " + _batt + "    Fuel rate: " + _fuelRate
                     + (_tscRpm > 0 ? "    TSC1 holding " + _tscRpm + " RPM" : "    TSC1 released");
 
-            if (dm1hit) FillList(_lstActive, _active);
-            if (dm2hit) FillList(_lstPrev, _prev);
+            if (dm1hit) FillList(_lstActive, _active, ref _sigActive);
+            if (dm2hit) FillList(_lstPrev, _prev, ref _sigPrev);
             if (dm1hit) RefreshLiveList();
             if ((DateTime.UtcNow - _lastBusUi).TotalMilliseconds > 800)
             {
@@ -630,13 +689,23 @@ namespace J1939Reader
             _idBox.Text =
                 "VIN / NAME: " + (string.IsNullOrEmpty(_vin) ? "(not published yet)" : _vin) + "\r\n" +
                 "Software: " + (string.IsNullOrEmpty(_sw) ? "(not published yet)" : _sw) + "\r\n" +
+                "Component: " + (string.IsNullOrEmpty(_compId) ? "(not published yet)" : _compId) + "\r\n" +
+                "Engine hours: " + (string.IsNullOrEmpty(_hours) ? "(not published yet)" : _hours) + "\r\n" +
                 "DM1: " + (_active.Count == 0 ? "no active codes parsed" : (_active.Count + " active")) + "\r\n" +
                 "RPM broadcast: " + (_rpmVal < 0 ? "none" : _rpmVal.ToString("0")) + "\r\n\r\n" +
                 CannotDoText();
         }
 
-        static void FillList(ListBox box, List<Dtc> items)
+        /// <summary>
+        /// DM1 lands every 2 s. Rebuilding the box every time drops the selection, which fires
+        /// SelectedIndexChanged and scrolls the explanation the tech is mid-way through reading, so only
+        /// touch it when the codes actually changed.
+        /// </summary>
+        static void FillList(ListBox box, List<Dtc> items, ref string sig)
         {
+            string now = Signature(items);
+            if (now == sig) return;
+            sig = now;
             int keep = box.SelectedIndex;
             box.BeginUpdate();
             box.Items.Clear();
@@ -644,6 +713,14 @@ namespace J1939Reader
             else foreach (Dtc d in items) box.Items.Add(d.ToString());
             box.EndUpdate();
             if (keep >= 0 && keep < box.Items.Count) box.SelectedIndex = keep;
+        }
+
+        static string Signature(List<Dtc> items)
+        {
+            var sb = new StringBuilder();
+            foreach (Dtc d in items)
+                sb.Append(d.Spn).Append('/').Append(d.Fmi).Append('/').Append(d.Occ).Append(';');
+            return sb.ToString();
         }
 
         void TrackBus(J1939Frame f)
@@ -680,32 +757,50 @@ namespace J1939Reader
             if (_lstPgn == null) return;
             var now = DateTime.UtcNow;
             var pgnList = new List<PgnRow>(_pgns.Values);
-            pgnList.Sort((a, b) => b.Count.CompareTo(a.Count));
-            _lstPgn.BeginUpdate();
-            _lstPgn.Items.Clear();
+            // Sorted by PGN, not by message count: a busy bus reorders count-ranked rows every refresh
+            // and the list becomes impossible to read. The count is already a column.
+            pgnList.Sort(delegate(PgnRow a, PgnRow b)
+            {
+                int c = a.Pgn.CompareTo(b.Pgn);
+                return c != 0 ? c : a.Sa.CompareTo(b.Sa);
+            });
+            var pgnItems = new List<object>(pgnList.Count);
             int n = 0;
             foreach (PgnRow r in pgnList)
             {
                 double age = (now - r.Last).TotalSeconds;
                 string pn = Names.Pgn(r.Pgn);
-                _lstPgn.Items.Add(string.Format("{0:X4}  SA{1,-3} {2,-22} x{3,-5} {4:0.0}s ago",
+                pgnItems.Add(string.Format("{0:X4}  SA{1,-3} {2,-22} x{3,-5} {4:0.0}s ago",
                     r.Pgn, r.Sa, pn, r.Count, age));
-                if (++n >= 80) break;
+                if (++n >= 200) break;
             }
-            _lstPgn.EndUpdate();
+            Repopulate(_lstPgn, pgnItems);
 
             var saList = new List<SaRow>(_sas.Values);
-            saList.Sort((a, b) => a.Sa.CompareTo(b.Sa));
-            _lstSa.BeginUpdate();
-            _lstSa.Items.Clear();
+            saList.Sort(delegate(SaRow a, SaRow b) { return a.Sa.CompareTo(b.Sa); });
+            var saItems = new List<object>(saList.Count);
             foreach (SaRow r in saList)
             {
                 double age = (now - r.Last).TotalSeconds;
                 string live = age < 2 ? "LIVE" : (age < 10 ? "quiet" : "gone");
-                _lstSa.Items.Add(string.Format("SA {0,-3} {1,-24} {2,-5} x{3}  {4:0.0}s {5}",
+                saItems.Add(string.Format("SA {0,-3} {1,-24} {2,-5} x{3}  {4:0.0}s {5}",
                     r.Sa, Names.Sa(r.Sa), live, r.Count, age, r.Claimed ? "CLAIM" : ""));
             }
-            _lstSa.EndUpdate();
+            Repopulate(_lstSa, saItems);
+        }
+
+        /// <summary>Refresh a live list without throwing away where the user had scrolled to.</summary>
+        static void Repopulate(ListBox box, List<object> items)
+        {
+            if (box == null) return;
+            int top = box.TopIndex;
+            int sel = box.SelectedIndex;
+            box.BeginUpdate();
+            box.Items.Clear();
+            foreach (object o in items) box.Items.Add(o);
+            box.EndUpdate();
+            if (sel >= 0 && sel < box.Items.Count) box.SelectedIndex = sel;
+            if (top > 0 && top < box.Items.Count) box.TopIndex = top;
         }
 
         void TickReconnect()
@@ -723,6 +818,7 @@ namespace J1939Reader
                 if (_rp.Connect())
                 {
                     _lastGood = DateTime.UtcNow;
+                    ClearLiveData();
                     Log("Reconnected device " + _rp.DeviceId + " " + _rp.Protocol);
                     RequestCodes(false);
                 }
@@ -770,22 +866,40 @@ namespace J1939Reader
 
         void TakeShot()
         {
-            Control c = _tabs != null ? (Control)_tabs : this;
-            string path = SessionIo.Screenshot(c);
-            Log("Screenshot " + path);
+            try
+            {
+                Control c = _tabs != null ? (Control)_tabs : this;
+                string path = SessionIo.Screenshot(c);
+                Log("Screenshot " + path);
+            }
+            catch (Exception ex) { Log("Screenshot failed: " + ex.Message); }
         }
 
         void SaveSession()
+        {
+            try { SaveSessionCore(); }
+            catch (Exception ex)
+            {
+                Log("Save failed: " + ex.Message);
+                MessageBox.Show(this, "Could not write the session file.\n\n" + ex.Message,
+                    "Save", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        void SaveSessionCore()
         {
             var sb = new StringBuilder();
             sb.AppendLine("J1939Reader session  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             sb.AppendLine("Device " + _rp.DeviceId + "  " + _rp.Protocol + "  connected=" + _rp.IsConnected);
             sb.AppendLine("RPM " + (_rpmVal < 0 ? "—" : _rpmVal.ToString("0"))
                 + "  Red Stop " + (_red ? "ON" : "off")
-                + "  Amber " + (_amber ? "ON" : "off"));
+                + "  Amber " + (_amber ? "ON" : "off")
+                + "  Protect " + (_protect ? "ON" : "off")
+                + "  MIL " + (_mil ? "ON" : "off"));
             sb.AppendLine("DEF " + _defTxt);
             sb.AppendLine("Coolant " + _coolant + "  Oil " + _oil + "  Battery " + _batt + "  Fuel " + _fuelRate);
             sb.AppendLine("VIN " + _vin + "  SW " + _sw);
+            sb.AppendLine("Component " + _compId + "  Hours " + _hours);
             sb.AppendLine();
             sb.AppendLine("Active DTCs:");
             if (_active.Count == 0) sb.AppendLine("  (none)");
@@ -802,18 +916,30 @@ namespace J1939Reader
             foreach (SaRow r in _sas.Values)
                 sb.AppendLine("  SA " + r.Sa + " " + Names.Sa(r.Sa) + " x" + r.Count);
             var csv = new StringBuilder();
-            csv.AppendLine("time,rpm,red,amber,def,coolant,oil,battery,fuel,active_count");
-            csv.AppendLine(string.Format("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}",
-                DateTime.Now.ToString("o"),
-                _rpmVal, _red, _amber,
+            csv.AppendLine("time,job,rpm,red,amber,protect,mil,def,coolant,oil,battery,fuel,active_count,previous_count");
+            csv.AppendLine(string.Format("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13}",
+                DateTime.Now.ToString("o"), Quote(JobTag),
+                _rpmVal < 0 ? "" : _rpmVal.ToString("0"), _red, _amber, _protect, _mil,
                 Quote(_defTxt), Quote(_coolant), Quote(_oil), Quote(_batt), Quote(_fuelRate),
-                _active.Count));
-            foreach (Dtc d in _active)
-                csv.AppendLine("dtc,active," + d.Spn + "," + d.Fmi + "," + d.Occ + "," + Quote(d.Name));
+                _active.Count, _prev.Count));
+
+            var dtcCsv = new StringBuilder();
+            dtcCsv.AppendLine("time,job,state,spn,fmi,occurrences,name,fmi_text");
+            AppendDtcRows(dtcCsv, "active", _active);
+            AppendDtcRows(dtcCsv, "previous", _prev);
+
             if (!string.IsNullOrWhiteSpace(JobTag))
                 sb.Insert(0, "Job  " + JobTag + Environment.NewLine);
-            string path = SessionIo.SaveTextCsv(sb.ToString(), csv.ToString(), JobTag);
+            string path = SessionIo.SaveSession(sb.ToString(), csv.ToString(), dtcCsv.ToString(), JobTag);
             Log("Saved " + path);
+        }
+
+        void AppendDtcRows(StringBuilder csv, string state, List<Dtc> items)
+        {
+            string when = DateTime.Now.ToString("o");
+            foreach (Dtc d in items)
+                csv.AppendLine(when + "," + Quote(JobTag) + "," + state + "," + d.Spn + "," + d.Fmi + ","
+                    + d.Occ + "," + Quote(d.Name) + "," + Quote(d.FmiText));
         }
 
         static string Quote(string s)
