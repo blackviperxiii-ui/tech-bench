@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
+Current stamp: **1.1.0** (Help → About). Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
 
 ## What it does
 
@@ -14,6 +14,10 @@ Does **not** ship manuals, filter charts, or service passwords. Those stay in yo
 - **Unit history** — what this model/serial has shown in past saved sessions
 - **Report** — printable one-page summary for a work order
 - Job strip (model/serial) prefixes saved sessions and scopes the history
+- Remembers last model/serial and window size in `%LocalAppData%\TechBench\settings.json`
+- Help → Check for updates: public `latest.json` + SHA-256 of `TechBench.exe`, swapped by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token)
+
+A missing knowledge base does not block launch — the search status line says the index is empty.
 
 ## Build (32-bit — required for INLINE 7)
 
@@ -28,13 +32,25 @@ That produces `TechBench.exe`. Desktop shortcut can point at it.
 
 `/platform:x86` is not optional: RP1210 adapter drivers are 32-bit only. The Adapters tab tells you if the running process is wrong.
 
+### Release (hash + latest.json)
+
+```bat
+release.bat
+```
+
+Writes `TechBench.exe` and `latest.json` (`version`, `sha256`, `url`). Upload **both** files to a **public** HTTPS location. Shop PCs download them anonymously.
+
+This GitHub repo is private, so `github.com/.../releases/...` URLs will 404 without a login. Host the two files somewhere GET works without auth (public dist repo, object storage, etc.). On a shop PC you can override the feed with `update-url.txt` next to the exe (one URL, `#` comments allowed).
+
+The updater never sends credentials. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start.
+
 ## Test
 
 ```bat
 test.bat
 ```
 
-248 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
+280 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, settings, updater. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
 
 ## Knowledge base
 
@@ -46,7 +62,7 @@ If it lives somewhere else, point at it either way:
 - `kb-path.txt` next to `TechBench.exe`, one path per line (`#` comments allowed)
 - a `TECHBENCH_KB` environment variable
 
-A malformed file in `data\` only costs that section — the status line under the search box names the file that failed.
+A malformed file in `data\` only costs that section — the status line under the search box names the file that failed. Launch is not blocked if the folder is missing.
 
 ### Adding what you learn
 

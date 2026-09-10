@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using J1939Reader;
 using TechBench;
 
@@ -132,6 +133,14 @@ static class SelfTest
         Console.WriteLine();
         Console.WriteLine("== job report ==");
         ReportTests();
+
+        Console.WriteLine();
+        Console.WriteLine("== settings ==");
+        SettingsTests();
+
+        Console.WriteLine();
+        Console.WriteLine("== updater ==");
+        UpdaterTests();
 
         Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
@@ -814,5 +823,87 @@ ProtocolDescription=ISO 15765
         var s = new string[hits.Count];
         for (int i = 0; i < hits.Count; i++) s[i] = hits[i].Title;
         return s;
+    }
+
+    static void SettingsTests()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "tb-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string path = AppSettings.PathName(dir);
+        var s = new AppSettings();
+        s.Model = "HP450WCU";
+        s.Serial = "123456";
+        s.X = 40;
+        s.Y = 50;
+        s.Width = 1280;
+        s.Height = 800;
+        s.Maximized = true;
+        s.SaveTo(path);
+        var loaded = AppSettings.LoadFrom(path);
+        Eq("settings model", loaded.Model, "HP450WCU");
+        Eq("settings serial", loaded.Serial, "123456");
+        Eq("settings width", loaded.Width, 1280);
+        Eq("settings height", loaded.Height, 800);
+        Eq("settings maximized", loaded.Maximized, true);
+        Eq("missing settings file is empty", AppSettings.LoadFrom(Path.Combine(dir, "nope.json")).Model, "");
+        File.WriteAllText(path, "{ this is not json");
+        Eq("corrupt settings file does not throw", AppSettings.LoadFrom(path).Serial, "");
+        try { Directory.Delete(dir, true); } catch { }
+    }
+
+    static void UpdaterTests()
+    {
+        Eq("stamped version", AppVersion.Number, "1.1.0");
+        Version parsed;
+        Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
+        Check("1.2.0 is newer", Updater.IsNewer("1.2.0", "1.1.0"), "1.2.0 vs 1.1.0");
+        Check("v1.1.1 is newer", Updater.IsNewer("v1.1.1", "1.1.0"), "v prefix");
+        Check("same version is not newer", !Updater.IsNewer("1.1.0", "1.1.0"), "same");
+        Check("older is not newer", !Updater.IsNewer("1.0.9", "1.1.0"), "older");
+        Check("garbage version is not newer", !Updater.IsNewer("nope", "1.1.0"), "garbage");
+
+        var m = Updater.ParseManifest(
+            @"{""version"":""1.2.0"",""sha256"":""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"",""url"":""https://example.com/TechBench.exe"",""notes"":""fix""}");
+        Check("manifest parses", m != null, "null");
+        if (m != null)
+        {
+            Eq("manifest version", m.Version, "1.2.0");
+            Eq("manifest url", m.Url, "https://example.com/TechBench.exe");
+            Eq("manifest notes", m.Notes, "fix");
+            Eq("manifest hash length", m.Sha256.Length, 64);
+        }
+        Check("spaced hash normalizes",
+            Updater.NormalizeHash("AB CD") == "abcd", Updater.NormalizeHash("AB CD"));
+        Check("short hash rejected",
+            Updater.ParseManifest(@"{""version"":""1"",""sha256"":""abc"",""url"":""http://x""}") == null, "accepted short hash");
+        Check("missing url rejected",
+            Updater.ParseManifest(@"{""version"":""1.2.0"",""sha256"":""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef""}") == null,
+            "accepted");
+
+        byte[] payload = Encoding.UTF8.GetBytes("tech-bench-update-bytes");
+        string hash = Updater.Sha256Bytes(payload);
+        Eq("sha256 hex length", hash.Length, 64);
+        string dir = Path.Combine(Path.GetTempPath(), "tb-upd-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string file = Path.Combine(dir, "blob.bin");
+        File.WriteAllBytes(file, payload);
+        Check("file hash matches bytes", Updater.HashMatches(file, hash), Updater.Sha256File(file));
+        Check("wrong hash fails", !Updater.HashMatches(file, "ff" + hash.Substring(2)), "matched");
+
+        Updater.Stage(dir, payload, hash);
+        Check("staged pending verifies", Updater.HasVerifiedPending(dir), "missing sidecar or mismatch");
+        File.WriteAllText(Path.Combine(dir, Updater.HashSidecar), "0");
+        Check("tampered sidecar fails", !Updater.HasVerifiedPending(dir), "still verified");
+        Check("cannot apply mid-session", !Updater.CanApplyNow(true), "allowed");
+        Check("can apply when idle", Updater.CanApplyNow(false), "blocked");
+        string script = Updater.ApplyScript();
+        Check("cmd waits for process", script.Contains("TechBench.exe") && script.Contains(":wait"), "no wait");
+        Check("cmd swaps hashed exe", script.Contains("TechBench.exe.new") && script.Contains("move /Y"), "no swap");
+        Check("cmd never mentions a token",
+            script.IndexOf("ghp_", StringComparison.OrdinalIgnoreCase) < 0
+            && script.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) < 0, "token");
+        Check("default feed is public HTTPS",
+            Updater.DefaultManifestUrl.StartsWith("https://"), Updater.DefaultManifestUrl);
+        try { Directory.Delete(dir, true); } catch { }
     }
 }

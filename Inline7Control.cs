@@ -52,6 +52,15 @@ namespace J1939Reader
 
         public string JobTag { get; set; }
 
+        /// <summary>
+        /// True while the adapter is connecting, connected, or in the middle of a reset.
+        /// Updates must not swap TechBench.exe in that state.
+        /// </summary>
+        public bool SessionLive
+        {
+            get { return _bus.WantConnected || _snap.Connected || _snap.Busy; }
+        }
+
         public Inline7Control()
         {
             Dock = DockStyle.Fill;
