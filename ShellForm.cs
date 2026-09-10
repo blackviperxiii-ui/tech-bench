@@ -255,23 +255,30 @@ namespace TechBench
 
         void CheckUpdates(bool interactive)
         {
-            if (_checking && !interactive) return;
-            _checking = true;
-            string url = Updater.ManifestUrl(_settings);
-            UpdateCheck result = null;
-            try { result = Updater.Check(url); }
-            catch (Exception ex)
+            if (_checking)
             {
-                result = new UpdateCheck { Error = ex.Message };
-            }
-
-            if (IsDisposed) return;
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(delegate { FinishCheck(result, interactive); }));
+                if (interactive)
+                    MessageBox.Show(this, "Already checking for updates…",
+                        "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            FinishCheck(result, interactive);
+            _checking = true;
+            string url = Updater.ManifestUrl(_settings);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                UpdateCheck result;
+                try { result = Updater.Check(url); }
+                catch (Exception ex)
+                {
+                    result = new UpdateCheck { Error = ex.Message };
+                }
+                if (IsDisposed) return;
+                try
+                {
+                    BeginInvoke(new Action(delegate { FinishCheck(result, interactive); }));
+                }
+                catch { }
+            });
         }
 
         void FinishCheck(UpdateCheck result, bool interactive)

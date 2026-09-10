@@ -295,7 +295,7 @@ namespace TechBench
         {
             var req = (HttpWebRequest)WebRequest.Create(url);
             req.UserAgent = "TechBench/" + AppVersion.Number;
-            req.Timeout = 20000;
+            req.Timeout = 8000;
             req.ReadWriteTimeout = 60000;
             req.AllowAutoRedirect = true;
             req.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
