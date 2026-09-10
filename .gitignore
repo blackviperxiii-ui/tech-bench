@@ -7,5 +7,10 @@ Smoke.exe
 MakeIco.exe
 SelfTest.exe
 TechBench.exe
+TechBench.exe.bak
+TechBench.exe.new
+TechBench.exe.new.sha256
+apply-update.cmd
+latest.json
 .vs/
 *.log

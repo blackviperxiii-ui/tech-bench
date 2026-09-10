@@ -9,6 +9,10 @@ namespace TechBench
         [STAThread]
         static void Main()
         {
+            string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            if (Updater.TryBeginPendingSwap(exeDir))
+                return;
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
@@ -16,21 +20,13 @@ namespace TechBench
             Application.ThreadException += (s, e) => Crash("UI thread", e.Exception);
             AppDomain.CurrentDomain.UnhandledException += (s, e) => Crash("background", e.ExceptionObject as Exception);
 
-            bool found;
-            string kbRoot = KbIndex.FindRoot(out found);
+            string kbRoot = KbIndex.FindRoot();
             var kb = new KbIndex();
             try { kb.Load(kbRoot); }
             catch (Exception ex)
             {
-                MessageBox.Show("Could not load knowledge base from:\n" + kbRoot + "\n\n" + ex.Message, "Tech Bench");
-            }
-            if (!found)
-            {
-                MessageBox.Show(
-                    "No knowledge base found.\n\nExpected data\\kb.json under:\n" + kbRoot +
-                    "\n\nSearch will be empty until the air-compressor-kb folder is there. You can also point at it with " +
-                    "a kb-path.txt next to TechBench.exe, or the TECHBENCH_KB environment variable.",
-                    "Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Search status line names the failure. Do not block launch with a dialog.
+                kb.Status = "Could not load knowledge base from " + kbRoot + ": " + ex.Message;
             }
 
             Application.Run(new ShellForm(kb));

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 using J1939Reader;
 
@@ -15,12 +16,17 @@ namespace TechBench
         readonly SearchControl _search;
         readonly TabControl _tabs;
         readonly TabPage _pSearch;
+        readonly ToolStripMenuItem _installUpdate;
+        readonly AppSettings _settings;
         KbIndex _kb;
+        UpdateManifest _ready;
+        bool _checking;
 
         public ShellForm(KbIndex kb)
         {
             _kb = kb;
-            Text = "Tech Bench";
+            _settings = AppSettings.Load();
+            Text = Title("");
             ClientSize = new Size(1180, 800);
             MinimumSize = new Size(900, 600);
             StartPosition = FormStartPosition.CenterScreen;
@@ -33,6 +39,21 @@ namespace TechBench
                 if (File.Exists(ico)) Icon = new Icon(ico);
             }
             catch { }
+
+            var menu = new MenuStrip();
+            var help = new ToolStripMenuItem("&Help");
+            var check = new ToolStripMenuItem("&Check for updates");
+            _installUpdate = new ToolStripMenuItem("&Install update") { Enabled = false };
+            var about = new ToolStripMenuItem("&About Tech Bench");
+            check.Click += delegate { CheckUpdates(true); };
+            _installUpdate.Click += delegate { InstallReadyUpdate(); };
+            about.Click += delegate { ShowAbout(); };
+            help.DropDownItems.Add(check);
+            help.DropDownItems.Add(_installUpdate);
+            help.DropDownItems.Add(new ToolStripSeparator());
+            help.DropDownItems.Add(about);
+            menu.Items.Add(help);
+            MainMenuStrip = menu;
 
             var job = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.FromArgb(22, 32, 48) };
             var jobFlow = new FlowLayoutPanel
@@ -92,8 +113,14 @@ namespace TechBench
             _tabs.TabPages.Add(pInline);
             _tabs.TabPages.Add(pAdapters);
 
+            // Last-added docks at the top: menu, then job strip, then tabs fill the rest.
             Controls.Add(_tabs);
             Controls.Add(job);
+            Controls.Add(menu);
+
+            if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
+            if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
+            ApplyWindow(_settings);
 
             useJob.Click += delegate
             {
@@ -135,6 +162,21 @@ namespace TechBench
                     e.Handled = true;
                 }
             };
+
+            FormClosing += delegate { PersistSettings(); };
+            Shown += delegate
+            {
+                SyncJob();
+                if (Updater.HasVerifiedPending(AppDomain.CurrentDomain.BaseDirectory))
+                    MarkReadyFromPending();
+                ThreadPool.QueueUserWorkItem(delegate { CheckUpdates(false); });
+            };
+        }
+
+        static string Title(string jobTag)
+        {
+            string head = "Tech Bench " + AppVersion.Number;
+            return string.IsNullOrEmpty(jobTag) ? head : (head + "  ·  " + jobTag);
         }
 
         static Label JobLabel(string text)
@@ -151,6 +193,158 @@ namespace TechBench
         bool HasImage(string key)
         {
             return _tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey(key);
+        }
+
+        void ApplyWindow(AppSettings s)
+        {
+            if (s == null) return;
+            if (s.Width >= MinimumSize.Width && s.Height >= MinimumSize.Height)
+            {
+                var bounds = new Rectangle(s.X, s.Y, s.Width, s.Height);
+                if (OnAnyScreen(bounds))
+                {
+                    StartPosition = FormStartPosition.Manual;
+                    Bounds = bounds;
+                }
+            }
+            if (s.Maximized) WindowState = FormWindowState.Maximized;
+        }
+
+        static bool OnAnyScreen(Rectangle bounds)
+        {
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                if (screen.WorkingArea.IntersectsWith(bounds)) return true;
+            }
+            return false;
+        }
+
+        void PersistSettings()
+        {
+            _settings.Model = _model.Text.Trim();
+            _settings.Serial = _serial.Text.Trim();
+            _settings.Maximized = WindowState == FormWindowState.Maximized;
+            Rectangle r = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            _settings.X = r.X;
+            _settings.Y = r.Y;
+            _settings.Width = r.Width;
+            _settings.Height = r.Height;
+            _settings.Save();
+        }
+
+        void ShowAbout()
+        {
+            string kb = (_kb == null || string.IsNullOrEmpty(_kb.Root)) ? "(none)" : _kb.Root;
+            string bits = Rp1210.HostIs32Bit ? "32-bit (correct for RP1210)" : "64-bit — rebuild with build.bat";
+            MessageBox.Show(this,
+                "Tech Bench " + AppVersion.Number + "\n\n"
+                + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\n\n"
+                + "Process: " + bits + "\n"
+                + "Knowledge base: " + kb + "\n"
+                + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\n") : "")
+                + "\nUpdates download a public latest.json and a hashed TechBench.exe.\n"
+                + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.",
+                "About Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        void MarkReadyFromPending()
+        {
+            _installUpdate.Enabled = true;
+            _installUpdate.Text = "&Install pending update";
+        }
+
+        void CheckUpdates(bool interactive)
+        {
+            if (_checking && !interactive) return;
+            _checking = true;
+            string url = Updater.ManifestUrl(_settings);
+            UpdateCheck result = null;
+            try { result = Updater.Check(url); }
+            catch (Exception ex)
+            {
+                result = new UpdateCheck { Error = ex.Message };
+            }
+
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(delegate { FinishCheck(result, interactive); }));
+                return;
+            }
+            FinishCheck(result, interactive);
+        }
+
+        void FinishCheck(UpdateCheck result, bool interactive)
+        {
+            _checking = false;
+            if (result == null)
+            {
+                if (interactive)
+                    MessageBox.Show(this, "Update check failed.", "Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (!result.Ok)
+            {
+                if (interactive)
+                    MessageBox.Show(this, result.Error, "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (!result.Newer)
+            {
+                if (interactive)
+                    MessageBox.Show(this, "Tech Bench " + AppVersion.Number + " is current.",
+                        "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _ready = result.Manifest;
+            _installUpdate.Enabled = true;
+            _installUpdate.Text = "&Install update " + _ready.Version;
+            if (!interactive) return;
+
+            string notes = string.IsNullOrEmpty(_ready.Notes) ? "" : ("\n\n" + _ready.Notes);
+            DialogResult ask = MessageBox.Show(this,
+                "Version " + _ready.Version + " is available (you have " + AppVersion.Number + ")."
+                + notes + "\n\nDownload and install after this window closes?",
+                "Updates", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (ask == DialogResult.Yes) InstallReadyUpdate();
+        }
+
+        void InstallReadyUpdate()
+        {
+            if (!Updater.CanApplyNow(_inline.SessionLive))
+            {
+                MessageBox.Show(this,
+                    "Disconnect the adapter before installing an update.\n\n"
+                    + "The new TechBench.exe is swapped by a small script after this window closes, never mid-session.",
+                    "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            try
+            {
+                if (_ready != null)
+                {
+                    byte[] bytes = Updater.DownloadExe(_ready.Url);
+                    Updater.Stage(exeDir, bytes, _ready.Sha256);
+                }
+                else if (!Updater.HasVerifiedPending(exeDir))
+                {
+                    MessageBox.Show(this, "No update is staged. Use Help → Check for updates first.",
+                        "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            PersistSettings();
+            Updater.LaunchSwap(exeDir);
+            Close();
         }
 
         Control BuildAdaptersPanel()
@@ -272,7 +466,7 @@ namespace TechBench
         {
             string tag = (_model.Text + " " + _serial.Text).Trim();
             _inline.JobTag = tag;
-            Text = string.IsNullOrEmpty(tag) ? "Tech Bench" : ("Tech Bench  ·  " + tag);
+            Text = Title(tag);
         }
     }
 }
