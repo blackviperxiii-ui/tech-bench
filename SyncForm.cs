@@ -25,7 +25,7 @@ namespace TechBench
             _kbRoot = kbRoot;
             _last = last;
             Text = "Shop sync";
-            StartPosition = FormStartPosition.CenterParent;
+            StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false;
             ShowInTaskbar = false;
             AutoScaleMode = AutoScaleMode.Font;
