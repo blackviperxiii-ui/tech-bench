@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Windows.Forms;
+using TechBench;
 
 namespace J1939Reader
 {
@@ -36,10 +38,16 @@ namespace J1939Reader
                     using (var dlg = new PrintPreviewDialog())
                     {
                         dlg.Document = doc;
-                        dlg.Width = 900;
-                        dlg.Height = 700;
+                        Size sz = UiLayout.SizeForScreen(900, 700, 480, 360);
+                        dlg.Width = sz.Width;
+                        dlg.Height = sz.Height;
                         var form = dlg as Form;
-                        if (form != null) form.StartPosition = FormStartPosition.CenterParent;
+                        if (form != null)
+                        {
+                            form.StartPosition = FormStartPosition.CenterParent;
+                            form.MinimumSize = new Size(480, 360);
+                            UiLayout.FitToWorkingArea(form);
+                        }
                         dlg.ShowDialog(owner);
                     }
                 }

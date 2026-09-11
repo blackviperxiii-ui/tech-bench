@@ -38,8 +38,9 @@ namespace TechBench
             _kb = kb;
             _settings = AppSettings.Load();
             Text = Title("");
-            ClientSize = new Size(1180, 800);
-            MinimumSize = new Size(900, 600);
+            // 800-tall client + chrome is already taller than a 1366×768 shop laptop.
+            MinimumSize = new Size(760, 520);
+            Size = UiLayout.SizeForScreen(1180, 720, 760, 520);
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
@@ -113,7 +114,7 @@ namespace TechBench
             var row0 = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                WrapContents = false,
+            WrapContents = true,
                 BackColor = Color.Transparent
             };
             row0.Controls.Add(JobLabel("WO"));
@@ -144,14 +145,14 @@ namespace TechBench
             var row1 = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                WrapContents = false,
+                WrapContents = true,
                 BackColor = Color.Transparent
             };
             row1.Controls.Add(JobLabel("Model"));
             _model = new TextBox { Width = 170, Margin = new Padding(0, 2, 12, 0) };
             row1.Controls.Add(_model);
             row1.Controls.Add(JobLabel("Serial"));
-            _serial = new TextBox { Width = 230, Margin = new Padding(0, 2, 12, 0) };
+            _serial = new TextBox { Width = 200, Margin = new Padding(0, 2, 12, 0) };
             row1.Controls.Add(_serial);
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
             row1.Controls.Add(useJob);
@@ -166,7 +167,7 @@ namespace TechBench
             _tabs = new TabControl { Dock = DockStyle.Fill };
             try
             {
-                var il = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(32, 32) };
+                var il = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(20, 20) };
                 string s = Path.Combine(assets, "search32.png");
                 string i = Path.Combine(assets, "inline32.png");
                 string a = Path.Combine(assets, "app32.png");
@@ -282,6 +283,7 @@ namespace TechBench
             };
             Shown += delegate
             {
+                UiLayout.FitToWorkingArea(this);
                 ApplyWo(_orders.Current);
                 SyncJob();
                 RunSync(false);
@@ -327,6 +329,7 @@ namespace TechBench
                 }
             }
             if (s.Maximized) WindowState = FormWindowState.Maximized;
+            UiLayout.FitToWorkingArea(this);
         }
 
         static bool OnAnyScreen(Rectangle bounds)
@@ -486,13 +489,7 @@ namespace TechBench
                 WordWrap = false,
                 Font = new Font("Consolas", 9.5f)
             };
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Padding = new Padding(0, 0, 0, 8)
-            };
+            var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 8));
             var rescan = new Button { Text = "Rescan", AutoSize = true };
             bar.Controls.Add(rescan);
             rescan.Click += delegate { box.Text = DescribeAdapters(); };

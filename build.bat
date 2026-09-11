@@ -12,7 +12,7 @@ rem /platform:x86 is required: RP1210 adapter drivers are 32-bit only.
   /win32manifest:app.manifest ^
   /out:TechBench.exe ^
   Program.cs ShellForm.cs SearchControl.cs CodeEditForm.cs NoteEditForm.cs SyncForm.cs ^
-  KbIndex.cs UserCodes.cs ShopSync.cs AppVersion.cs AppSettings.cs Updater.cs ^
+  KbIndex.cs UserCodes.cs ShopSync.cs AppVersion.cs AppSettings.cs Updater.cs UiLayout.cs ^
   WorkOrder.cs WorkOrderStore.cs WorkOrderControl.cs IdSettings.cs IdSettingsForm.cs IdGateway.cs ^
   Inline7Control.cs TrendChart.cs Rp1210.cs Rp1210Api.cs Ini.cs ^
   BusMonitor.cs BusWorker.cs Trend.cs Timeline.cs History.cs JobReport.cs JobReportPrint.cs ^

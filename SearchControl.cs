@@ -31,14 +31,8 @@ namespace TechBench
 
             // Docked/flow containers rather than absolute coordinates plus a hand-written Resize
             // handler: the two used to fight each other, and neither survived DPI scaling.
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true
-            };
-            _q = new TextBox { Width = 420, Margin = new Padding(0, 2, 8, 4) };
+            var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 4));
+            _q = new TextBox { Width = 360, Margin = new Padding(0, 2, 8, 4) };
             _kind = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
