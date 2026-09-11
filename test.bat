@@ -12,7 +12,7 @@ if not exist "%CSC%" (
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
   /out:SelfTest.exe ^
   SelfTest.cs J1939Decode.cs Names.cs Bam.cs Rp1210.cs Rp1210Api.cs Ini.cs ^
-  BusMonitor.cs Trend.cs Timeline.cs History.cs JobReport.cs SessionData.cs ^
+  BusMonitor.cs BusWorker.cs Trend.cs Timeline.cs History.cs JobReport.cs SessionData.cs ^
   KbIndex.cs UserCodes.cs AppVersion.cs AppSettings.cs Updater.cs
 if errorlevel 1 exit /b 1
 SelfTest.exe

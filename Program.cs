@@ -25,7 +25,8 @@ namespace TechBench
             try { kb.Load(kbRoot); }
             catch (Exception ex)
             {
-                // Search status line names the failure. Do not block launch with a dialog.
+                // Search status line names the failure. Do not block launch with a dialog —
+                // INLINE 7 still works with an empty index.
                 kb.Status = "Could not load knowledge base from " + kbRoot + ": " + ex.Message;
             }
 
