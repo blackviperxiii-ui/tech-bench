@@ -248,10 +248,16 @@ namespace J1939Reader
         }
 
         /// <summary>
-        /// SAE J1939 TSC1 (PGN 0) to engine SA 0. rpm 0 = release control.
+        /// SAE J1939 TSC1 (PGN 0) to the engine that is broadcasting EEC1. rpm 0 = release control.
         /// Must be repeated ~every 50 ms while holding or the ECM drops the request.
+        /// Destination is the engine source address — industrial controllers are often not SA 0.
         /// </summary>
         public bool SendTsc1(int rpm)
+        {
+            return SendTsc1(rpm, 0);
+        }
+
+        public bool SendTsc1(int rpm, int engineSa)
         {
             byte[] d = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
             if (rpm <= 0)
@@ -266,7 +272,14 @@ namespace J1939Reader
                 d[1] = (byte)(raw & 0xFF);
                 d[2] = (byte)((raw >> 8) & 0xFF);
             }
-            return SendJ1939(0x0000, 0, d, 3);
+            return SendJ1939(0x0000, Tsc1Dest(engineSa), d, 3);
+        }
+
+        /// <summary>TSC1 destination: the detected engine SA, falling back to ECM 1 (0).</summary>
+        public static byte Tsc1Dest(int engineSa)
+        {
+            if (engineSa < 0 || engineSa > 253) return 0;
+            return (byte)engineSa;
         }
 
         static readonly byte[] ToolName = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x81 };

@@ -119,6 +119,14 @@ static class SelfTest
         MonitorTests();
 
         Console.WriteLine();
+        Console.WriteLine("== disconnected snapshot ==");
+        SnapshotBlankTests();
+
+        Console.WriteLine();
+        Console.WriteLine("== TSC1 destination ==");
+        Tsc1DestTests();
+
+        Console.WriteLine();
         Console.WriteLine("== unit history ==");
         HistoryTests();
 
@@ -416,6 +424,22 @@ ProtocolDescription=ISO 15765
         Eq("software landed", id.Sw, "SW1234");
         Eq("component id landed", id.CompId, "CUMMINS  ·  QSB6.7  ·  555");
         Eq("hours landed", id.HoursText, "1234.5 h");
+        id.Feed(F(0xFEE5, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0), t);
+        Eq("hours NA clears last reading", id.HoursText, "");
+
+        // J1939 NA/error sentinels must blank the HUD, not keep the last good sample.
+        m.Feed(F(0xFEF7, 17, 0, 0, 0, 0, 0x28, 0x02, 0, 0), t);
+        Eq("battery decoded", m.BatteryV, 27.6d);
+        m.Feed(F(0xFEF2, 17, 0x46, 0x00, 0, 0, 0, 0, 0, 0), t);
+        Eq("fuel decoded", m.FuelLph, 3.5d);
+        m.Feed(F(0xFEEE, 17, 0xFF, 0, 0, 0, 0, 0, 0, 0), t);
+        Check("coolant NA clears last reading", double.IsNaN(m.CoolantC), "held " + m.CoolantC);
+        m.Feed(F(0xFEEF, 17, 0, 0, 0, 0xFF, 0, 0, 0, 0), t);
+        Check("oil NA clears last reading", double.IsNaN(m.OilKpa), "held " + m.OilKpa);
+        m.Feed(F(0xFEF7, 17, 0, 0, 0, 0, 0xFF, 0xFF, 0, 0), t);
+        Check("battery NA clears last reading", double.IsNaN(m.BatteryV), "held " + m.BatteryV);
+        m.Feed(F(0xFEF2, 17, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0), t);
+        Check("fuel NA clears last reading", double.IsNaN(m.FuelLph), "held " + m.FuelLph);
 
         // Trend sampling is rate limited and follows the engine.
         var tr = new BusMonitor();
@@ -450,6 +474,37 @@ ProtocolDescription=ISO 15765
         Eq("boundary-spanning FMI", bamMon.Engine.Active[1].Fmi, 9);
 
         Check("null frame ignored", !bamMon.Feed(null, t), "accepted");
+    }
+
+    static void SnapshotBlankTests()
+    {
+        var s = new BusSnapshot
+        {
+            Rpm = 800, CoolantC = 90, OilKpa = 400, BatteryV = 27.6, FuelLph = 3.5,
+            DefText = "50.0%  temp 20 C", OilText = "400 kPa",
+            Vin = "1ABC", Sw = "SW", CompId = "CUMMINS", Hours = "10 h",
+            Red = true, Amber = true, Protect = true, Mil = true,
+            HasSpn5246 = true, HasTankFmi9 = true, Has1569 = true
+        };
+        s.Active.Add(new Dtc { Spn = 5246, Fmi = 0 });
+        s.Prev.Add(new Dtc { Spn = 100, Fmi = 1 });
+        s.FaultModules.Add(0);
+        s.BlankDisconnectedReadouts();
+        Check("disconnected snapshot blanks rpm", double.IsNaN(s.Rpm), "held " + s.Rpm);
+        Check("disconnected snapshot blanks coolant", double.IsNaN(s.CoolantC), "held");
+        Eq("disconnected snapshot blanks DEF", s.DefText, "—");
+        Eq("disconnected snapshot blanks VIN", s.Vin, "");
+        Eq("disconnected snapshot clears lamps", s.Red, false);
+        Eq("disconnected snapshot clears active list", s.Active.Count, 0);
+        Eq("disconnected snapshot clears modules", s.FaultModules.Count, 0);
+    }
+
+    static void Tsc1DestTests()
+    {
+        Eq("TSC1 dest follows engine SA 17", Rp1210.Tsc1Dest(17), (byte)17);
+        Eq("TSC1 dest SA 0 stays 0", Rp1210.Tsc1Dest(0), (byte)0);
+        Eq("TSC1 dest auto-unknown falls back to 0", Rp1210.Tsc1Dest(-1), (byte)0);
+        Eq("TSC1 dest broadcast SA rejected", Rp1210.Tsc1Dest(255), (byte)0);
     }
 
     // ---------------- history ----------------
@@ -555,6 +610,16 @@ ProtocolDescription=ISO 15765
 
         UserCodes.Save(root, upserted);
         Check("backup kept on overwrite", File.Exists(UserCodes.PathFor(root) + ".bak"), "no .bak");
+
+        string corrupt = Path.Combine(root, "data", "user-codes.json");
+        File.WriteAllText(corrupt, "{ this is not json ");
+        bool threw = false;
+        try { UserCodes.Load(root); }
+        catch { threw = true; }
+        Check("corrupt user-codes.json throws instead of looking empty", threw, "returned empty list");
+        Check("corrupt file left in place so a failed load cannot wipe the shop file",
+            File.ReadAllText(corrupt).Contains("not json"), "was rewritten");
+        UserCodes.Save(root, upserted);
 
         // The KB loader has to be able to read what the editor writes.
         var kb = new KbIndex();

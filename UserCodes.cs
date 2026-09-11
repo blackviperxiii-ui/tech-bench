@@ -41,36 +41,34 @@ namespace TechBench
         {
             var list = new List<UserCode>();
             string path = PathFor(kbRoot);
-            try
+            if (!File.Exists(path)) return list;
+            // Do not swallow parse failures: a failed load that looks empty would let Save
+            // overwrite a full shop file with a single new entry.
+            var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var root = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
+            object codes;
+            if (root == null || !root.TryGetValue("codes", out codes)) return list;
+            var arr = codes as ArrayList;
+            if (arr == null) return list;
+            foreach (object item in arr)
             {
-                if (!File.Exists(path)) return list;
-                var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-                var root = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
-                object codes;
-                if (root == null || !root.TryGetValue("codes", out codes)) return list;
-                var arr = codes as ArrayList;
-                if (arr == null) return list;
-                foreach (object item in arr)
+                var d = item as Dictionary<string, object>;
+                if (d == null) continue;
+                var uc = new UserCode
                 {
-                    var d = item as Dictionary<string, object>;
-                    if (d == null) continue;
-                    var uc = new UserCode
-                    {
-                        Brand = Str(d, "brand_id"),
-                        Code = Str(d, "code"),
-                        Title = Str(d, "title"),
-                        Description = Str(d, "description"),
-                        Severity = Str(d, "severity"),
-                        Controller = Str(d, "controller_id"),
-                        Reset = Str(d, "reset_notes"),
-                        Safety = Str(d, "safety")
-                    };
-                    uc.Causes.AddRange(StrList(d, "likely_causes"));
-                    uc.Checks.AddRange(StrList(d, "checks"));
-                    list.Add(uc);
-                }
+                    Brand = Str(d, "brand_id"),
+                    Code = Str(d, "code"),
+                    Title = Str(d, "title"),
+                    Description = Str(d, "description"),
+                    Severity = Str(d, "severity"),
+                    Controller = Str(d, "controller_id"),
+                    Reset = Str(d, "reset_notes"),
+                    Safety = Str(d, "safety")
+                };
+                uc.Causes.AddRange(StrList(d, "likely_causes"));
+                uc.Checks.AddRange(StrList(d, "checks"));
+                list.Add(uc);
             }
-            catch { }
             return list;
         }
 
