@@ -113,7 +113,10 @@ namespace TechBench
                     if (d > usable - m2) d = usable - m2;
                     if (d < 1) d = 1;
                     sc.SplitterDistance = d;
-                    placed = true;
+                    // Default 150×100 SplitContainer/TabPage bounds clamp 430-class
+                    // distances; lock only once the requested distance actually fits.
+                    if (distance >= m1 && distance <= usable - m2)
+                        placed = true;
                 }
                 catch { }
             };
