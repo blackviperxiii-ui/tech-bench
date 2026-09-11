@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.1.0** (Help → About). Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
+Current stamp: **1.2.0** (Help → About). Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
 
 ## What it does
 
