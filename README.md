@@ -2,13 +2,13 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.0** (Help → About). Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
+Current stamp: **1.2.1** (Help → About). Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
 
 ## What it does
 
 - Search fault codes, manuals, rental filters/oil, equipment dims, and (if present) iFix service passwords
 - Open PDFs from the USB/Doosan/IR index
-- INLINE 7 tab: live RPM, DM1/DM2, code reset, bus monitor, snapshots
+- INLINE 7 page: live RPM, DM1/DM2, code reset, bus monitor, snapshots
 - **Trend** strip chart of RPM / coolant / oil / battery / fuel rate, with the lamp-on periods shaded
 - **Timeline** of every code that came and went, with the RPM at the moment it latched
 - **Unit history** — what this model/serial has shown in past saved sessions
@@ -44,7 +44,7 @@ build.bat
 
 That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
 
-`/platform:x86` is not optional: RP1210 adapter drivers are 32-bit only. The Adapters tab tells you if the running process is wrong.
+`/platform:x86` is not optional: RP1210 adapter drivers are 32-bit only. The Adapters page tells you if the running process is wrong.
 
 ### Release (hash + latest.json + installer)
 
@@ -89,7 +89,7 @@ A malformed file in `data\` only costs that section — the status line under th
 
 Stay in Tech Bench instead of ID Mobile Access:
 
-- **Work orders** tab and the WO picker on the job strip
+- **Work orders** page and the WO picker on the job strip
 - Notes, photos, INLINE 7 shots, and the diagnostic report attach to that WO number
 - **Share with shop** copies the packet to `data\shop\_shared\work-orders` (rides along if the knowledge base is already on OneDrive) and to a share folder you pick in Shop → IntelliDealer. Same `data\shop` tree the two-way sync branch uses — this does not overwrite that work.
 - **Log on / log off** write a shop timestamp on the packet. They post to IntelliDealer only when Azure API Gateway credentials are saved.
@@ -132,7 +132,7 @@ Keys may be decimal or `0x` hex.
 
 Close **USB-Link 3 Explorer** and Guidanz before Connect, or the adapter stays locked.
 
-Adapters are discovered from `RP121032.INI`, so any installed RP1210 vendor DLL shows up in the **Adapter** box and on the **Adapters** tab — not just the Cummins INLINE 7. Device IDs and baud rates come from the vendor's own INI rather than being guessed.
+Adapters are discovered from `RP121032.INI`, so any installed RP1210 vendor DLL shows up in the **Adapter** box and on the **Adapters** page — not just the Cummins INLINE 7. Device IDs and baud rates come from the vendor's own INI rather than being guessed.
 
 All adapter traffic runs on a background thread, so a code reset no longer freezes the window.
 
