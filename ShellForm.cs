@@ -161,7 +161,6 @@ namespace TechBench
             var pAdapters = ShellPage("shellPage3", BuildAdaptersPanel());
             _pages = new Control[] { _pSearch, _pOrders, pInline, pAdapters };
             _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill };
-            foreach (Control page in _pages) _host.Controls.Add(page);
 
             _nav = UiLayout.SwitchBar(
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
@@ -289,8 +288,14 @@ namespace TechBench
         {
             if (_pages == null || i < 0 || i >= _pages.Length) return;
             _page = i;
-            for (int n = 0; n < _pages.Length; n++)
-                _pages[n].Visible = n == i;
+            // One Dock.Fill child only. Sibling fill pages stay on Search at 192 DPI.
+            _host.SuspendLayout();
+            _host.Controls.Clear();
+            Control page = _pages[i];
+            page.Visible = true;
+            page.Dock = DockStyle.Fill;
+            _host.Controls.Add(page);
+            _host.ResumeLayout(true);
             PaintNav();
         }
 
