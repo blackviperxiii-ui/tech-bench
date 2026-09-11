@@ -24,7 +24,7 @@ namespace TechBench
         readonly AppSettings _settings;
         readonly ToolStripStatusLabel _syncStatus;
         readonly Label _jobSync;
-        readonly Timer _watchDebounce = new Timer();
+        readonly System.Windows.Forms.Timer _watchDebounce = new System.Windows.Forms.Timer();
         readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
         KbIndex _kb;
         UpdateManifest _ready;
