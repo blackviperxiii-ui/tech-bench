@@ -51,6 +51,9 @@ namespace J1939Reader
         /// <summary>Set by the shell; returns KB text for an SPN/FMI, or null.</summary>
         public Func<int, int, string> LookupCode;
 
+        /// <summary>Set by the shell after a session file is written, so shop history can sync.</summary>
+        public Action<string> SessionSaved;
+
         public string JobTag { get; set; }
 
         /// <summary>
@@ -1248,6 +1251,7 @@ namespace J1939Reader
             // The new files are history for next time; drop the cached index so a rescan picks them up.
             _history = null;
             _historyJob = "";
+            if (SessionSaved != null) SessionSaved(path);
         }
 
         void AppendDtcRows(StringBuilder csv, string state, List<Dtc> items)

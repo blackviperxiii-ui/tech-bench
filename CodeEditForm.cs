@@ -84,7 +84,7 @@ namespace TechBench
                 Height = 34,
                 Padding = new Padding(12, 0, 12, 0),
                 ForeColor = Color.DimGray,
-                Text = "Writes data\\user-codes.json in the knowledge base folder (previous file kept as .bak). "
+                Text = "Writes data\\shop\\{you}\\user-codes.json so other techs can sync it. "
                      + "The index reloads when you save."
             };
 

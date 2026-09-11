@@ -151,6 +151,10 @@ static class SelfTest
         UpdaterTests();
 
         Console.WriteLine();
+        Console.WriteLine("== shop two-way sync ==");
+        ShopSyncTests();
+
+        Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
         return _fail == 0 ? 0 : 1;
     }
@@ -970,5 +974,178 @@ ProtocolDescription=ISO 15765
         Check("default feed is public HTTPS",
             Updater.DefaultManifestUrl.StartsWith("https://"), Updater.DefaultManifestUrl);
         try { Directory.Delete(dir, true); } catch { }
+    }
+
+    static string MkRoot()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "tb-sync-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "data"));
+        File.WriteAllText(Path.Combine(root, "data", "kb.json"), "{\"codes\":[]}");
+        return root;
+    }
+
+    static UserCode Code(string brand, string code, string title)
+    {
+        return new UserCode { Brand = brand, Code = code, Title = title };
+    }
+
+    static void ShopSyncTests()
+    {
+        string prev = ShopSync.SettingsFolderOverride;
+        string settings = Path.Combine(Path.GetTempPath(), "tb-sync-set-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(settings);
+        ShopSync.SettingsFolderOverride = settings;
+        try
+        {
+            Eq("sanitize drops junk", ShopSync.SanitizeTechId("Jeremy S."), "Jeremy-S");
+            Eq("sanitize empty", ShopSync.SanitizeTechId("@@@"), "tech");
+
+            string kbA = MkRoot();
+            string kbB = MkRoot();
+            string usb = Path.Combine(Path.GetTempPath(), "tb-usb-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(usb);
+
+            var alice = new ShopSyncSettings { TechId = "alice", SyncFolder = usb };
+            var bob = new ShopSyncSettings { TechId = "bob", SyncFolder = usb };
+
+            ShopSync.SaveUserCode(kbA, "alice", Code("DOOSAN", "F99", "Alice cooler note"));
+            ShopSync.SaveNote(kbA, "alice", "Tank header", "Check the 4-pin first.");
+            string pic = Path.Combine(kbA, "alice.png");
+            File.WriteAllText(pic, "png-bytes");
+            ShopSync.AddFile(kbA, "alice", pic);
+
+            ShopSyncResult a1 = ShopSync.Run(kbA, alice);
+            Check("alice pushes new shop files", a1.Pushed > 0, "pushed=" + a1.Pushed);
+            Eq("alice has no conflict on first push", a1.Conflicts, 0);
+
+            ShopSync.SaveUserCode(kbB, "bob", Code("IR", "F12", "Bob sensor note"));
+            ShopSyncResult b1 = ShopSync.Run(kbB, bob);
+            Check("bob pulls alice and pushes his", b1.Pulled > 0 && b1.Pushed > 0,
+                "pulled=" + b1.Pulled + " pushed=" + b1.Pushed);
+            Eq("bob first pass no file conflict", b1.Conflicts, 0);
+
+            ShopSyncResult a2 = ShopSync.Run(kbA, alice);
+            Check("alice pulls bob's shard", a2.Pulled > 0, "pulled=" + a2.Pulled);
+
+            var kb = new KbIndex();
+            kb.Load(kbA);
+            int total;
+            Check("alice KB has bob's code after pull",
+                kb.Search("F12", "CODE", 10, out total).Count >= 1, "total=" + total);
+            Check("alice KB has her own code",
+                kb.Search("F99", "CODE", 10, out total).Count >= 1, "total=" + total);
+            Check("note is searchable",
+                kb.Search("Tank header", "NOTE", 10, out total).Count >= 1, kb.Status);
+            Check("note also matches its file name",
+                kb.Search("Tank-header", "NOTE", 10, out total).Count >= 1, "total=" + total);
+            Check("file is searchable",
+                kb.Search("alice.png", "FILE", 10, out total).Count >= 1, kb.Status);
+
+            // Same file, both sides edited after a clean sync → conflict, not last-write-wins.
+            string noteA = Path.Combine(ShopSync.ShardDir(kbA, "alice"), "notes");
+            string[] notes = Directory.GetFiles(noteA, "*.txt");
+            Check("alice has a note file", notes.Length > 0, "none");
+            string relNote = Path.GetFileName(notes[0]);
+            ShopSync.Run(kbA, alice);
+            ShopSync.Run(kbB, bob);
+            string aliceNote = notes[0];
+            string usbNote = Path.Combine(usb, "data", "shop", "alice", "notes", relNote);
+            Check("usb has alice's note", File.Exists(usbNote), usbNote);
+            File.WriteAllText(aliceNote, "Alice rewrite");
+            File.WriteAllText(usbNote, "Bob rewrite of alice note");
+            ShopSyncResult clash = ShopSync.Run(kbA, alice);
+            Check("both-changed note is a conflict", clash.Conflicts >= 1, "conflicts=" + clash.Conflicts);
+            Check("alice's text not silently overwritten",
+                File.ReadAllText(aliceNote).Contains("Alice rewrite"), File.ReadAllText(aliceNote));
+            Check("sync-folder text not silently overwritten",
+                File.ReadAllText(usbNote).Contains("Bob rewrite"), File.ReadAllText(usbNote));
+
+            ShopConflict noteClash = null;
+            foreach (ShopConflict c in clash.ConflictList)
+                if (c.Kind == "note" || (c.RelativePath ?? "").IndexOf(relNote, StringComparison.OrdinalIgnoreCase) >= 0)
+                    noteClash = c;
+            Check("conflict names the note", noteClash != null, "missing");
+            if (noteClash != null)
+            {
+                ShopSync.Resolve(kbA, noteClash, "local");
+                ShopSyncResult after = ShopSync.Run(kbA, alice);
+                bool still = false;
+                foreach (ShopConflict c in after.ConflictList)
+                    if ((c.RelativePath ?? "").IndexOf(relNote, StringComparison.OrdinalIgnoreCase) >= 0) still = true;
+                Check("keep mine clears that file conflict", !still, "still listed");
+            }
+
+            // Record-level: same brand+code, different text in two shards.
+            string kbC = MkRoot();
+            ShopSync.SaveUserCode(kbC, "alice", Code("DOOSAN", "F50", "Alice title"));
+            ShopSync.SaveUserCode(kbC, "bob", Code("DOOSAN", "F50", "Bob title"));
+            var rec = new ShopSyncResult();
+            ShopSync.CollectCodeConflicts(kbC, rec);
+            Eq("same code different text is a conflict", rec.Conflicts, 1);
+            ShopSync.Resolve(kbC, rec.ConflictList[0], "local");
+            var rec2 = new ShopSyncResult();
+            ShopSync.CollectCodeConflicts(kbC, rec2);
+            Eq("keep mine resolves the code", rec2.Conflicts, 0);
+            var kbResolved = new KbIndex();
+            kbResolved.Load(kbC);
+            var f50 = kbResolved.Search("F50", "CODE", 10, out total);
+            Check("resolved title is Alice's",
+                f50.Count == 1 && f50[0].Title.Contains("Alice title"),
+                "count=" + total);
+
+            ShopSync.SaveUserCode(kbC, "alice", Code("DOOSAN", "F51", "A"));
+            ShopSync.SaveUserCode(kbC, "bob", Code("DOOSAN", "F51", "B"));
+            var rec3 = new ShopSyncResult();
+            ShopSync.CollectCodeConflicts(kbC, rec3);
+            Eq("F51 is a conflict", rec3.Conflicts, 1);
+            ShopSync.Resolve(kbC, rec3.ConflictList[0], "both");
+            var rec4 = new ShopSyncResult();
+            ShopSync.CollectCodeConflicts(kbC, rec4);
+            Eq("keep both stops nagging", rec4.Conflicts, 0);
+            var kbBoth = new KbIndex();
+            kbBoth.Load(kbC);
+            Eq("keep both still shows two F51 hits", kbBoth.Search("F51", "CODE", 10, out total).Count, 2);
+
+            // Shared tree (no USB): does not copy out of the KB.
+            string kbShare = MkRoot();
+            ShopSync.SaveUserCode(kbShare, "alice", Code("DOOSAN", "F1", "shared"));
+            ShopSyncResult share = ShopSync.Run(kbShare, new ShopSyncSettings { TechId = "alice", SyncFolder = "" });
+            Check("shared-tree mode", share.SharedTree, "not shared");
+            Eq("shared tree does not push to a folder", share.Pushed, 0);
+
+            // Legacy user-codes.json is imported into the shard once.
+            string kbLeg = MkRoot();
+            UserCodes.Save(kbLeg, new List<UserCode> { Code("DOOSAN", "LEG", "Old file") });
+            ShopSync.Run(kbLeg, new ShopSyncSettings { TechId = "pat", SyncFolder = "" });
+            Check("legacy copied into shard", File.Exists(ShopSync.ShardCodesPath(kbLeg, "pat")), "missing shard");
+            var kbLegIdx = new KbIndex();
+            kbLegIdx.Load(kbLeg);
+            Eq("legacy code not duplicated in search", kbLegIdx.Search("LEG", "CODE", 10, out total).Count, 1);
+
+            // History publish / import: new csv copies, same name different bytes is left alone.
+            string histSrc = Path.Combine(kbA, "job_dtcs.csv");
+            File.WriteAllText(histSrc, "time,job,state,spn,fmi,occurrences,name,fmi_text\n2026,HP,active,1,0,1,x,x\n");
+            ShopSync.PublishHistory(kbA, "alice", histSrc);
+            string sessions = Path.Combine(Path.GetTempPath(), "tb-sess-" + Guid.NewGuid().ToString("N"));
+            Eq("import copies missing history", ShopSync.ImportHistory(kbA, sessions), 1);
+            Eq("import is idempotent", ShopSync.ImportHistory(kbA, sessions), 0);
+            File.WriteAllText(Path.Combine(sessions, "job_dtcs.csv"), "local-only");
+            File.WriteAllText(Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "job_dtcs.csv"), "shop-other");
+            Eq("import does not last-write-wins session csv", ShopSync.ImportHistory(kbA, sessions), 0);
+            Eq("local session csv kept", File.ReadAllText(Path.Combine(sessions, "job_dtcs.csv")), "local-only");
+
+            try { Directory.Delete(kbA, true); } catch { }
+            try { Directory.Delete(kbB, true); } catch { }
+            try { Directory.Delete(kbC, true); } catch { }
+            try { Directory.Delete(kbShare, true); } catch { }
+            try { Directory.Delete(kbLeg, true); } catch { }
+            try { Directory.Delete(usb, true); } catch { }
+            try { Directory.Delete(sessions, true); } catch { }
+        }
+        finally
+        {
+            ShopSync.SettingsFolderOverride = prev;
+            try { Directory.Delete(settings, true); } catch { }
+        }
     }
 }

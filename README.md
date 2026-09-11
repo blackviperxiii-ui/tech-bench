@@ -16,6 +16,7 @@ Current stamp: **1.1.0** (Help → About). Does **not** ship manuals, filter cha
 - Job strip (model/serial) prefixes saved sessions and scopes the history
 - Remembers last model/serial and window size in `%LocalAppData%\TechBench\settings.json`
 - Help → Check for updates: public `latest.json` + SHA-256 of `TechBench.exe`, swapped by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token)
+- **Shop sync** — two-way share of tech notes, user codes, and shop files through the knowledge-base folder or a USB/network folder you pick in Shop → Sync
 
 A missing knowledge base does not block launch — the search status line says the index is empty.
 
@@ -50,7 +51,7 @@ The updater never sends credentials. If an INLINE 7 session is live, install is 
 test.bat
 ```
 
-280 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, settings, updater. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
+Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, settings, updater, two-way shop sync. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
 
 ## Knowledge base
 
@@ -66,7 +67,20 @@ A malformed file in `data\` only costs that section — the status line under th
 
 ### Adding what you learn
 
-**Add code to KB** (or Ctrl+N) writes `data\user-codes.json`, which the index already merges on load. The previous file is kept as `.bak`. Highlight an existing code first and the form opens pre-filled so editing is one step.
+**Add code to KB** (or Ctrl+N) writes `data\shop\{your-name}\user-codes.json`. The index merges every tech's folder on load. Older `data\user-codes.json` is still read (and copied into your shop folder on the first sync).
+
+**Add note** / **Add file** (Shop menu) drop a `.txt` or a copy of a PDF/photo into that same shop folder.
+
+### Sharing with another tech
+
+Two-way, no GitHub token, no extra installer:
+
+1. If `air-compressor-kb` already lives in a shared OneDrive folder, you are done. Each PC uses a tech name (Shop → Sync, defaults to the Windows user). Status bar shows sync state.
+2. If each bench has its own copy, Shop → Sync → Browse and point both PCs at the same USB stick, network share, or extra folder. **Sync now** copies `data\shop`, `data\notes`, and `data\files` both ways.
+
+Same user-code (or the same file) edited on both sides is listed as a conflict. Pick **Keep mine**, **Keep theirs**, or **Keep both** — the app never last-write-wins a note.
+
+`sync-path.txt` next to `TechBench.exe` (one path, `#` comments allowed) sets the sync folder without opening the dialog.
 
 ### Naming SPNs without a rebuild
 
@@ -111,6 +125,7 @@ The `_dtcs.csv` files are what the Unit history tab reads back, so saving a sess
 |---|---|
 | Ctrl+F or F3 | jump to the search box |
 | Ctrl+N | add a code to the knowledge base |
+| Shop → Sync | pick a folder, run two-way sync, resolve conflicts |
 | Enter (search box) | search now |
 | Down (search box) | move into the results |
 
