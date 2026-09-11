@@ -17,12 +17,14 @@ namespace TechBench
         readonly Inline7Control _inline;
         readonly SearchControl _search;
         readonly WorkOrderControl _orders;
-        readonly TabControl _tabs;
-        readonly TabPage _pSearch;
-        readonly TabPage _pOrders;
+        readonly Panel _host;
+        readonly Control[] _pages;
+        readonly Control _pSearch;
+        readonly Control _pOrders;
         readonly FlowLayoutPanel _nav;
         readonly Font _navNorm;
         readonly Font _navBold;
+        int _page;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
         readonly ToolStripStatusLabel _syncStatus;
@@ -47,8 +49,8 @@ namespace TechBench
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
-            _navNorm = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-            _navBold = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            _navNorm = new Font("Segoe UI", 12f, FontStyle.Regular);
+            _navBold = new Font("Segoe UI", 12f, FontStyle.Bold);
             string assets = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
             try
             {
@@ -146,43 +148,28 @@ namespace TechBench
             job.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
 
-            _tabs = new TabControl
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(1, 1),
-                Appearance = TabAppearance.FlatButtons
-            };
-
             _search = new SearchControl(kb);
             _inline = new Inline7Control();
             _orders = new WorkOrderControl(kb == null ? "" : kb.Root);
 
-            _pSearch = new TabPage("Search");
-            _pSearch.Controls.Add(_search);
-            var pInline = new TabPage("INLINE 7");
-            pInline.Controls.Add(_inline);
-            _pOrders = new TabPage("Work orders");
-            _pOrders.Controls.Add(_orders);
-            var pAdapters = new TabPage("Adapters");
-            pAdapters.Controls.Add(BuildAdaptersPanel());
-
-            _tabs.TabPages.Add(_pSearch);
-            _tabs.TabPages.Add(_pOrders);
-            _tabs.TabPages.Add(pInline);
-            _tabs.TabPages.Add(pAdapters);
+            // Panels, not TabControl: native headers paint "Work orders / INLINE 7 / Adapters"
+            // at 192 DPI but those pages are not hit-testable. Big wrap buttons + Visible pages
+            // cannot ghost.
+            _pSearch = ShellPage("shellPage0", _search);
+            _pOrders = ShellPage("shellPage1", _orders);
+            var pInline = ShellPage("shellPage2", _inline);
+            var pAdapters = ShellPage("shellPage3", BuildAdaptersPanel());
+            _pages = new Control[] { _pSearch, _pOrders, pInline, pAdapters };
+            _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill };
+            foreach (Control page in _pages) _host.Controls.Add(page);
 
             _nav = UiLayout.SwitchBar(
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
-                delegate(int i)
-                {
-                    if (i >= 0 && i < _tabs.TabCount) _tabs.SelectedIndex = i;
-                });
-            _tabs.SelectedIndexChanged += delegate { PaintNav(); };
-            PaintNav();
+                delegate(int i) { ShowPage(i); });
+            ShowPage(0);
 
             // Last-added docks at the top: status, menu, job strip, switch bar, then pages fill.
-            Controls.Add(_tabs);
+            Controls.Add(_host);
             Controls.Add(_nav);
             Controls.Add(job);
             Controls.Add(menu);
@@ -195,7 +182,7 @@ namespace TechBench
             useJob.Click += delegate
             {
                 string q = (_model.Text + " " + _serial.Text).Trim();
-                _tabs.SelectedTab = _pSearch;
+                ShowPage(0);
                 _search.Prefill(q);
                 SyncJob();
             };
@@ -209,7 +196,7 @@ namespace TechBench
             // The INLINE 7 tab knows SPNs; the knowledge base knows the shop's own write-ups on them.
             _inline.OpenInSearch = delegate(string query)
             {
-                _tabs.SelectedTab = _pSearch;
+                ShowPage(0);
                 _search.Prefill(query);
             };
             _inline.LookupCode = delegate(int spn, int fmi)
@@ -238,7 +225,7 @@ namespace TechBench
             {
                 if ((e.Control && e.KeyCode == Keys.F) || e.KeyCode == Keys.F3)
                 {
-                    _tabs.SelectedTab = _pSearch;
+                    ShowPage(0);
                     _search.FocusQuery();
                     e.Handled = true;
                 }
@@ -295,7 +282,27 @@ namespace TechBench
 
         void PaintNav()
         {
-            UiLayout.MarkSwitch(_nav, _tabs.SelectedIndex, _navNorm, _navBold);
+            UiLayout.MarkSwitch(_nav, _page, _navNorm, _navBold);
+        }
+
+        void ShowPage(int i)
+        {
+            if (_pages == null || i < 0 || i >= _pages.Length) return;
+            _page = i;
+            for (int n = 0; n < _pages.Length; n++)
+                _pages[n].Visible = n == i;
+            PaintNav();
+        }
+
+        static Panel ShellPage(string name, Control body)
+        {
+            var p = new Panel { Name = name, Dock = DockStyle.Fill, Visible = false };
+            if (body != null)
+            {
+                body.Dock = DockStyle.Fill;
+                p.Controls.Add(body);
+            }
+            return p;
         }
 
         void ApplyWindow(AppSettings s)
@@ -546,7 +553,7 @@ namespace TechBench
                 }
                 RunSync(false);
                 ReloadKb();
-                _tabs.SelectedTab = _pSearch;
+                ShowPage(0);
                 _search.Prefill((dlg.Result.Code + " " + dlg.Result.Title).Trim());
             }
         }
@@ -567,7 +574,7 @@ namespace TechBench
                     ShopSync.SaveNote(_kb.Root, ShopSync.LoadSettings().TechId, dlg.NoteTitle, dlg.NoteBody);
                     RunSync(false);
                     ReloadKb();
-                    _tabs.SelectedTab = _pSearch;
+                    ShowPage(0);
                     string q = dlg.NoteTitle;
                     if (string.IsNullOrWhiteSpace(q))
                     {
@@ -605,7 +612,7 @@ namespace TechBench
                     string dest = ShopSync.AddFile(_kb.Root, ShopSync.LoadSettings().TechId, dlg.FileName);
                     RunSync(false);
                     ReloadKb();
-                    _tabs.SelectedTab = _pSearch;
+                    ShowPage(0);
                     _search.Prefill(Path.GetFileName(dest));
                 }
                 catch (Exception ex)

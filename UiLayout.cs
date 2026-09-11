@@ -95,9 +95,11 @@ namespace TechBench
                     Name = "shellSwitch" + i,
                     Text = names[i],
                     AutoSize = true,
-                    MinimumSize = new Size(128, 36),
-                    Margin = new Padding(0, 0, 8, 4),
+                    MinimumSize = new Size(170, 48),
+                    Margin = new Padding(0, 0, 10, 4),
+                    Padding = new Padding(12, 8, 12, 8),
                     Tag = idx,
+                    Font = new Font("Segoe UI", 12f, FontStyle.Bold),
                     UseVisualStyleBackColor = false
                 };
                 b.Click += delegate { if (onPick != null) onPick(idx); };
