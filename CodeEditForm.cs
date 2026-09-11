@@ -24,8 +24,8 @@ namespace TechBench
             ShowInTaskbar = false;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
-            ClientSize = new Size(680, 620);
-            MinimumSize = new Size(560, 520);
+            MinimumSize = new Size(520, 420);
+            Size = UiLayout.SizeForScreen(680, 620, 520, 420);
 
             var table = new TableLayoutPanel
             {
@@ -91,6 +91,7 @@ namespace TechBench
             Controls.Add(table);
             Controls.Add(note);
             Controls.Add(buttons);
+            Load += delegate { UiLayout.FitToWorkingArea(this); };
         }
 
         void Collect()
