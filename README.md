@@ -34,7 +34,7 @@ That produces `TechBench.exe`. Desktop shortcut can point at it.
 test.bat
 ```
 
-248 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
+267 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
 
 ## Knowledge base
 
