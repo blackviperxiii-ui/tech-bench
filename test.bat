@@ -24,7 +24,6 @@ if errorlevel 1 exit /b 1
 "%CSC%" /nologo /platform:x86 /target:exe /main:LayoutAudit ^
   /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
-  /win32manifest:app.manifest ^
   /out:LayoutAudit.exe ^
   tools\LayoutAudit.cs Program.cs ShellForm.cs SearchControl.cs CodeEditForm.cs NoteEditForm.cs SyncForm.cs ^
   KbIndex.cs UserCodes.cs ShopSync.cs AppVersion.cs AppSettings.cs Updater.cs UiLayout.cs ^
