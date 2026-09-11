@@ -1,7 +1,7 @@
 @echo off
 rem Offline self-test: J1939 decoding, BAM reassembly, DM11/DM3 code-clear construction, adapter discovery, trend, timeline,
 rem unit history, KB load/search, user-code round-trip, snapshot diff, report text,
-rem settings, latest.json / SHA-256 updater, two-way shop sync,
+rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way shop sync,
 rem work-order packets / IntelliDealer gateway (no live DMS),
 rem and shop-laptop WinForms layout (primary buttons stay on screen).
 rem Needs no adapter and no knowledge base — it builds its own sample data in %TEMP%.

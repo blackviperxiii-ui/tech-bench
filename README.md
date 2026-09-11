@@ -15,11 +15,23 @@ Current stamp: **1.2.0** (Help → About). Does **not** ship manuals, filter cha
 - **Report** — printable one-page summary for a work order
 - Job strip (model/serial) prefixes saved sessions and scopes the history
 - Remembers last model/serial and window size in `%LocalAppData%\TechBench\settings.json`
-- Help → Check for updates: public `latest.json` + SHA-256 of `TechBench.exe`, swapped by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token)
+- Help → Check for updates: public `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token)
 - **Shop sync** — two-way share of tech notes, user codes, and shop files through the knowledge-base folder or a USB/network folder you pick in Shop → Sync
 - **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off. IntelliDealer Azure API Gateway log on / log off / sign off / multimedia post-back only when dealer credentials are in Shop → IntelliDealer
 
 A missing knowledge base does not block launch — the search status line says the index is empty.
+
+## Install (shop PC)
+
+Run `TechBench-Setup-<version>.exe` (from a release). It does **not** need administrator.
+
+- Puts `TechBench.exe` and tab icons in `%LocalAppData%\Programs\TechBench`
+- Start Menu shortcut (Uninstall is there too)
+- Desktop shortcut unless you untick it
+
+That folder is user-writable, so **Help → Check for updates** replaces the installed exe in place. Do not copy `TechBench.exe` onto the Desktop after that — you would update the wrong file.
+
+INLINE 7 / other RP1210 adapters still need the **vendor** driver package (Cummins, Noregon, …). Those installers are usually machine-wide and often ask for admin. Tech Bench itself does not ship those DLLs and does not ask for elevation (`asInvoker`).
 
 ## Build (32-bit — required for INLINE 7)
 
@@ -30,21 +42,28 @@ cd Documents\TechBench
 build.bat
 ```
 
-That produces `TechBench.exe`. Desktop shortcut can point at it.
+That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
 
 `/platform:x86` is not optional: RP1210 adapter drivers are 32-bit only. The Adapters tab tells you if the running process is wrong.
 
-### Release (hash + latest.json)
+### Release (hash + latest.json + installer)
 
 ```bat
 release.bat
 ```
 
-Writes `TechBench.exe` and `latest.json` (`version`, `sha256`, `url`). Upload **both** files to a **public** HTTPS location. Shop PCs download them anonymously.
+Writes:
 
-This GitHub repo is private, so `github.com/.../releases/...` URLs will 404 without a login. Host the two files somewhere GET works without auth (public dist repo, object storage, etc.). On a shop PC you can override the feed with `update-url.txt` next to the exe (one URL, `#` comments allowed).
+- `TechBench.exe` and `latest.json` (`version`, `sha256`, `url`) for the in-app updater
+- `dist\TechBench-Setup-<version>.exe` — Inno Setup per-user installer (same version stamp as Help → About)
 
-The updater never sends credentials. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start.
+Building the Setup exe needs the Inno Setup compiler (`ISCC.exe`). `installer\build.bat` looks in the usual install paths, then downloads a local copy into `tools\innosetup` (gitignored) if needed. Shop PCs never run that step — they only run the finished Setup exe.
+
+Upload **TechBench.exe** and **latest.json** to a **public** HTTPS location. Shop PCs download them anonymously. Hand techs the Setup exe for first install (and for machines that never had a copy).
+
+This GitHub repo is private, so `github.com/.../releases/...` URLs will 404 without a login. Host the two updater files somewhere GET works without auth (public dist repo, object storage, etc.). On a shop PC you can override the feed with `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed).
+
+The updater never sends credentials and the installer does not contain a GitHub token. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start, in the same folder the Setup exe used.
 
 ## Test
 
@@ -52,7 +71,7 @@ The updater never sends credentials. If an INLINE 7 session is live, install is 
 test.bat
 ```
 
-Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, settings, updater, two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
+Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
 
 ## Knowledge base
 

@@ -70,13 +70,62 @@ namespace TechBench
                 if (w < 1) w = Math.Max(1, flow.Width);
                 Size pref = flow.GetPreferredSize(new Size(w, 0));
                 int h = pref.Height;
-                if (h < 28) h = 28;
+                int minH = 28;
+                if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
+                if (h < minH) h = minH;
                 if (flow.Height != h) flow.Height = h;
             };
             flow.Layout += delegate { fit(null, EventArgs.Empty); };
             flow.SizeChanged += delegate { fit(null, EventArgs.Empty); };
             return flow;
         }
+
+        /// <summary>
+        /// Large wrapping buttons for Search / Work orders / INLINE 7 / Adapters.
+        /// Native TabControl headers vanish under a fixed job strip at 192 DPI and do not look like switches.
+        /// </summary>
+        public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick)
+        {
+            var bar = WrapBar(new Padding(8, 8, 8, 8));
+            bar.BackColor = Color.FromArgb(36, 48, 68);
+            bar.MinimumSize = new Size(0, 72);
+            if (names == null) return bar;
+            for (int i = 0; i < names.Length; i++)
+            {
+                int idx = i;
+                var b = new Button
+                {
+                    Name = "shellSwitch" + i,
+                    Text = names[i],
+                    AutoSize = true,
+                    MinimumSize = new Size(170, 48),
+                    Margin = new Padding(0, 0, 10, 4),
+                    Padding = new Padding(12, 8, 12, 8),
+                    Tag = idx,
+                    Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                    UseVisualStyleBackColor = false
+                };
+                b.Click += delegate { if (onPick != null) onPick(idx); };
+                bar.Controls.Add(b);
+            }
+            return bar;
+        }
+
+        public static void MarkSwitch(FlowLayoutPanel bar, int selected, Font normal, Font bold)
+        {
+            if (bar == null) return;
+            foreach (Control c in bar.Controls)
+            {
+                Button b = c as Button;
+                if (b == null) continue;
+                int idx = (b.Tag is int) ? (int)b.Tag : -1;
+                bool on = idx == selected;
+                b.Font = on && bold != null ? bold : (normal ?? b.Font);
+                b.BackColor = on ? Color.White : Color.FromArgb(70, 90, 120);
+                b.ForeColor = on ? Color.Black : Color.White;
+            }
+        }
+
 
         public static SplitContainer Split(Orientation orientation, int distance, int min1, int min2, Control a, Control b)
         {
