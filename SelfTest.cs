@@ -880,6 +880,8 @@ ProtocolDescription=ISO 15765
                 kb.Search("F99", "CODE", 10, out total).Count >= 1, "total=" + total);
             Check("note is searchable",
                 kb.Search("Tank header", "NOTE", 10, out total).Count >= 1, kb.Status);
+            Check("note also matches its file name",
+                kb.Search("Tank-header", "NOTE", 10, out total).Count >= 1, "total=" + total);
             Check("file is searchable",
                 kb.Search("alice.png", "FILE", 10, out total).Count >= 1, kb.Status);
 

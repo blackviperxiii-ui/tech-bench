@@ -344,7 +344,13 @@ namespace TechBench
                     ReloadKb();
                     _tabs.SelectedTab = _pSearch;
                     string q = dlg.NoteTitle;
-                    if (string.IsNullOrWhiteSpace(q)) q = Path.GetFileNameWithoutExtension(path);
+                    if (string.IsNullOrWhiteSpace(q))
+                    {
+                        foreach (string raw in (dlg.NoteBody ?? "").Replace("\r\n", "\n").Split('\n'))
+                        {
+                            if (raw.Trim().Length > 0) { q = raw.Trim(); break; }
+                        }
+                    }
                     _search.Prefill(q);
                 }
                 catch (Exception ex)
