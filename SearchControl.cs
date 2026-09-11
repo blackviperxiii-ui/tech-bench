@@ -45,11 +45,11 @@ namespace TechBench
                 Width = 130,
                 Margin = new Padding(0, 2, 8, 4)
             };
-            foreach (string k in new[] { "ALL", "CODE", "PASSWORD", "MANUAL", "FILTER", "EQUIP" })
+            foreach (string k in new[] { "ALL", "CODE", "PASSWORD", "MANUAL", "FILTER", "EQUIP", "NOTE", "FILE" })
                 _kind.Items.Add(k);
             _kind.SelectedIndex = 0;
             var go = new Button { Text = "Search", AutoSize = true, Margin = new Padding(0, 1, 8, 4) };
-            _open = new Button { Text = "Open PDF", AutoSize = true, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
+            _open = new Button { Text = "Open file", AutoSize = true, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
             bar.Controls.Add(_q);
             bar.Controls.Add(_kind);
             bar.Controls.Add(go);
@@ -159,7 +159,7 @@ namespace TechBench
             if (_sel == null) { _detail.Text = ""; _open.Enabled = false; return; }
             string extra = "";
             bool canOpen = false;
-            if (_sel.Kind == "MANUAL")
+            if (_sel.Kind == "MANUAL" || _sel.Kind == "FILE" || _sel.Kind == "NOTE")
             {
                 if (string.IsNullOrEmpty(_sel.Path))
                     extra = "\r\n\r\n(No file path recorded for this document.)";
@@ -184,11 +184,11 @@ namespace TechBench
             if (!Exists(_sel.Path))
             {
                 MessageBox.Show(this, "Cannot reach:\n" + _sel.Path + "\n\nCheck that the USB drive or network share is connected.",
-                    "Open PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "Open file", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             try { Process.Start(_sel.Path); }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open PDF"); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open file"); }
         }
     }
 }

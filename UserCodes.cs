@@ -19,6 +19,8 @@ namespace TechBench
         public readonly List<string> Checks = new List<string>();
         public string Reset = "";
         public string Safety = "";
+        /// <summary>Which shop shard this came from. Not written to JSON.</summary>
+        public string Author = "";
 
         public bool IsUsable()
         {
@@ -37,13 +39,35 @@ namespace TechBench
             return Path.Combine(Path.Combine(kbRoot ?? "", "data"), "user-codes.json");
         }
 
+        public static string KeyOf(UserCode c)
+        {
+            return (c.Brand ?? "").Trim().ToLowerInvariant() + "\u0001" + (c.Code ?? "").Trim().ToLowerInvariant();
+        }
+
+        public static string Fingerprint(UserCode c)
+        {
+            if (c == null) return "";
+            var sb = new StringBuilder();
+            sb.Append(c.Brand).Append('\n').Append(c.Code).Append('\n').Append(c.Title).Append('\n');
+            sb.Append(c.Description).Append('\n').Append(c.Severity).Append('\n').Append(c.Controller).Append('\n');
+            sb.Append(c.Reset).Append('\n').Append(c.Safety).Append('\n');
+            foreach (string x in c.Causes) sb.Append(x).Append('\n');
+            sb.Append("---\n");
+            foreach (string x in c.Checks) sb.Append(x).Append('\n');
+            return ShopSync.HashText(sb.ToString());
+        }
+
         public static List<UserCode> Load(string kbRoot)
         {
+            return LoadFrom(PathFor(kbRoot));
+        }
+
+        public static List<UserCode> LoadFrom(string path)
+        {
             var list = new List<UserCode>();
-            string path = PathFor(kbRoot);
             try
             {
-                if (!File.Exists(path)) return list;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return list;
                 var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
                 var root = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
                 object codes;
@@ -102,23 +126,22 @@ namespace TechBench
         {
             var list = existing ?? new List<UserCode>();
             if (entry == null || !entry.IsUsable()) return list;
-            string key = Key(entry);
+            string key = KeyOf(entry);
             for (int i = 0; i < list.Count; i++)
             {
-                if (Key(list[i]) == key) { list[i] = entry; return list; }
+                if (KeyOf(list[i]) == key) { list[i] = entry; return list; }
             }
             list.Add(entry);
             return list;
         }
 
-        static string Key(UserCode c)
-        {
-            return (c.Brand ?? "").Trim().ToLowerInvariant() + "\u0001" + (c.Code ?? "").Trim().ToLowerInvariant();
-        }
-
         public static void Save(string kbRoot, List<UserCode> codes)
         {
-            string path = PathFor(kbRoot);
+            SaveTo(PathFor(kbRoot), codes);
+        }
+
+        public static void SaveTo(string path, List<UserCode> codes)
+        {
             string dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             // Keep a single rolling backup: this file is hand-editable and losing it loses shop knowledge.
