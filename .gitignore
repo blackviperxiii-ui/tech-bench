@@ -6,6 +6,8 @@ obj/
 Smoke.exe
 MakeIco.exe
 SelfTest.exe
+LayoutAudit.exe
 TechBench.exe
+layout-shots*/
 .vs/
 *.log
