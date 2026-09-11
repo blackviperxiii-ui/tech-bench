@@ -65,6 +65,17 @@ namespace J1939Reader
             get { return _bus.WantConnected || _snap.Connected || _snap.Busy; }
         }
 
+        /// <summary>WO tab attaches the PNG after Shot.</summary>
+        public Action<string> AfterScreenshot;
+
+        /// <summary>WO tab attaches the diagnostic report text after Report.</summary>
+        public Action<string> AfterReport;
+
+        public string LiveReportText()
+        {
+            return JobReport.Text(BuildReportData());
+        }
+
         public Inline7Control()
         {
             Dock = DockStyle.Fill;
@@ -1101,6 +1112,7 @@ namespace J1939Reader
             {
                 string path = SessionIo.Screenshot(_tabs != null ? (Control)_tabs : this);
                 Log("Screenshot " + path);
+                if (AfterScreenshot != null) AfterScreenshot(path);
             }
             catch (Exception ex) { Log("Screenshot failed: " + ex.Message); }
         }
@@ -1167,7 +1179,12 @@ namespace J1939Reader
 
         void PrintReport(bool preview)
         {
-            try { JobReportPrint.Print(BuildReportData(), preview, this); }
+            try
+            {
+                ReportData d = BuildReportData();
+                JobReportPrint.Print(d, preview, this);
+                if (AfterReport != null) AfterReport(JobReport.Text(d));
+            }
             catch (Exception ex)
             {
                 Log("Report failed: " + ex.Message);

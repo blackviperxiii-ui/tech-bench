@@ -155,6 +155,10 @@ static class SelfTest
         ShopSyncTests();
 
         Console.WriteLine();
+        Console.WriteLine("== work orders / IntelliDealer gateway ==");
+        WorkOrderTests();
+
+        Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
         return _fail == 0 ? 0 : 1;
     }
@@ -738,6 +742,173 @@ ProtocolDescription=ISO 15765
         Check("empty report says no job", emptyText.Contains("(not entered)"), "no job placeholder");
         Check("empty report marks faults as none", emptyText.Contains("(none)"), "no none marker");
         Check("empty report shows em dash for rpm", emptyText.Contains("RPM:      —"), emptyText);
+    }
+
+    static void WorkOrderTests()
+    {
+        string prevFolder = IdSettings.FolderOverride;
+        string prevWo = WorkOrderStore.FolderOverride;
+        string prevExe = WorkOrderStore.ExeDirOverride;
+        var prevHttp = IdGateway.HttpOverride;
+        string root = Path.Combine(Path.GetTempPath(), "tb-wo-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string kb = Path.Combine(root, "kb");
+        Directory.CreateDirectory(Path.Combine(kb, "data"));
+        string share = Path.Combine(root, "share");
+        Directory.CreateDirectory(share);
+        IdSettings.FolderOverride = Path.Combine(root, "cfg");
+        WorkOrderStore.FolderOverride = Path.Combine(root, "local-wo");
+        WorkOrderStore.ExeDirOverride = Path.Combine(root, "exe");
+        Directory.CreateDirectory(WorkOrderStore.ExeDirOverride);
+        try
+        {
+            Eq("sanitize key", WorkOrderStore.SafeKey("WO 12/34"), "WO-12-34");
+            Eq("empty key", WorkOrderStore.SafeKey("***"), "");
+
+            var wo = new WorkOrder
+            {
+                Number = "44551",
+                Segment = "01",
+                Customer = "Acme Quarry",
+                Model = "HP450",
+                Serial = "12345",
+                Notes = "No start. Check 4-pin.",
+                Description = "Won't crank"
+            };
+            Eq("key", wo.Key(), "44551-01");
+            Check("job tag has WO", wo.JobTag().Contains("WO 44551-01"), wo.JobTag());
+
+            var s = new IdSettings { TechId = "jeremy", ShareFolder = share };
+            WorkOrderStore.Save(wo, s, kb);
+            string packet = Path.Combine(WorkOrderStore.LocalRoot(), "44551-01");
+            Check("wo.json written", File.Exists(Path.Combine(packet, "wo.json")), packet);
+            Check("notes.txt written", File.ReadAllText(Path.Combine(packet, "notes.txt")).Contains("4-pin"), "notes");
+            Check("shop shard packet",
+                File.Exists(Path.Combine(WorkOrderStore.ShopTechDir(kb, "jeremy"), "44551-01", "wo.json")),
+                "missing data\\shop\\jeremy\\work-orders");
+
+            WorkOrder loaded = WorkOrderStore.Load(packet);
+            Check("reload packet", loaded != null, packet);
+            if (loaded != null)
+            {
+                Eq("reload customer", loaded.Customer, "Acme Quarry");
+                Check("reload notes", loaded.Notes.Contains("4-pin"), loaded.Notes);
+            }
+
+            string pic = Path.Combine(root, "shot.png");
+            File.WriteAllText(pic, "png-bytes");
+            WorkOrderStore.AttachFile(wo, pic, s, kb);
+            Check("media listed", wo.Media.Count >= 1, "count=" + wo.Media.Count);
+
+            wo.ReportText = "TECH BENCH — DIAGNOSTIC REPORT";
+            string dest = WorkOrderStore.Share(wo, s, kb);
+            Check("share dest exists", Directory.Exists(dest), dest);
+            Check("shared in kb _shared",
+                File.Exists(Path.Combine(WorkOrderStore.ShopSharedDir(kb), "44551-01", "wo.json")),
+                "kb shared missing");
+            Check("shared in share\\work-orders",
+                File.Exists(Path.Combine(share, "work-orders", "44551-01", "wo.json")),
+                "share folder missing");
+            Check("shared in share data\\shop\\_shared",
+                File.Exists(Path.Combine(share, "data", "shop", "_shared", "work-orders", "44551-01", "wo.json")),
+                "sync-compatible path missing");
+
+            List<WorkOrder> fromJson = WorkOrderStore.ParseAssignedJson(
+                "[{\"Number\":\"99\",\"Customer\":\"Bob\",\"Model\":\"XHP750\",\"Serial\":\"S1\"}]");
+            Eq("json count", fromJson.Count, 1);
+            Eq("json number", fromJson[0].Number, "99");
+            List<WorkOrder> wrapped = WorkOrderStore.ParseAssignedJson(
+                "{\"value\":[{\"WorkOrder\":\"77\",\"Segment\":\"02\",\"CustomerName\":\"Cat\"}]}");
+            Eq("odata wrap", wrapped.Count, 1);
+            Eq("odata wo", wrapped[0].Number, "77");
+            List<WorkOrder> csv = WorkOrderStore.ParseAssignedCsv("Number,Customer,Model\n88,Delta,HP1600\n");
+            Eq("csv count", csv.Count, 1);
+            Eq("csv model", csv[0].Model, "HP1600");
+
+            File.WriteAllText(Path.Combine(WorkOrderStore.ExeDirOverride, "id-work-orders.json"),
+                "[{\"Number\":\"SIDECAR\",\"Customer\":\"From file\"}]");
+            List<WorkOrder> all = WorkOrderStore.ListAll(s, kb);
+            bool sawLocal = false, sawFile = false;
+            foreach (WorkOrder x in all)
+            {
+                if (x.Number == "44551") sawLocal = true;
+                if (x.Number == "SIDECAR") sawFile = true;
+            }
+            Check("list includes saved WO", sawLocal, "missing 44551");
+            Check("list includes sidecar file", sawFile, "missing SIDECAR");
+
+            string sync = Path.Combine(IdSettings.Folder(), "sync.json");
+            File.WriteAllText(sync, "{\"TechId\":\"alice\",\"SyncFolder\":\"Z:\\\\usb\"}");
+            Eq("reads other-agent sync folder", IdSettings.ReadSiblingShare(WorkOrderStore.ExeDirOverride), "Z:\\usb");
+            string after = File.ReadAllText(sync);
+            Check("does not smash sync.json", after.Contains("alice") && after.Contains("Z:"), after);
+
+            var blank = new IdSettings();
+            IdCallResult missing = IdGateway.FetchAssigned(blank);
+            Check("no creds is not a live fetch", !missing.Posted, missing.Message);
+            IdCallResult noSign = IdGateway.SignOff(blank, wo);
+            Check("sign-off refused without gateway", !noSign.Posted, noSign.Message);
+            Check("sign-off names payroll/DMS", noSign.Message.Contains("payroll") || noSign.Message.Contains("API Gateway"), noSign.Message);
+
+            var live = new IdSettings
+            {
+                GatewayUrl = "https://dealer.azure-api.net",
+                SubscriptionKey = "test-key",
+                TechNumber = "T12",
+                AssignedPath = "/service/technicians/{tech}/workorders",
+                SignOffPath = "/service/workorders/{wo}/signoff"
+            };
+            Eq("expand assigned", IdGateway.Expand(live.AssignedPath, live, null),
+                "/service/technicians/T12/workorders");
+            Eq("combine url", IdGateway.CombineUrl(live.GatewayUrl, "/x"),
+                "https://dealer.azure-api.net/x");
+
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                if (req.Url.Contains("workorders") && req.Method == "GET")
+                    return new IdHttpResponse { Status = 200, Body = "[{\"Number\":\"G1\",\"Customer\":\"Gateway\"}]" };
+                return new IdHttpResponse { Status = 404, Error = "not found" };
+            };
+            IdCallResult fetched = IdGateway.FetchAssigned(live);
+            Check("gateway fetch posts on 200", fetched.Posted, fetched.Message);
+            Eq("gateway fetch count", fetched.WorkOrders.Count, 1);
+            Eq("gateway source", fetched.WorkOrders[0].Source, "gateway");
+
+            IdCallResult denied = IdGateway.SignOff(live, wo);
+            Check("sign-off 404 is not success", !denied.Posted, denied.Message);
+            Check("did not fake sign-off", wo.ApiSignOff == false, "ApiSignOff was set");
+
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                Check("sign-off sends subscription key",
+                    req.Headers.ContainsKey("Ocp-Apim-Subscription-Key")
+                    && req.Headers["Ocp-Apim-Subscription-Key"] == "test-key",
+                    "missing header");
+                return new IdHttpResponse { Status = 200, Body = "{\"ok\":true}" };
+            };
+            IdCallResult signed = IdGateway.SignOff(live, wo);
+            Check("sign-off 200 is posted", signed.Posted, signed.Message);
+
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                return new IdHttpResponse { Status = 200, Body = "{\"ok\":true}" };
+            };
+            string media = Path.Combine(packet, "media", "shot.png");
+            IdCallResult mm = IdGateway.PostMultimedia(live, wo, media);
+            Check("multimedia 200 posts", mm.Posted, mm.Message);
+            IdCallResult mmBlank = IdGateway.PostMultimedia(blank, wo, media);
+            Check("multimedia without creds is local only", !mmBlank.Posted, mmBlank.Message);
+
+            Eq("list still has packets after gateway tests", all.Count >= 1, true);
+        }
+        finally
+        {
+            IdSettings.FolderOverride = prevFolder;
+            WorkOrderStore.FolderOverride = prevWo;
+            WorkOrderStore.ExeDirOverride = prevExe;
+            IdGateway.HttpOverride = prevHttp;
+            try { Directory.Delete(root, true); } catch { }
+        }
     }
 
     static void LampCase(string what, byte b0, bool red, bool amber, bool protect, bool mil)
