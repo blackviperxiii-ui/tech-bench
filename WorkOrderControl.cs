@@ -36,34 +36,21 @@ namespace TechBench
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
 
-            var split = new SplitContainer
-            {
-                Dock = DockStyle.Fill,
-                SplitterDistance = 280,
-                Orientation = Orientation.Vertical
-            };
-
             _list = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
             _list.SelectedIndexChanged += delegate { PickFromList(); };
-            var leftBar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                Padding = new Padding(4)
-            };
+            var leftBar = UiLayout.WrapBar(new Padding(4, 4, 4, 4));
             leftBar.Controls.Add(Btn("New", delegate { NewOrder(); }));
             leftBar.Controls.Add(Btn("Refresh", delegate { Reload(true); }));
             leftBar.Controls.Add(Btn("From ID", delegate { PullAssigned(); }));
             var left = new Panel { Dock = DockStyle.Fill };
             left.Controls.Add(_list);
             left.Controls.Add(leftBar);
-            split.Panel1.Controls.Add(left);
 
             var right = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 10,
+                RowCount = 9,
                 Padding = new Padding(8),
                 AutoScroll = true
             };
@@ -71,7 +58,7 @@ namespace TechBench
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 9; i++)
                 right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             _number = Field(right, 0, 0, "WO number");
@@ -121,7 +108,17 @@ namespace TechBench
             right.SetColumnSpan(_clock, 3);
             right.Controls.Add(_clock, 1, 7);
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+            _status = new Label
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                ForeColor = Color.DimGray,
+                Margin = new Padding(0, 8, 0, 0)
+            };
+            right.SetColumnSpan(_status, 4);
+            right.Controls.Add(_status, 0, 8);
+
+            var bar = UiLayout.WrapBar(new Padding(8, 6, 8, 4));
             bar.Controls.Add(Btn("Save", delegate { SaveCurrent(); }));
             bar.Controls.Add(Btn("Add photo", delegate { AddPhoto(); }));
             bar.Controls.Add(Btn("Attach report", delegate { AttachLiveReport(); }));
@@ -133,20 +130,12 @@ namespace TechBench
             bar.Controls.Add(_logOff);
             bar.Controls.Add(_signOff);
             bar.Controls.Add(Btn("Settings", delegate { OpenSettings(); }));
-            right.SetColumnSpan(bar, 4);
-            right.Controls.Add(bar, 0, 8);
 
-            _status = new Label
-            {
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                ForeColor = Color.DimGray,
-                Margin = new Padding(0, 8, 0, 0)
-            };
-            right.SetColumnSpan(_status, 4);
-            right.Controls.Add(_status, 0, 9);
+            var rightHost = new Panel { Dock = DockStyle.Fill };
+            rightHost.Controls.Add(right);
+            rightHost.Controls.Add(bar);
 
-            split.Panel2.Controls.Add(right);
+            var split = UiLayout.Split(Orientation.Vertical, 280, 180, 280, left, rightHost);
             Controls.Add(split);
             Reload(false);
         }
