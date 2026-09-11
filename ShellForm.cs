@@ -146,19 +146,13 @@ namespace TechBench
             job.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
 
-            _tabs = new HiddenHeaderTabControl { Dock = DockStyle.Fill };
-            try
+            _tabs = new TabControl
             {
-                var il = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(20, 20) };
-                string s = Path.Combine(assets, "search32.png");
-                string i = Path.Combine(assets, "inline32.png");
-                string a = Path.Combine(assets, "app32.png");
-                if (File.Exists(s)) il.Images.Add("search", Image.FromFile(s));
-                if (File.Exists(i)) il.Images.Add("inline", Image.FromFile(i));
-                if (File.Exists(a)) il.Images.Add("app", Image.FromFile(a));
-                if (il.Images.Count > 0) _tabs.ImageList = il;
-            }
-            catch { }
+                Dock = DockStyle.Fill,
+                SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(1, 1),
+                Appearance = TabAppearance.FlatButtons
+            };
 
             _search = new SearchControl(kb);
             _inline = new Inline7Control();
@@ -166,15 +160,11 @@ namespace TechBench
 
             _pSearch = new TabPage("Search");
             _pSearch.Controls.Add(_search);
-            if (HasImage("search")) _pSearch.ImageKey = "search";
             var pInline = new TabPage("INLINE 7");
             pInline.Controls.Add(_inline);
-            if (HasImage("inline")) pInline.ImageKey = "inline";
             _pOrders = new TabPage("Work orders");
             _pOrders.Controls.Add(_orders);
-            if (HasImage("app")) _pOrders.ImageKey = "app";
             var pAdapters = new TabPage("Adapters");
-            if (HasImage("app")) pAdapters.ImageKey = "app";
             pAdapters.Controls.Add(BuildAdaptersPanel());
 
             _tabs.TabPages.Add(_pSearch);
@@ -306,11 +296,6 @@ namespace TechBench
         void PaintNav()
         {
             UiLayout.MarkSwitch(_nav, _tabs.SelectedIndex, _navNorm, _navBold);
-        }
-
-        bool HasImage(string key)
-        {
-            return _tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey(key);
         }
 
         void ApplyWindow(AppSettings s)

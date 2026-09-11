@@ -169,23 +169,4 @@ namespace TechBench
             return sc;
         }
     }
-
-    /// <summary>
-    /// Tab pages without the native header row. The shell switch bar is the only primary nav;
-    /// SysTabControl headers were a thin gray label strip that shop techs could not click.
-    /// </summary>
-    internal sealed class HiddenHeaderTabControl : TabControl
-    {
-        const int TcmAdjustRect = 0x1328;
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == TcmAdjustRect && !DesignMode)
-            {
-                m.Result = (IntPtr)1;
-                return;
-            }
-            base.WndProc(ref m);
-        }
-    }
 }
