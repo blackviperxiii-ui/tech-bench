@@ -127,6 +127,10 @@ static class SelfTest
         Tsc1DestTests();
 
         Console.WriteLine();
+        Console.WriteLine("== J1939 DM11/DM3 code clear ==");
+        ClearCodesTests();
+
+        Console.WriteLine();
         Console.WriteLine("== unit history ==");
         HistoryTests();
 
@@ -513,6 +517,125 @@ ProtocolDescription=ISO 15765
         Eq("TSC1 dest SA 0 stays 0", Rp1210.Tsc1Dest(0), (byte)0);
         Eq("TSC1 dest auto-unknown falls back to 0", Rp1210.Tsc1Dest(-1), (byte)0);
         Eq("TSC1 dest broadcast SA rejected", Rp1210.Tsc1Dest(255), (byte)0);
+    }
+
+    static string DestList(int engineSa)
+    {
+        byte[] d = J1939Clear.Destinations(engineSa);
+        var parts = new string[d.Length];
+        for (int i = 0; i < d.Length; i++) parts[i] = d[i].ToString();
+        return string.Join(",", parts);
+    }
+
+    static void ClearCodesTests()
+    {
+        Eq("clear dests cover engine + compressor + broadcast", DestList(0), "0,48,255");
+        Eq("clear dests include detected engine SA 17", DestList(17), "0,17,48,255");
+        Eq("compressor as engine SA is not duplicated", DestList(48), "0,48,255");
+        Eq("unknown engine SA still hits 0 and 48", DestList(-1), "0,48,255");
+        Eq("broadcast engine SA rejected from dest list", DestList(255), "0,48,255");
+
+        byte[] dm11To48 = J1939Clear.Rp1210Message(J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Zeros8(), 6);
+        Eq("RP1210 DM11 PGN LSB", dm11To48[0], (byte)0xD3);
+        Eq("RP1210 DM11 PGN mid", dm11To48[1], (byte)0xFE);
+        Eq("RP1210 DM11 PGN msb", dm11To48[2], (byte)0x00);
+        Eq("RP1210 priority 6", dm11To48[3], (byte)6);
+        Eq("RP1210 tool SA F9", dm11To48[4], (byte)0xF9);
+        Eq("RP1210 dest compressor 48", dm11To48[5], (byte)48);
+        Eq("RP1210 DM11 zeros payload length", dm11To48.Length, 14);
+
+        byte[] reqDm11 = J1939Clear.Rp1210Message(J1939Clear.Request, J1939Clear.CompressorSa,
+            J1939Clear.RequestPayload(J1939Clear.Dm11), 6);
+        Eq("request PGN LSB EA00", reqDm11[0], (byte)0x00);
+        Eq("request PGN PF", reqDm11[1], (byte)0xEA);
+        Eq("request dest SA 48", reqDm11[5], (byte)48);
+        Eq("request payload DM11 LSB", reqDm11[6], (byte)0xD3);
+        Eq("request payload DM11 mid", reqDm11[7], (byte)0xFE);
+        Eq("request payload DM11 msb", reqDm11[8], (byte)0x00);
+
+        var rp = new Rp1210();
+        Eq("reset without adapter or capture is not connected", rp.ResetAllFaults(0), "not connected");
+
+        rp.Capture = new List<J1939Tx>();
+        string report = rp.ResetAllFaults(0);
+        Check("capture reset is not 'not connected'", report != "not connected", report);
+        Check("report names DM11", report.IndexOf("DM11", StringComparison.Ordinal) >= 0, report);
+        Check("report names DM3", report.IndexOf("DM3", StringComparison.Ordinal) >= 0, report);
+        Check("report names compressor SA 48", report.IndexOf("SA 48", StringComparison.Ordinal) >= 0, report);
+        Check("capture mode does not attempt UDS",
+            report.IndexOf("UDS", StringComparison.Ordinal) < 0, report);
+        Check("capture send succeeded (no adapter reject line)",
+            report.IndexOf("Adapter rejected", StringComparison.Ordinal) < 0, report);
+
+        List<J1939Tx> cap = rp.Capture;
+        Check("reset constructed frames", cap.Count > 0, "empty capture");
+        Eq("three rounds of DM11 zeros to engine",
+            J1939Clear.Count(cap, J1939Clear.Dm11, 0, J1939Clear.Zeros8()), J1939Clear.Rounds);
+        Eq("three rounds of DM11 0xFF to engine",
+            J1939Clear.Count(cap, J1939Clear.Dm11, 0, J1939Clear.Ff8()), J1939Clear.Rounds);
+        Eq("three rounds of DM11 zeros to compressor SA 48",
+            J1939Clear.Count(cap, J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Zeros8()), J1939Clear.Rounds);
+        Eq("three rounds of DM11 0xFF to compressor SA 48",
+            J1939Clear.Count(cap, J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Ff8()), J1939Clear.Rounds);
+        Eq("three rounds of DM11 zeros to broadcast",
+            J1939Clear.Count(cap, J1939Clear.Dm11, 255, J1939Clear.Zeros8()), J1939Clear.Rounds);
+        Eq("three rounds of DM3 zeros to compressor SA 48",
+            J1939Clear.Count(cap, J1939Clear.Dm3, J1939Clear.CompressorSa, J1939Clear.Zeros8()), J1939Clear.Rounds);
+        Eq("directed Request DM11 to compressor SA 48 x3",
+            J1939Clear.CountRequest(cap, J1939Clear.Dm11, J1939Clear.CompressorSa), J1939Clear.Rounds);
+        Eq("directed Request DM3 to compressor SA 48 x3",
+            J1939Clear.CountRequest(cap, J1939Clear.Dm3, J1939Clear.CompressorSa), J1939Clear.Rounds);
+        Eq("directed Request DM11 to engine x3",
+            J1939Clear.CountRequest(cap, J1939Clear.Dm11, 0), J1939Clear.Rounds);
+        Eq("refresh DM1 from compressor SA 48",
+            J1939Clear.CountRequest(cap, J1939Clear.Dm1, J1939Clear.CompressorSa), 1);
+        Eq("refresh DM2 from compressor SA 48",
+            J1939Clear.CountRequest(cap, J1939Clear.Dm2, J1939Clear.CompressorSa), 1);
+        Eq("refresh DM1 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 0), 1);
+        Eq("refresh DM1 from broadcast", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 255), 1);
+        Eq("refresh DM2 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm2, 0), 1);
+
+        if (cap.Count >= 2)
+        {
+            J1939Tx last = cap[cap.Count - 1];
+            J1939Tx prev = cap[cap.Count - 2];
+            Check("last frames are DM1/DM2 requests",
+                last.Pgn == J1939Clear.Request && prev.Pgn == J1939Clear.Request &&
+                (last.RequestedPgn == J1939Clear.Dm1 || last.RequestedPgn == J1939Clear.Dm2) &&
+                (prev.RequestedPgn == J1939Clear.Dm1 || prev.RequestedPgn == J1939Clear.Dm2),
+                "last pgn=" + last.Pgn + " req=" + last.RequestedPgn);
+        }
+
+        bool wireMatches = cap.Count > 0;
+        for (int i = 0; i < cap.Count; i++)
+        {
+            byte[] built = J1939Clear.Rp1210Message(cap[i].Pgn, cap[i].Dest, cap[i].Data, cap[i].Priority);
+            if (!J1939Clear.SameBytes(built, cap[i].Rp1210)) { wireMatches = false; break; }
+        }
+        Check("captured RP1210 bytes match constructor", wireMatches, "mismatch");
+
+        // Detected engine SA 17 must get its own directed Request, not only SA 0.
+        var rp17 = new Rp1210();
+        rp17.Capture = new List<J1939Tx>();
+        rp17.ResetAllFaults(17);
+        Eq("DM11 zeros also go to detected engine SA 17",
+            J1939Clear.Count(rp17.Capture, J1939Clear.Dm11, 17, J1939Clear.Zeros8()), J1939Clear.Rounds);
+        Eq("refresh DM1 from detected engine SA 17",
+            J1939Clear.CountRequest(rp17.Capture, J1939Clear.Dm1, 17), 1);
+
+        var prevRp = new Rp1210();
+        prevRp.Capture = new List<J1939Tx>();
+        string prevReport = prevRp.ClearPreviousFaults(0);
+        Check("clear-previous report names SA 48",
+            prevReport.IndexOf("SA 48", StringComparison.Ordinal) >= 0, prevReport);
+        Eq("clear-previous DM3 zeros to compressor once",
+            J1939Clear.Count(prevRp.Capture, J1939Clear.Dm3, J1939Clear.CompressorSa, J1939Clear.Zeros8()), 1);
+        Eq("clear-previous does not send DM11",
+            J1939Clear.Count(prevRp.Capture, J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Zeros8()), 0);
+        Eq("clear-previous still refreshes DM1 from SA 48",
+            J1939Clear.CountRequest(prevRp.Capture, J1939Clear.Dm1, J1939Clear.CompressorSa), 1);
+        Eq("clear-previous still refreshes DM2 from SA 48",
+            J1939Clear.CountRequest(prevRp.Capture, J1939Clear.Dm2, J1939Clear.CompressorSa), 1);
     }
 
     // ---------------- history ----------------
