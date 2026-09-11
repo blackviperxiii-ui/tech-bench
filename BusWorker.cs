@@ -62,6 +62,26 @@ namespace J1939Reader
         public List<int> FaultModules = new List<int>();
         public List<PgnRow> Pgns = new List<PgnRow>();
         public List<SaRow> Sas = new List<SaRow>();
+
+        /// <summary>
+        /// Disconnect can race the UI snapshot: IsConnected is already false while the monitor still
+        /// holds the last live values. Blanking here keeps the HUD from looking hooked up.
+        /// </summary>
+        public void BlankDisconnectedReadouts()
+        {
+            Rpm = CoolantC = OilKpa = BatteryV = FuelLph = double.NaN;
+            DefText = "—";
+            OilText = "—";
+            Vin = "";
+            Sw = "";
+            CompId = "";
+            Hours = "";
+            Red = Amber = Protect = Mil = false;
+            HasSpn5246 = HasTankFmi9 = Has1569 = false;
+            Active.Clear();
+            Prev.Clear();
+            FaultModules = new List<int>();
+        }
     }
 
     /// <summary>
@@ -77,6 +97,7 @@ namespace J1939Reader
         const int ReconnectEveryMs = 5000;
         const double StaleAfterSeconds = 3.0;
         const int MaxLogQueued = 500;
+        const int DisposeJoinMs = 30000;
 
         readonly Rp1210 _rp = new Rp1210();
         readonly BusMonitor _mon = new BusMonitor();
@@ -133,14 +154,12 @@ namespace J1939Reader
             _thread = null;
             if (t != null)
             {
-                try { t.Join(1500); }
+                try { t.Join(DisposeJoinMs); }
                 catch { }
             }
-            try
-            {
-                if (_rp.IsConnected && _tscRpm > 0) _rp.SendTsc1(0);
-            }
-            catch { }
+            // ResetAll blocks in the native DLL well past 1.5 s. Unload only after the
+            // worker has left those calls; Loop already disconnects and disposes.
+            if (t != null && t.IsAlive) return;
             _rp.Dispose();
         }
 
@@ -206,10 +225,12 @@ namespace J1939Reader
             {
                 if (_rp.IsConnected)
                 {
-                    if (_tscRpm > 0) _rp.SendTsc1(0);
+                    if (_tscRpm > 0) _rp.SendTsc1(0, EngineSaLocked());
                     _rp.Disconnect();
                 }
             }
+            catch { }
+            try { _rp.Dispose(); }
             catch { }
         }
 
@@ -221,7 +242,7 @@ namespace J1939Reader
             {
                 if (_rp.IsConnected)
                 {
-                    if (_tscRpm > 0) { _rp.SendTsc1(0); _tscRpm = 0; }
+                    if (_tscRpm > 0) { _rp.SendTsc1(0, EngineSaLocked()); _tscRpm = 0; }
                     _rp.Disconnect();
                     lock (_gate) _mon.ClearLive();
                     Log("Disconnected");
@@ -241,7 +262,7 @@ namespace J1939Reader
             if (_tscRpm > 0 && (now - _lastTsc).TotalMilliseconds >= TscHeartbeatMs)
             {
                 _lastTsc = now;
-                _rp.SendTsc1(_tscRpm);
+                _rp.SendTsc1(_tscRpm, EngineSaLocked());
             }
 
             if (_autoRefresh && (now - _lastReq).TotalMilliseconds >= AutoRefreshMs)
@@ -367,17 +388,23 @@ namespace J1939Reader
                     {
                         _mon.Vin = ""; _mon.Sw = ""; _mon.CompId = ""; _mon.HoursText = "";
                     }
-                    _rp.RequestPgn(0xFEEC, 0);
+                    byte pingSa = Rp1210.Tsc1Dest(EngineSaLocked());
+                    _rp.RequestPgn(0xFEEC, pingSa);
                     _rp.RequestPgn(0xFEEC, 255);
-                    _rp.RequestPgn(0xFEDA, 0);
+                    _rp.RequestPgn(0xFEDA, pingSa);
                     _rp.RequestPgn(0xFEDA, 255);
-                    _rp.RequestPgn(0xFEEB, 0);
-                    _rp.RequestPgn(0xFEE5, 0);
-                    _rp.RequestPgn(0xFECA, 0);
+                    _rp.RequestPgn(0xFEEB, pingSa);
+                    _rp.RequestPgn(0xFEE5, pingSa);
+                    _rp.RequestPgn(0xFECA, pingSa);
+                    if (pingSa != 0)
+                    {
+                        _rp.RequestPgn(0xFEEC, 0);
+                        _rp.RequestPgn(0xFEDA, 0);
+                    }
                     Log("Pinged ECM for VIN / software / component / hours / DM1");
                     break;
                 case BusCmdKind.SetTsc1:
-                    _rp.SendTsc1(c.Arg);
+                    _rp.SendTsc1(c.Arg, EngineSaLocked());
                     Log(c.Arg <= 0
                         ? "TSC1 release — ECM has its own throttle back"
                         : "TSC1 request " + c.Arg + " RPM (heartbeat while held)");
@@ -394,7 +421,17 @@ namespace J1939Reader
                     lock (_gate) _mon.ClearHistory();
                     Log("Trend and timeline cleared");
                     break;
+                default:
+                {
+                    BusCmdKind unhandled = c.Kind;
+                    throw new InvalidOperationException("unhandled bus command: " + unhandled);
+                }
             }
+        }
+
+        int EngineSaLocked()
+        {
+            lock (_gate) return _mon.EngineSa;
         }
 
         void RequestCodes(bool log)
@@ -451,10 +488,7 @@ namespace J1939Reader
                 s.LastResetReport = _lastResetReport;
             }
             if (!s.Connected)
-            {
-                s.DefText = "—";
-                s.OilText = "—";
-            }
+                s.BlankDisconnectedReadouts();
             return s;
         }
 

@@ -40,6 +40,7 @@ namespace J1939Reader
         string _sigActive = "", _sigPrev = "", _sigModules = "", _sigTimeline = "", _sigLive = "";
         DateTime _lastBusUi = DateTime.MinValue;
         string _shownResetReport = "";
+        bool _holdResetReport;
         int _tscRpm;
         History _history;
         string _historyJob = "";
@@ -731,6 +732,7 @@ namespace J1939Reader
 
         void PingEcm()
         {
+            _holdResetReport = false;
             _bus.Enqueue(new BusCommand(BusCmdKind.PingIdentity));
             _idBox.Text = "Waiting for ECM identity…\r\n"
                 + "If DM1 is already updating at the top but VIN never appears, the computer is alive — it just may not publish VIN on this industrial calibration.\r\n\r\n"
@@ -814,7 +816,7 @@ namespace J1939Reader
             List<string> lines = _bus.DrainLog();
             if (lines != null) foreach (string l in lines) Log(l);
 
-            SetConnected(s.Connected);
+            SetConnected(s.Connected || s.Busy);
 
             string status;
             if (s.Busy) status = "Working: " + s.BusyWhat + "…";
@@ -859,6 +861,7 @@ namespace J1939Reader
             if (s.LastResetReport != _shownResetReport && s.LastResetReport.Length > 0)
             {
                 _shownResetReport = s.LastResetReport;
+                _holdResetReport = true;
                 _idBox.Text = s.LastResetReport + "\r\n\r\n"
                     + "Red Stop: " + (s.Red ? "STILL ON" : "off") + "     Amber: " + (s.Amber ? "STILL ON" : "off") + "\r\n"
                     + "Lamps are not cleared separately. They track the active DTCs below.\r\n\r\n"
@@ -1021,7 +1024,7 @@ namespace J1939Reader
         void UpdateIdBox(BusSnapshot s)
         {
             if (_idBox == null) return;
-            if (_shownResetReport.Length > 0) return;   // reset report takes the box until the next ping
+            if (_holdResetReport) return;   // reset report takes the box until the next ping
             string text =
                 "VIN / NAME: " + Or(s.Vin) + "\r\n" +
                 "Software: " + Or(s.Sw) + "\r\n" +

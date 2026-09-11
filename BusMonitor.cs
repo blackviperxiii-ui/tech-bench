@@ -144,23 +144,25 @@ namespace J1939Reader
                     }
                     return false;
                 case 0xFEEE:
-                    if (engine && f.Data.Length > 0 && f.Data[0] < 0xFB) CoolantC = f.Data[0] - 40;
+                    if (engine && f.Data.Length > 0)
+                        CoolantC = f.Data[0] < 0xFB ? f.Data[0] - 40 : double.NaN;
                     return false;
                 case 0xFEEF:
-                    if (engine && f.Data.Length > 3 && f.Data[3] < 0xFB) OilKpa = f.Data[3] * 4;
+                    if (engine && f.Data.Length > 3)
+                        OilKpa = f.Data[3] < 0xFB ? f.Data[3] * 4 : double.NaN;
                     return false;
                 case 0xFEF7:
-                    if (engine)
+                    if (engine && f.Data.Length >= 6)
                     {
                         int raw = J1939Decode.U16(f.Data, 4);
-                        if (f.Data.Length >= 6 && raw < 0xFB00) BatteryV = raw * 0.05;
+                        BatteryV = raw < 0xFB00 ? raw * 0.05 : double.NaN;
                     }
                     return false;
                 case 0xFEF2:
-                    if (engine)
+                    if (engine && f.Data.Length >= 2)
                     {
                         int raw = J1939Decode.U16(f.Data, 0);
-                        if (f.Data.Length >= 2 && raw < 0xFB00) FuelLph = raw * 0.05;
+                        FuelLph = raw < 0xFB00 ? raw * 0.05 : double.NaN;
                     }
                     return false;
                 case 0xFEEC:
@@ -173,7 +175,11 @@ namespace J1939Reader
                     if (engine) { string v = J1939Decode.Ascii(f.Data, true); if (v.Length > 0) CompId = v; }
                     return false;
                 case 0xFEE5:
-                    if (engine) { string v = J1939Decode.Hours(f.Data); if (v != null) HoursText = v; }
+                    if (engine)
+                    {
+                        string v = J1939Decode.Hours(f.Data);
+                        HoursText = v ?? "";
+                    }
                     return false;
                 case 0xFECA:
                 {
