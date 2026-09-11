@@ -35,7 +35,13 @@ namespace J1939Reader
 
         public const short CmdFiltersPass = 3;
         public const short CmdProtectAddr = 19;
-        const byte OurSa = 0xF9;
+        const byte OurSa = J1939Clear.ToolSa;
+
+        /// <summary>
+        /// When set, SendJ1939 records each constructed RP1210 payload and succeeds with no adapter.
+        /// SelfTest uses this. Production leaves it null.
+        /// </summary>
+        public List<J1939Tx> Capture;
 
         IntPtr _module = IntPtr.Zero;
         DClientConnect _connect;
@@ -230,16 +236,11 @@ namespace J1939Reader
 
         public bool SendJ1939(int pgn, byte dest, byte[] data, byte priority)
         {
-            if (!IsConnected || _send == null) return false;
-            int dlen = data == null ? 0 : data.Length;
-            byte[] m = new byte[6 + dlen];
-            m[0] = (byte)(pgn & 0xFF);
-            m[1] = (byte)((pgn >> 8) & 0xFF);
-            m[2] = (byte)((pgn >> 16) & 0xFF);
-            m[3] = (byte)(priority & 0x07);
-            m[4] = OurSa;
-            m[5] = dest;
-            if (dlen > 0) Buffer.BlockCopy(data, 0, m, 6, dlen);
+            byte[] m = J1939Clear.Rp1210Message(pgn, dest, data, priority);
+            if (Capture != null)
+                Capture.Add(J1939Clear.Tx(pgn, dest, data, priority));
+            if (!IsConnected || _send == null)
+                return Capture != null;
             short rc;
             try { rc = _send(_client, m, (short)m.Length, 0, 1); }
             catch (Exception ex) { LastError = "send failed: " + ex.Message; return false; }
@@ -278,8 +279,7 @@ namespace J1939Reader
         /// <summary>TSC1 destination: the detected engine SA, falling back to ECM 1 (0).</summary>
         public static byte Tsc1Dest(int engineSa)
         {
-            if (engineSa < 0 || engineSa > 253) return 0;
-            return (byte)engineSa;
+            return J1939Clear.UnicastDest(engineSa, J1939Clear.EngineSa);
         }
 
         static readonly byte[] ToolName = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x81 };
@@ -304,39 +304,71 @@ namespace J1939Reader
         }
 
         /// <summary>
-        /// Full J1939 DM11/DM3 plus best-effort UDS 0x14. Active faults whose condition is still true
+        /// Full J1939 DM11/DM3 plus best-effort UDS 0x14. Hits engine SA 0, the detected engine SA,
+        /// compressor controller SA 48, and broadcast. Active faults whose condition is still true
         /// will come back immediately. Blocking — call from the bus worker, never the UI thread.
         /// </summary>
         public string ResetAllFaults()
         {
-            if (!IsConnected) return "not connected";
+            return ResetAllFaults(0);
+        }
+
+        public string ResetAllFaults(int engineSa)
+        {
+            if (!IsConnected && Capture == null) return "not connected";
             var sb = new StringBuilder();
             ClaimToolAddress();
-            byte[] zeros = new byte[8];
-            byte[] ffs = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-            int[] pgms = { 0xFED3, 0xFECC }; // DM11 active, DM3 previously active
-            byte[] dests = { 0, 255 };
-            for (int round = 0; round < 3; round++)
+            int sent = 0, failed = 0;
+            for (int round = 0; round < J1939Clear.Rounds; round++)
             {
-                foreach (int pgn in pgms)
+                List<J1939Tx> roundFrames = J1939Clear.ClearRoundFrames(engineSa);
+                for (int i = 0; i < roundFrames.Count; i++)
                 {
-                    foreach (byte da in dests)
-                    {
-                        SendJ1939(pgn, da, zeros, 6);
-                        SendJ1939(pgn, da, ffs, 6);
-                        RequestPgn(pgn, da);
-                    }
+                    J1939Tx tx = roundFrames[i];
+                    if (SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority)) sent++;
+                    else failed++;
                 }
-                System.Threading.Thread.Sleep(200);
+                if (IsConnected) System.Threading.Thread.Sleep(200);
             }
-            sb.AppendLine("Sent J1939 DM11 (clear active) and DM3 (clear previously active) x3 to engine and broadcast.");
-            string uds = TryUdsClear();
-            if (!string.IsNullOrEmpty(uds)) sb.AppendLine(uds);
-            RequestPgn(0xFECA, 0);
-            RequestPgn(0xFECA, 255);
-            RequestPgn(0xFECB, 0);
-            RequestPgn(0xFECB, 255);
+            sb.AppendLine("Sent J1939 DM11 (clear active) and DM3 (clear previously active) x" +
+                J1939Clear.Rounds + " to engine, compressor controller (SA " +
+                J1939Clear.CompressorSa + "), and broadcast.");
+            if (failed > 0)
+                sb.AppendLine("Adapter rejected " + failed + " of " + (sent + failed) + " J1939 frames.");
+            if (IsConnected)
+            {
+                string uds = TryUdsClear();
+                if (!string.IsNullOrEmpty(uds)) sb.AppendLine(uds);
+            }
+            RequestDmAfterClear(engineSa);
             return sb.ToString();
+        }
+
+        /// <summary>DM3 previously-active only, same shop destinations as reset-all.</summary>
+        public string ClearPreviousFaults(int engineSa)
+        {
+            if (!IsConnected && Capture == null) return "not connected";
+            ClaimToolAddress();
+            List<J1939Tx> frames = J1939Clear.ClearPreviousFrames(engineSa);
+            for (int i = 0; i < frames.Count; i++)
+            {
+                J1939Tx tx = frames[i];
+                SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority);
+            }
+            RequestDmAfterClear(engineSa);
+            return "Sent DM3 (clear previously active) to engine, compressor controller (SA " +
+                J1939Clear.CompressorSa + "), and broadcast.";
+        }
+
+        /// <summary>Request DM1 and DM2 from engine, compressor controller, and broadcast.</summary>
+        public void RequestDmAfterClear(int engineSa)
+        {
+            List<J1939Tx> frames = J1939Clear.RefreshDmFrames(engineSa);
+            for (int i = 0; i < frames.Count; i++)
+            {
+                J1939Tx tx = frames[i];
+                SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority);
+            }
         }
 
         string TryUdsClear()
@@ -435,12 +467,7 @@ namespace J1939Reader
 
         public bool RequestPgn(int pgn, byte dest)
         {
-            byte[] data = new byte[] {
-                (byte)(pgn & 0xFF),
-                (byte)((pgn >> 8) & 0xFF),
-                (byte)((pgn >> 16) & 0xFF)
-            };
-            return SendJ1939(0xEA00, dest, data);
+            return SendJ1939(J1939Clear.Request, dest, J1939Clear.RequestPayload(pgn));
         }
 
         public bool Read(out J1939Frame frame)

@@ -573,7 +573,7 @@ namespace J1939Reader
                 "What this app can switch (standard J1939):\r\n" +
                 "• TSC1 speed request / release — tests whether the ECM accepts a diagnostic throttle\r\n" +
                 "• Identity request — VIN, software; no answer after a live DM1 usually means power/harness, not 'needs a new switch'\r\n" +
-                "• Code clear (DM3/DM11) — after the fault condition is gone\r\n\r\n" +
+                "• Code clear (DM3/DM11) — engine + compressor controller SA 48, after the fault condition is gone\r\n\r\n" +
                 "What cannot be created from this adapter:\r\n" +
                 "• New calibration switches inside the Cummins (those only exist if Cummins put them in the file)\r\n" +
                 "• Cylinder cutout, EGR/VGT/DEF pump actuator tests — proprietary Guidanz\r\n" +
@@ -665,7 +665,7 @@ namespace J1939Reader
         void DoClearPrevious()
         {
             var r = MessageBox.Show(this,
-                "Clear PREVIOUSLY ACTIVE codes only (DM3)?\n\nActive faults that are still happening will stay.",
+                "Clear PREVIOUSLY ACTIVE codes only (DM3) on the engine and compressor controller (SA 48)?\n\nActive faults that are still happening will stay.",
                 "Clear previous", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
             _bus.Enqueue(new BusCommand(BusCmdKind.ClearPrevious));
@@ -674,8 +674,8 @@ namespace J1939Reader
         void DoResetAll()
         {
             var r = MessageBox.Show(this,
-                "Reset all codes on the ECM?\n\n" +
-                "Sends J1939 DM11 + DM3 (3 rounds) and UDS 0x14 if ISO15765 opens.\n\n" +
+                "Reset all codes on the engine and compressor controller (SA 48)?\n\n" +
+                "Sends J1939 DM11 + DM3 (3 rounds) to SA 0, SA 48, and broadcast, then re-requests DM1/DM2. UDS 0x14 is also tried if ISO15765 opens.\n\n" +
                 "Red Stop and Amber are not separate codes. They are lamp bits on DM1. They go OFF by themselves when the DTCs that set them are gone.\n" +
                 "There is no legal 'Red Stop off' / 'Amber off' switch — forcing the lamps off while 5246 / FMI 9 are still active would hide a no-fuel command, not diagnose it.\n\n" +
                 "If FMI 9 or inducement is still true, lamps and those SPNs will come right back.\n\nContinue?",

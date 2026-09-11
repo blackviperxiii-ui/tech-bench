@@ -117,7 +117,7 @@ Adapters are discovered from `RP121032.INI`, so any installed RP1210 vendor DLL 
 
 All adapter traffic runs on a background thread, so a code reset no longer freezes the window.
 
-The **Module** box picks whose DM1/DM2 the code lists show. On a portable compressor the controller (usually SA 48) has its own faults, separate from the engine's.
+The **Module** box picks whose DM1/DM2 the code lists show. On a portable compressor the controller (usually SA 48) has its own faults, separate from the engine's. **Reset all codes** / **Clear previous** send DM11/DM3 to the engine (SA 0 and the detected engine SA), the compressor controller (SA 48), and broadcast, then re-request DM1/DM2 from those same addresses. Broadcast-only was not enough for SA 48.
 
 This tool does not disable DEF/SCR or Red Stop. Those lamps follow active DTCs.
 
