@@ -1,8 +1,9 @@
 @echo off
 setlocal EnableDelayedExpansion
-rem Compile TechBench.exe, SHA-256 it, and write latest.json for the in-app updater.
+rem Compile TechBench.exe, SHA-256 it, write latest.json, and build the per-user Inno installer.
 rem Upload TechBench.exe and latest.json to a *public* HTTPS location (GitHub Release on a
-rem public repo, or any file host). Shop PCs never get a GitHub token.
+rem public repo, or any file host). Shop PCs never get a GitHub token. The setup exe is what
+rem techs run; it also does not contain a token.
 
 call "%~dp0build.bat"
 if errorlevel 1 exit /b 1
@@ -33,13 +34,19 @@ set URL=https://github.com/blackviperxiii-ui/tech-bench/releases/download/v!VERS
   echo }
 )
 
+call "%~dp0installer\build.bat"
+if errorlevel 1 exit /b 1
+
 echo.
 echo Release !VERSION!
 echo   TechBench.exe
 echo   sha256 !HASH!
 echo   latest.json written
+echo   dist\TechBench-Setup-!VERSION!.exe
 echo.
-echo Upload TechBench.exe and latest.json where HTTPS GET works without a login.
+echo Give techs the Setup exe (Start Menu + Desktop shortcuts, no admin).
+echo Upload TechBench.exe and latest.json where HTTPS GET works without a login —
+echo the in-app updater replaces the *installed* TechBench.exe, not a Desktop copy.
 echo If this GitHub repo stays private, do not use github.com/.../releases/... as the URL —
-echo put both files on a public host and, on shop PCs, a one-line update-url.txt next to the exe.
+echo put both files on a public host and, on shop PCs, a one-line update-url.txt next to the installed exe.
 endlocal

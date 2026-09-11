@@ -11,7 +11,7 @@ namespace TechBench
 {
     /// <summary>
     /// Single stamped version. Keep the assembly attributes above in lockstep with Number.
-    /// release.bat reads Number when it writes latest.json.
+    /// release.bat reads Number when it writes latest.json and the Setup exe filename.
     /// </summary>
     internal static class AppVersion
     {
