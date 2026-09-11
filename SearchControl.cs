@@ -61,15 +61,10 @@ namespace TechBench
                 MaxLength = 0,
                 Font = new Font("Consolas", 9.5f)
             };
-            var split = new SplitContainer
-            {
-                Dock = DockStyle.Fill,
-                Orientation = Orientation.Vertical,
-                SplitterDistance = 420,
-                SplitterWidth = 6
-            };
-            split.Panel1.Controls.Add(_list);
-            split.Panel2.Controls.Add(_detail);
+            // Raw SplitContainer + SplitterDistance in the ctor clamps to the default
+            // 150×100 handle, then the hit list disappears and the detail TextBox
+            // fills the whole client — the "one giant text box" shop techs hit.
+            var split = UiLayout.Split(Orientation.Vertical, 420, 180, 180, _list, _detail);
 
             Controls.Add(split);
             Controls.Add(_status);

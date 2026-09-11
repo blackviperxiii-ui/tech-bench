@@ -78,6 +78,50 @@ namespace TechBench
             return flow;
         }
 
+        /// <summary>
+        /// Large wrapping buttons for Search / Work orders / INLINE 7 / Adapters.
+        /// Native TabControl headers vanish under a fixed job strip at 192 DPI and do not look like switches.
+        /// </summary>
+        public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick)
+        {
+            var bar = WrapBar(new Padding(8, 6, 8, 4));
+            bar.BackColor = Color.FromArgb(36, 48, 68);
+            if (names == null) return bar;
+            for (int i = 0; i < names.Length; i++)
+            {
+                int idx = i;
+                var b = new Button
+                {
+                    Name = "shellSwitch" + i,
+                    Text = names[i],
+                    AutoSize = true,
+                    MinimumSize = new Size(128, 36),
+                    Margin = new Padding(0, 0, 8, 4),
+                    Tag = idx,
+                    UseVisualStyleBackColor = false
+                };
+                b.Click += delegate { if (onPick != null) onPick(idx); };
+                bar.Controls.Add(b);
+            }
+            return bar;
+        }
+
+        public static void MarkSwitch(FlowLayoutPanel bar, int selected, Font normal, Font bold)
+        {
+            if (bar == null) return;
+            foreach (Control c in bar.Controls)
+            {
+                Button b = c as Button;
+                if (b == null) continue;
+                int idx = (b.Tag is int) ? (int)b.Tag : -1;
+                bool on = idx == selected;
+                b.Font = on && bold != null ? bold : (normal ?? b.Font);
+                b.BackColor = on ? Color.White : Color.FromArgb(70, 90, 120);
+                b.ForeColor = on ? Color.Black : Color.White;
+            }
+        }
+
+
         public static SplitContainer Split(Orientation orientation, int distance, int min1, int min2, Control a, Control b)
         {
             var sc = new SplitContainer
@@ -123,6 +167,25 @@ namespace TechBench
             sc.HandleCreated += delegate { apply(null, EventArgs.Empty); };
             sc.SizeChanged += delegate { apply(null, EventArgs.Empty); };
             return sc;
+        }
+    }
+
+    /// <summary>
+    /// Tab pages without the native header row. The shell switch bar is the only primary nav;
+    /// SysTabControl headers were a thin gray label strip that shop techs could not click.
+    /// </summary>
+    internal sealed class HiddenHeaderTabControl : TabControl
+    {
+        const int TcmAdjustRect = 0x1328;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == TcmAdjustRect && !DesignMode)
+            {
+                m.Result = (IntPtr)1;
+                return;
+            }
+            base.WndProc(ref m);
         }
     }
 }
