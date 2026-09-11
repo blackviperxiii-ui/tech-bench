@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
+using TechBench;
 
 namespace J1939Reader
 {
@@ -69,7 +70,7 @@ namespace J1939Reader
                 IsBalloon = false
             };
 
-            _tabs = new TabControl { Dock = DockStyle.Fill };
+            _tabs = new TabControl { Dock = DockStyle.Fill, Multiline = true };
             _tabs.TabPages.Add(BuildCodesTab());
             _tabs.TabPages.Add(BuildAdvancedTab());
             _tabs.TabPages.Add(BuildBusTab());
@@ -146,36 +147,23 @@ namespace J1939Reader
 
         static SplitContainer Split(Orientation orientation, int distance, Control a, Control b)
         {
-            var sc = new SplitContainer
-            {
-                Dock = DockStyle.Fill,
-                Orientation = orientation,
-                SplitterDistance = distance,
-                SplitterWidth = 6
-            };
-            sc.Panel1.Controls.Add(a);
-            sc.Panel2.Controls.Add(b);
-            a.Dock = DockStyle.Fill;
-            b.Dock = DockStyle.Fill;
-            return sc;
+            return UiLayout.Split(orientation, distance, 80, 80, a, b);
+        }
+
+        static SplitContainer Split(Orientation orientation, int distance, int min1, int min2, Control a, Control b)
+        {
+            return UiLayout.Split(orientation, distance, min1, min2, a, b);
         }
 
         Control BuildToolbar()
         {
-            var flow = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                Padding = new Padding(8, 8, 8, 4)
-            };
+            var flow = UiLayout.WrapBar(new Padding(8, 4, 8, 2));
 
             flow.Controls.Add(Lbl("Adapter"));
             _cboAdapter = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 260,
+                Width = 220,
                 Margin = new Padding(0, 3, 10, 0)
             };
             foreach (Rp1210Api a in _adapters) _cboAdapter.Items.Add(a);
@@ -222,7 +210,7 @@ namespace J1939Reader
 
         Control BuildHud()
         {
-            var panel = new Panel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 0, 8, 6) };
+            var panel = new Panel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 0, 8, 2) };
 
             var line = new FlowLayoutPanel
             {
@@ -267,7 +255,7 @@ namespace J1939Reader
             _lstPrev = List();
             _lstActive.SelectedIndexChanged += delegate { ShowCode(_lstActive); };
             _lstPrev.SelectedIndexChanged += delegate { ShowCode(_lstPrev); };
-            SplitContainer lists = Split(Orientation.Vertical, 430,
+            SplitContainer lists = Split(Orientation.Vertical, 430, 160, 160,
                 Titled("Active DTCs (DM1) — click a code for explanation", _lstActive),
                 Titled("Previously active (DM2) — click a code", _lstPrev));
 
@@ -278,13 +266,7 @@ namespace J1939Reader
 
             var helpHost = new Panel { Dock = DockStyle.Fill };
             helpHost.Controls.Add(_codeHelp);
-            var helpBar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true
-            };
+            var helpBar = UiLayout.WrapBar(new Padding(0, 0, 0, 4));
             helpBar.Controls.Add(Lbl("What this code means"));
             _btnKbLookup = Btn("Look up in knowledge base", delegate { LookupSelectedInKb(); });
             _btnKbLookup.Enabled = false;
@@ -302,8 +284,8 @@ namespace J1939Reader
                 Font = new Font("Consolas", 9f)
             };
 
-            SplitContainer lower = Split(Orientation.Vertical, 560, helpHost, Titled("Log", _log));
-            p.Controls.Add(Split(Orientation.Horizontal, 240, lists, lower));
+            SplitContainer lower = Split(Orientation.Vertical, 560, 200, 160, helpHost, Titled("Log", _log));
+            p.Controls.Add(Split(Orientation.Horizontal, 200, 80, 140, lists, lower));
             return p;
         }
 
@@ -314,8 +296,8 @@ namespace J1939Reader
             var warn = new Label
             {
                 Dock = DockStyle.Top,
-                AutoSize = false,
-                Height = 46,
+                AutoSize = true,
+                Padding = new Padding(0, 0, 0, 4),
                 Text = "These are standard J1939 diagnostic controls the ECM already understands. " +
                        "They isolate harness vs computer. They do not add new Cummins calibration bits, " +
                        "and they do not disable DEF, SCR, Red Stop, or engine protection."
@@ -330,7 +312,7 @@ namespace J1939Reader
                 if (i >= 0 && i < _liveRows.Count)
                     _liveHelp.Text = _liveRows[i].Name + "\r\nState: " + _liveRows[i].State + "\r\n\r\n" + _liveRows[i].Detail;
             };
-            SplitContainer top = Split(Orientation.Vertical, 470,
+            SplitContainer top = Split(Orientation.Vertical, 470, 180, 140,
                 Titled("Live ECM states (status — click for explanation)", _lstLive),
                 Titled("Explanation", _liveHelp));
 
@@ -349,15 +331,8 @@ namespace J1939Reader
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Text = "Diagnostic toggles — hover a switch for the full description"
             };
-            var toggles = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                Padding = new Padding(8, 4, 8, 8)
-            };
+            var toggles = UiLayout.WrapBar(new Padding(8, 4, 8, 6));
+            toggles.Dock = DockStyle.Top;
             _chkSafe = MkToggle(toggles,
                 "Safety: engine already running, compressor unloaded, area clear",
                 "Must be ON before a speed-request toggle will send TSC1. The engine will not start from these switches. TSC1 cannot override Red Stop or DEF inducement.");
@@ -392,28 +367,38 @@ namespace J1939Reader
             };
 
             _btnPing = Btn("Ping ECM identity", delegate { PingEcm(); });
-            _btnPing.Margin = new Padding(0, 6, 0, 0);
+            _btnPing.Margin = new Padding(8, 2, 0, 2);
             _tip.SetToolTip(_btnPing,
                 "Request VIN, software ID, component ID, hours, and DM1. If RPM/codes are already live but VIN never appears, this industrial ECM may not publish VIN — the computer is still alive.");
             toggles.Controls.Add(_btnPing);
             g.Controls.Add(toggles);
+            g.Layout += delegate
+            {
+                int inner = Math.Max(1, g.ClientSize.Width);
+                Size pref = toggles.GetPreferredSize(new Size(inner, 0));
+                int h = pref.Height + 8;
+                if (h < 36) h = 36;
+                if (toggles.Height != h) toggles.Height = h;
+            };
 
             _idBox = HelpBox();
             _idBox.Text = CannotDoText();
 
             var host = new Panel { Dock = DockStyle.Fill };
             host.Controls.Add(Titled("ECM identity / remaining codes after reset", _idBox));
-            host.Controls.Add(g);
-            host.Controls.Add(_mon);
 
-            p.Controls.Add(Split(Orientation.Horizontal, 200, top, host));
+            // Toggles + Ping stay in the tab chrome (not the bottom of a squeezed split) so they
+            // remain clickable on a 1366×768 shop laptop.
+            p.Controls.Add(Split(Orientation.Horizontal, 160, 80, 80, top, host));
+            p.Controls.Add(g);
+            p.Controls.Add(_mon);
             p.Controls.Add(warn);
             return p;
         }
 
         CheckBox MkToggle(Control parent, string label, string hover)
         {
-            var c = new CheckBox { Text = label, AutoSize = true, Margin = new Padding(0, 2, 0, 2) };
+            var c = new CheckBox { Text = label, AutoSize = true, Margin = new Padding(0, 2, 16, 2) };
             parent.Controls.Add(c);
             _tip.SetToolTip(c, hover);
             c.MouseEnter += delegate
@@ -429,18 +414,11 @@ namespace J1939Reader
 
             _lstPgn = List();
             _lstSa = List();
-            SplitContainer lists = Split(Orientation.Vertical, 470,
+            SplitContainer lists = Split(Orientation.Vertical, 470, 180, 160,
                 Titled("PGN traffic (who is talking)", _lstPgn),
                 Titled("Address claim / modules", _lstSa));
 
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                Padding = new Padding(0, 4, 0, 4)
-            };
+            var bar = UiLayout.WrapBar(new Padding(0, 4, 0, 4));
             _chkAutoRe = new CheckBox
             {
                 Text = "Auto-reconnect if the adapter drops",
@@ -464,7 +442,7 @@ namespace J1939Reader
             lower.Controls.Add(_diffBox);
             lower.Controls.Add(bar);
 
-            p.Controls.Add(Split(Orientation.Horizontal, 280, lists, lower));
+            p.Controls.Add(Split(Orientation.Horizontal, 220, 80, 110, lists, lower));
             return p;
         }
 
@@ -472,14 +450,7 @@ namespace J1939Reader
         {
             var p = new TabPage("Trend") { Padding = new Padding(8) };
 
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                Padding = new Padding(0, 0, 0, 6)
-            };
+            var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Channel"));
             _cboChannel = new ComboBox
             {
@@ -514,14 +485,7 @@ namespace J1939Reader
         TabPage BuildTimelineTab()
         {
             var p = new TabPage("Timeline") { Padding = new Padding(8) };
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                Padding = new Padding(0, 0, 0, 6)
-            };
+            var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Every code that came and went on this hookup, newest first."));
             bar.Controls.Add(Btn("Export CSV", delegate { ExportTimeline(); }));
 
@@ -537,14 +501,7 @@ namespace J1939Reader
         TabPage BuildHistoryTab()
         {
             var p = new TabPage("Unit history") { Padding = new Padding(8) };
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                Padding = new Padding(0, 0, 0, 6)
-            };
+            var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Faults this model/serial has shown in saved sessions."));
             bar.Controls.Add(Btn("Rescan", delegate { _history = null; _historyJob = ""; RefreshHistory(true); }));
 
@@ -561,8 +518,8 @@ namespace J1939Reader
             var note = new Label
             {
                 Dock = DockStyle.Top,
-                AutoSize = false,
-                Height = 34,
+                AutoSize = true,
+                Padding = new Padding(0, 0, 0, 6),
                 Text = "Cummins Features & Parameters this app does NOT write — reference only, so you know "
                      + "what lives in Guidanz and what does not belong in a J1939 tool at all."
             };
