@@ -20,6 +20,9 @@ namespace TechBench
         readonly TabControl _tabs;
         readonly TabPage _pSearch;
         readonly TabPage _pOrders;
+        readonly FlowLayoutPanel _nav;
+        readonly Font _navNorm;
+        readonly Font _navBold;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
         readonly ToolStripStatusLabel _syncStatus;
@@ -44,6 +47,8 @@ namespace TechBench
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
+            _navNorm = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+            _navBold = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             string assets = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
             try
             {
@@ -100,24 +105,11 @@ namespace TechBench
             strip.Items.Add(_syncStatus);
             _syncStatus.Click += delegate { OpenSync(); };
 
-            var job = new Panel { Dock = DockStyle.Top, Height = 82, BackColor = Color.FromArgb(22, 32, 48) };
-            var jobGrid = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                Padding = new Padding(8, 4, 8, 4)
-            };
-            jobGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-            jobGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-
-            var row0 = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-            WrapContents = true,
-                BackColor = Color.Transparent
-            };
-            row0.Controls.Add(JobLabel("WO"));
+            // WrapBar, not a fixed 82px panel: at 192 DPI the Absolute-36 rows overflowed
+            // and painted over the tab headers, leaving only the Search text box.
+            var job = UiLayout.WrapBar(new Padding(8, 6, 8, 4));
+            job.BackColor = Color.FromArgb(22, 32, 48);
+            job.Controls.Add(JobLabel("WO"));
             _woPick = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -125,46 +117,36 @@ namespace TechBench
                 Margin = new Padding(0, 2, 12, 0)
             };
             _woPick.SelectedIndexChanged += delegate { PickWoFromStrip(); };
-            row0.Controls.Add(_woPick);
-            row0.Controls.Add(JobLabel("Customer"));
+            job.Controls.Add(_woPick);
+            job.Controls.Add(JobLabel("Customer"));
             _customer = new TextBox { Width = 180, Margin = new Padding(0, 2, 12, 0) };
             _customer.TextChanged += delegate { PushHeader(); };
-            row0.Controls.Add(_customer);
+            job.Controls.Add(_customer);
             _jobSync = new Label
             {
                 Text = "Sync: …",
                 ForeColor = Color.Khaki,
                 AutoSize = true,
                 Cursor = Cursors.Hand,
-                Margin = new Padding(8, 8, 0, 0)
+                Margin = new Padding(8, 8, 12, 0)
             };
-            row0.Controls.Add(_jobSync);
+            job.Controls.Add(_jobSync);
             _jobSync.Click += delegate { OpenSync(); };
-            jobGrid.Controls.Add(row0, 0, 0);
-
-            var row1 = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                WrapContents = true,
-                BackColor = Color.Transparent
-            };
-            row1.Controls.Add(JobLabel("Model"));
+            job.Controls.Add(JobLabel("Model"));
             _model = new TextBox { Width = 170, Margin = new Padding(0, 2, 12, 0) };
-            row1.Controls.Add(_model);
-            row1.Controls.Add(JobLabel("Serial"));
+            job.Controls.Add(_model);
+            job.Controls.Add(JobLabel("Serial"));
             _serial = new TextBox { Width = 200, Margin = new Padding(0, 2, 12, 0) };
-            row1.Controls.Add(_serial);
+            job.Controls.Add(_serial);
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
-            row1.Controls.Add(useJob);
+            job.Controls.Add(useJob);
             var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            row1.Controls.Add(addCode);
+            job.Controls.Add(addCode);
             var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            row1.Controls.Add(addNoteBtn);
+            job.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
-            jobGrid.Controls.Add(row1, 0, 1);
-            job.Controls.Add(jobGrid);
 
-            _tabs = new TabControl { Dock = DockStyle.Fill };
+            _tabs = new HiddenHeaderTabControl { Dock = DockStyle.Fill };
             try
             {
                 var il = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(20, 20) };
@@ -200,8 +182,18 @@ namespace TechBench
             _tabs.TabPages.Add(pInline);
             _tabs.TabPages.Add(pAdapters);
 
-            // Last-added docks at the top: status, menu, job strip, then tabs fill.
+            _nav = UiLayout.SwitchBar(
+                new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
+                delegate(int i)
+                {
+                    if (i >= 0 && i < _tabs.TabCount) _tabs.SelectedIndex = i;
+                });
+            _tabs.SelectedIndexChanged += delegate { PaintNav(); };
+            PaintNav();
+
+            // Last-added docks at the top: status, menu, job strip, switch bar, then pages fill.
             Controls.Add(_tabs);
+            Controls.Add(_nav);
             Controls.Add(job);
             Controls.Add(menu);
             Controls.Add(strip);
@@ -309,6 +301,11 @@ namespace TechBench
                 AutoSize = true,
                 Margin = new Padding(0, 4, 6, 0)
             };
+        }
+
+        void PaintNav()
+        {
+            UiLayout.MarkSwitch(_nav, _tabs.SelectedIndex, _navNorm, _navBold);
         }
 
         bool HasImage(string key)

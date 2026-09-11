@@ -45,6 +45,8 @@ static class LayoutAudit
                 Console.WriteLine();
                 Console.WriteLine("== " + f.Width + "x" + f.Height + " client " + f.ClientSize.Width + "x" + f.ClientSize.Height + " ==");
 
+                clipped += SwitchReport(f);
+
                 TabControl tabs = FindTab(f);
                 foreach (TabPage page in tabs.TabPages)
                 {
@@ -102,6 +104,52 @@ static class LayoutAudit
         {
             Console.WriteLine("  shot failed " + name + ": " + ex.Message);
         }
+    }
+
+    static int SwitchReport(Form f)
+    {
+        string[] need = { "Search", "Work orders", "INLINE 7", "Adapters" };
+        int hits = 0;
+        for (int i = 0; i < need.Length; i++)
+        {
+            Button b = FindNamed(f, "shellSwitch" + i) as Button;
+            if (b == null)
+            {
+                Console.WriteLine("  CLIP  shell  missing switch \"" + need[i] + "\"");
+                hits++;
+                continue;
+            }
+            if (!string.Equals(b.Text, need[i], StringComparison.Ordinal))
+            {
+                Console.WriteLine("  CLIP  shell  switch " + i + " text=\"" + b.Text + "\" want=\"" + need[i] + "\"");
+                hits++;
+            }
+            string why = ClipReason(f, b);
+            if (why != null)
+            {
+                Console.WriteLine("  CLIP  shell  switch \"" + need[i] + "\"  " + why);
+                hits++;
+            }
+            else if (b.Height < 28 || b.Width < 40)
+            {
+                Console.WriteLine("  CLIP  shell  switch \"" + need[i] + "\"  tiny " + b.Size);
+                hits++;
+            }
+            else
+                Console.WriteLine("  OK    shell  switch \"" + need[i] + "\"  " + b.Width + "x" + b.Height + " @ " + b.Left + "," + b.Top);
+        }
+        return hits;
+    }
+
+    static Control FindNamed(Control c, string name)
+    {
+        if (c.Name == name) return c;
+        foreach (Control child in c.Controls)
+        {
+            Control hit = FindNamed(child, name);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 
     static int Report(Form f, string where)
