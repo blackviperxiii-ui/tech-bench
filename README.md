@@ -14,6 +14,7 @@ Does **not** ship manuals, filter charts, or service passwords. Those stay in yo
 - **Unit history** — what this model/serial has shown in past saved sessions
 - **Report** — printable one-page summary for a work order
 - Job strip (model/serial) prefixes saved sessions and scopes the history
+- **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off. IntelliDealer Azure API Gateway log on / log off / sign off / multimedia post-back only when dealer credentials are in Shop → IntelliDealer
 
 ## Build (32-bit — required for INLINE 7)
 
@@ -34,7 +35,7 @@ That produces `TechBench.exe`. Desktop shortcut can point at it.
 test.bat
 ```
 
-248 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text. No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
+289 offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
 
 ## Knowledge base
 
@@ -47,6 +48,18 @@ If it lives somewhere else, point at it either way:
 - a `TECHBENCH_KB` environment variable
 
 A malformed file in `data\` only costs that section — the status line under the search box names the file that failed.
+
+### Work orders (Mobile Tech in-app)
+
+Stay in Tech Bench instead of ID Mobile Access:
+
+- **Work orders** tab and the WO picker on the job strip
+- Notes, photos, INLINE 7 shots, and the diagnostic report attach to that WO number
+- **Share with shop** copies the packet to `data\shop\_shared\work-orders` (rides along if the knowledge base is already on OneDrive) and to a share folder you pick in Shop → IntelliDealer. Same `data\shop` tree the two-way sync branch uses — this does not overwrite that work.
+- **Log on / log off** write a shop timestamp on the packet. They post to IntelliDealer only when Azure API Gateway credentials are saved.
+- **Sign off** is refused until the gateway returns success. Tech Bench will not fake payroll.
+
+Drop `id-work-orders.json` (or `.csv`) next to `TechBench.exe` or in the KB `data` folder for a file-backed assigned list. Settings and optional `id-api.json` next to the exe hold the Gateway URL, subscription key, and operation paths.
 
 ### Adding what you learn
 
