@@ -22,8 +22,8 @@ namespace TechBench
             ShowInTaskbar = false;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
-            ClientSize = new Size(560, 420);
-            MinimumSize = new Size(420, 320);
+            ClientSize = new Size(520, 340);
+            MinimumSize = new Size(400, 280);
 
             var table = new TableLayoutPanel
             {

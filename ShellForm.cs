@@ -16,6 +16,7 @@ namespace TechBench
         readonly TabControl _tabs;
         readonly TabPage _pSearch;
         readonly ToolStripStatusLabel _syncStatus;
+        readonly Label _jobSync;
         readonly Timer _watchDebounce = new Timer();
         readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
         KbIndex _kb;
@@ -57,7 +58,7 @@ namespace TechBench
             menu.Items.Add(shop);
             MainMenuStrip = menu;
 
-            var strip = new StatusStrip();
+            var strip = new StatusStrip { Dock = DockStyle.Bottom, SizingGrip = false };
             _syncStatus = new ToolStripStatusLabel
             {
                 Spring = true,
@@ -85,13 +86,16 @@ namespace TechBench
             jobFlow.Controls.Add(useJob);
             var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
             jobFlow.Controls.Add(addCode);
-            jobFlow.Controls.Add(new Label
+            _jobSync = new Label
             {
-                Text = "Service passwords are for trained use. INLINE 7: close USB-Link Explorer first.",
-                ForeColor = Color.Silver,
+                Text = "Sync: …",
+                ForeColor = Color.Khaki,
                 AutoSize = true,
-                Margin = new Padding(0, 4, 0, 0)
-            });
+                Cursor = Cursors.Hand,
+                Margin = new Padding(8, 4, 0, 0)
+            };
+            jobFlow.Controls.Add(_jobSync);
+            _jobSync.Click += delegate { OpenSync(); };
             job.Controls.Add(jobFlow);
 
             _tabs = new TabControl { Dock = DockStyle.Fill };
@@ -336,7 +340,9 @@ namespace TechBench
                     RunSync(false);
                     ReloadKb();
                     _tabs.SelectedTab = _pSearch;
-                    _search.Prefill(Path.GetFileNameWithoutExtension(path));
+                    string q = dlg.NoteTitle;
+                    if (string.IsNullOrWhiteSpace(q)) q = Path.GetFileNameWithoutExtension(path);
+                    _search.Prefill(q);
                 }
                 catch (Exception ex)
                 {
@@ -422,10 +428,16 @@ namespace TechBench
             if (r == null)
             {
                 _syncStatus.Text = "Sync: idle";
+                _jobSync.Text = "Sync: idle";
                 return;
             }
             _syncStatus.Text = r.Status;
             _syncStatus.ForeColor = r.Conflicts > 0 ? Color.DarkRed : Color.Black;
+            _jobSync.ForeColor = r.Conflicts > 0 ? Color.OrangeRed : Color.Khaki;
+            string tech = ShopSync.SanitizeTechId(ShopSync.LoadSettings().TechId);
+            _jobSync.Text = r.Conflicts > 0
+                ? (r.Conflicts + " sync conflict(s) — click")
+                : ("Sync: " + (r.SharedTree ? "sharing KB" : "folder") + "  ·  " + tech + "  ·  click");
         }
 
         void RestartWatchers()
