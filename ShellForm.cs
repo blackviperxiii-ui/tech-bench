@@ -167,10 +167,10 @@ namespace TechBench
                 delegate(int i) { ShowPage(i); });
             ShowPage(0);
 
-            // Last-added docks at the top: status, menu, job strip, switch bar, then pages fill.
+            // Last-added docks nearest the edge: menu, then switches (cannot sit under the job strip), then job.
             Controls.Add(_host);
-            Controls.Add(_nav);
             Controls.Add(job);
+            Controls.Add(_nav);
             Controls.Add(menu);
             Controls.Add(strip);
 
