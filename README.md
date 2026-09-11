@@ -46,7 +46,7 @@ If it lives somewhere else, point at it either way:
 - `kb-path.txt` next to `TechBench.exe`, one path per line (`#` comments allowed)
 - a `TECHBENCH_KB` environment variable
 
-A malformed file in `data\` only costs that section — the status line under the search box names the file that failed.
+A malformed file in `data\` only costs that section — the status line under the search box names the file that failed. Launch is not blocked if the folder is missing.
 
 ### Adding what you learn
 
