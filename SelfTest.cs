@@ -155,6 +155,10 @@ static class SelfTest
         UpdaterTests();
 
         Console.WriteLine();
+        Console.WriteLine("== windows installer ==");
+        InstallerTests();
+
+        Console.WriteLine();
         Console.WriteLine("== shop two-way sync ==");
         ShopSyncTests();
 
@@ -1262,12 +1266,67 @@ ProtocolDescription=ISO 15765
         string script = Updater.ApplyScript();
         Check("cmd waits for process", script.Contains("TechBench.exe") && script.Contains(":wait"), "no wait");
         Check("cmd swaps hashed exe", script.Contains("TechBench.exe.new") && script.Contains("move /Y"), "no swap");
+        Check("swap stays in the exe folder", script.Contains("cd /d \"%~dp0\""), "no %~dp0");
         Check("cmd never mentions a token",
             script.IndexOf("ghp_", StringComparison.OrdinalIgnoreCase) < 0
             && script.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) < 0, "token");
         Check("default feed is public HTTPS",
             Updater.DefaultManifestUrl.StartsWith("https://"), Updater.DefaultManifestUrl);
         try { Directory.Delete(dir, true); } catch { }
+    }
+
+    static void InstallerTests()
+    {
+        string root = FindRepoRoot();
+        string iss = Path.Combine(root, "installer", "techbench.iss");
+        string build = Path.Combine(root, "installer", "build.bat");
+        string fetch = Path.Combine(root, "installer", "fetch-iscc.ps1");
+        string release = Path.Combine(root, "release.bat");
+        Check("installer script present", File.Exists(iss), iss);
+        Check("installer build.bat present", File.Exists(build), build);
+        Check("release.bat calls installer",
+            File.Exists(release) && File.ReadAllText(release).IndexOf(@"installer\build.bat", StringComparison.OrdinalIgnoreCase) >= 0,
+            "release.bat does not call installer\\build.bat");
+        if (!File.Exists(iss)) return;
+        string text = File.ReadAllText(iss);
+        Check("per-user lowest privileges",
+            text.IndexOf("PrivilegesRequired=lowest", StringComparison.OrdinalIgnoreCase) >= 0, "not lowest");
+        Check("user-writable default dir",
+            text.IndexOf("{localappdata}\\Programs\\TechBench", StringComparison.OrdinalIgnoreCase) >= 0, text);
+        Check("installs TechBench.exe",
+            text.IndexOf("TechBench.exe", StringComparison.OrdinalIgnoreCase) >= 0, "missing exe");
+        Check("installs assets folder",
+            text.IndexOf("assets", StringComparison.OrdinalIgnoreCase) >= 0, "no assets");
+        Check("Start Menu shortcut",
+            text.IndexOf("{group}", StringComparison.OrdinalIgnoreCase) >= 0, "no group icon");
+        Check("Desktop shortcut task",
+            text.IndexOf("{autodesktop}", StringComparison.OrdinalIgnoreCase) >= 0
+            && text.IndexOf("desktopicon", StringComparison.OrdinalIgnoreCase) >= 0, "no desktop");
+        Check("no GitHub PAT in installer script", !ContainsSecret(text), "secret");
+        if (File.Exists(build))
+            Check("no GitHub PAT in installer build.bat", !ContainsSecret(File.ReadAllText(build)), "secret");
+        if (File.Exists(fetch))
+            Check("no GitHub PAT in fetch-iscc.ps1", !ContainsSecret(File.ReadAllText(fetch)), "secret");
+        if (File.Exists(release))
+            Check("no GitHub PAT in release.bat", !ContainsSecret(File.ReadAllText(release)), "secret");
+    }
+
+    static string FindRepoRoot()
+    {
+        string dir = Environment.CurrentDirectory;
+        if (File.Exists(Path.Combine(dir, "installer", "techbench.iss"))) return dir;
+        dir = AppDomain.CurrentDomain.BaseDirectory;
+        if (File.Exists(Path.Combine(dir, "installer", "techbench.iss"))) return dir;
+        return Environment.CurrentDirectory;
+    }
+
+    static bool ContainsSecret(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        return text.IndexOf("ghp_", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("github_pat", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("GITHUB_TOKEN", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("Authorization:", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     static string MkRoot()

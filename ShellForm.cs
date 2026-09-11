@@ -17,9 +17,14 @@ namespace TechBench
         readonly Inline7Control _inline;
         readonly SearchControl _search;
         readonly WorkOrderControl _orders;
-        readonly TabControl _tabs;
-        readonly TabPage _pSearch;
-        readonly TabPage _pOrders;
+        readonly Panel _host;
+        readonly Control[] _pages;
+        readonly Control _pSearch;
+        readonly Control _pOrders;
+        readonly FlowLayoutPanel _nav;
+        readonly Font _navNorm;
+        readonly Font _navBold;
+        int _page;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
         readonly ToolStripStatusLabel _syncStatus;
@@ -44,6 +49,8 @@ namespace TechBench
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
+            _navNorm = new Font("Segoe UI", 12f, FontStyle.Regular);
+            _navBold = new Font("Segoe UI", 12f, FontStyle.Bold);
             string assets = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
             try
             {
@@ -100,24 +107,11 @@ namespace TechBench
             strip.Items.Add(_syncStatus);
             _syncStatus.Click += delegate { OpenSync(); };
 
-            var job = new Panel { Dock = DockStyle.Top, Height = 82, BackColor = Color.FromArgb(22, 32, 48) };
-            var jobGrid = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                Padding = new Padding(8, 4, 8, 4)
-            };
-            jobGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-            jobGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-
-            var row0 = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-            WrapContents = true,
-                BackColor = Color.Transparent
-            };
-            row0.Controls.Add(JobLabel("WO"));
+            // WrapBar, not a fixed 82px panel: at 192 DPI the Absolute-36 rows overflowed
+            // and painted over the tab headers, leaving only the Search text box.
+            var job = UiLayout.WrapBar(new Padding(8, 6, 8, 4));
+            job.BackColor = Color.FromArgb(22, 32, 48);
+            job.Controls.Add(JobLabel("WO"));
             _woPick = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -125,84 +119,58 @@ namespace TechBench
                 Margin = new Padding(0, 2, 12, 0)
             };
             _woPick.SelectedIndexChanged += delegate { PickWoFromStrip(); };
-            row0.Controls.Add(_woPick);
-            row0.Controls.Add(JobLabel("Customer"));
+            job.Controls.Add(_woPick);
+            job.Controls.Add(JobLabel("Customer"));
             _customer = new TextBox { Width = 180, Margin = new Padding(0, 2, 12, 0) };
             _customer.TextChanged += delegate { PushHeader(); };
-            row0.Controls.Add(_customer);
+            job.Controls.Add(_customer);
             _jobSync = new Label
             {
                 Text = "Sync: …",
                 ForeColor = Color.Khaki,
                 AutoSize = true,
                 Cursor = Cursors.Hand,
-                Margin = new Padding(8, 8, 0, 0)
+                Margin = new Padding(8, 8, 12, 0)
             };
-            row0.Controls.Add(_jobSync);
+            job.Controls.Add(_jobSync);
             _jobSync.Click += delegate { OpenSync(); };
-            jobGrid.Controls.Add(row0, 0, 0);
-
-            var row1 = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                WrapContents = true,
-                BackColor = Color.Transparent
-            };
-            row1.Controls.Add(JobLabel("Model"));
+            job.Controls.Add(JobLabel("Model"));
             _model = new TextBox { Width = 170, Margin = new Padding(0, 2, 12, 0) };
-            row1.Controls.Add(_model);
-            row1.Controls.Add(JobLabel("Serial"));
+            job.Controls.Add(_model);
+            job.Controls.Add(JobLabel("Serial"));
             _serial = new TextBox { Width = 200, Margin = new Padding(0, 2, 12, 0) };
-            row1.Controls.Add(_serial);
+            job.Controls.Add(_serial);
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
-            row1.Controls.Add(useJob);
+            job.Controls.Add(useJob);
             var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            row1.Controls.Add(addCode);
+            job.Controls.Add(addCode);
             var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            row1.Controls.Add(addNoteBtn);
+            job.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
-            jobGrid.Controls.Add(row1, 0, 1);
-            job.Controls.Add(jobGrid);
-
-            _tabs = new TabControl { Dock = DockStyle.Fill };
-            try
-            {
-                var il = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(20, 20) };
-                string s = Path.Combine(assets, "search32.png");
-                string i = Path.Combine(assets, "inline32.png");
-                string a = Path.Combine(assets, "app32.png");
-                if (File.Exists(s)) il.Images.Add("search", Image.FromFile(s));
-                if (File.Exists(i)) il.Images.Add("inline", Image.FromFile(i));
-                if (File.Exists(a)) il.Images.Add("app", Image.FromFile(a));
-                if (il.Images.Count > 0) _tabs.ImageList = il;
-            }
-            catch { }
 
             _search = new SearchControl(kb);
             _inline = new Inline7Control();
             _orders = new WorkOrderControl(kb == null ? "" : kb.Root);
 
-            _pSearch = new TabPage("Search");
-            _pSearch.Controls.Add(_search);
-            if (HasImage("search")) _pSearch.ImageKey = "search";
-            var pInline = new TabPage("INLINE 7");
-            pInline.Controls.Add(_inline);
-            if (HasImage("inline")) pInline.ImageKey = "inline";
-            _pOrders = new TabPage("Work orders");
-            _pOrders.Controls.Add(_orders);
-            if (HasImage("app")) _pOrders.ImageKey = "app";
-            var pAdapters = new TabPage("Adapters");
-            if (HasImage("app")) pAdapters.ImageKey = "app";
-            pAdapters.Controls.Add(BuildAdaptersPanel());
+            // Panels, not TabControl: native headers paint "Work orders / INLINE 7 / Adapters"
+            // at 192 DPI but those pages are not hit-testable. Big wrap buttons + Visible pages
+            // cannot ghost.
+            _pSearch = ShellPage("shellPage0", _search);
+            _pOrders = ShellPage("shellPage1", _orders);
+            var pInline = ShellPage("shellPage2", _inline);
+            var pAdapters = ShellPage("shellPage3", BuildAdaptersPanel());
+            _pages = new Control[] { _pSearch, _pOrders, pInline, pAdapters };
+            _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill };
 
-            _tabs.TabPages.Add(_pSearch);
-            _tabs.TabPages.Add(_pOrders);
-            _tabs.TabPages.Add(pInline);
-            _tabs.TabPages.Add(pAdapters);
+            _nav = UiLayout.SwitchBar(
+                new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
+                delegate(int i) { ShowPage(i); });
+            ShowPage(0);
 
-            // Last-added docks at the top: status, menu, job strip, then tabs fill.
-            Controls.Add(_tabs);
+            // Last-added docks nearest the edge: menu, then switches (cannot sit under the job strip), then job.
+            Controls.Add(_host);
             Controls.Add(job);
+            Controls.Add(_nav);
             Controls.Add(menu);
             Controls.Add(strip);
 
@@ -213,7 +181,7 @@ namespace TechBench
             useJob.Click += delegate
             {
                 string q = (_model.Text + " " + _serial.Text).Trim();
-                _tabs.SelectedTab = _pSearch;
+                ShowPage(0);
                 _search.Prefill(q);
                 SyncJob();
             };
@@ -227,7 +195,7 @@ namespace TechBench
             // The INLINE 7 tab knows SPNs; the knowledge base knows the shop's own write-ups on them.
             _inline.OpenInSearch = delegate(string query)
             {
-                _tabs.SelectedTab = _pSearch;
+                ShowPage(0);
                 _search.Prefill(query);
             };
             _inline.LookupCode = delegate(int spn, int fmi)
@@ -256,7 +224,7 @@ namespace TechBench
             {
                 if ((e.Control && e.KeyCode == Keys.F) || e.KeyCode == Keys.F3)
                 {
-                    _tabs.SelectedTab = _pSearch;
+                    ShowPage(0);
                     _search.FocusQuery();
                     e.Handled = true;
                 }
@@ -311,9 +279,35 @@ namespace TechBench
             };
         }
 
-        bool HasImage(string key)
+        void PaintNav()
         {
-            return _tabs.ImageList != null && _tabs.ImageList.Images.ContainsKey(key);
+            UiLayout.MarkSwitch(_nav, _page, _navNorm, _navBold);
+        }
+
+        void ShowPage(int i)
+        {
+            if (_pages == null || i < 0 || i >= _pages.Length) return;
+            _page = i;
+            // One Dock.Fill child only. Sibling fill pages stay on Search at 192 DPI.
+            _host.SuspendLayout();
+            _host.Controls.Clear();
+            Control page = _pages[i];
+            page.Visible = true;
+            page.Dock = DockStyle.Fill;
+            _host.Controls.Add(page);
+            _host.ResumeLayout(true);
+            PaintNav();
+        }
+
+        static Panel ShellPage(string name, Control body)
+        {
+            var p = new Panel { Name = name, Dock = DockStyle.Fill, Visible = false };
+            if (body != null)
+            {
+                body.Dock = DockStyle.Fill;
+                p.Controls.Add(body);
+            }
+            return p;
         }
 
         void ApplyWindow(AppSettings s)
@@ -361,10 +355,11 @@ namespace TechBench
             MessageBox.Show(this,
                 "Tech Bench " + AppVersion.Number + "\n\n"
                 + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\n\n"
+                + "This copy: " + Application.ExecutablePath + "\n"
                 + "Process: " + bits + "\n"
                 + "Knowledge base: " + kb + "\n"
                 + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\n") : "")
-                + "\nUpdates download a public latest.json and a hashed TechBench.exe.\n"
+                + "\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\n"
                 + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.",
                 "About Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -564,7 +559,7 @@ namespace TechBench
                 }
                 RunSync(false);
                 ReloadKb();
-                _tabs.SelectedTab = _pSearch;
+                ShowPage(0);
                 _search.Prefill((dlg.Result.Code + " " + dlg.Result.Title).Trim());
             }
         }
@@ -585,7 +580,7 @@ namespace TechBench
                     ShopSync.SaveNote(_kb.Root, ShopSync.LoadSettings().TechId, dlg.NoteTitle, dlg.NoteBody);
                     RunSync(false);
                     ReloadKb();
-                    _tabs.SelectedTab = _pSearch;
+                    ShowPage(0);
                     string q = dlg.NoteTitle;
                     if (string.IsNullOrWhiteSpace(q))
                     {
@@ -623,7 +618,7 @@ namespace TechBench
                     string dest = ShopSync.AddFile(_kb.Root, ShopSync.LoadSettings().TechId, dlg.FileName);
                     RunSync(false);
                     ReloadKb();
-                    _tabs.SelectedTab = _pSearch;
+                    ShowPage(0);
                     _search.Prefill(Path.GetFileName(dest));
                 }
                 catch (Exception ex)
