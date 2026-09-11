@@ -70,7 +70,9 @@ namespace TechBench
                 if (w < 1) w = Math.Max(1, flow.Width);
                 Size pref = flow.GetPreferredSize(new Size(w, 0));
                 int h = pref.Height;
-                if (h < 28) h = 28;
+                int minH = 28;
+                if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
+                if (h < minH) h = minH;
                 if (flow.Height != h) flow.Height = h;
             };
             flow.Layout += delegate { fit(null, EventArgs.Empty); };
@@ -84,8 +86,9 @@ namespace TechBench
         /// </summary>
         public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick)
         {
-            var bar = WrapBar(new Padding(8, 6, 8, 4));
+            var bar = WrapBar(new Padding(8, 8, 8, 8));
             bar.BackColor = Color.FromArgb(36, 48, 68);
+            bar.MinimumSize = new Size(0, 72);
             if (names == null) return bar;
             for (int i = 0; i < names.Length; i++)
             {
