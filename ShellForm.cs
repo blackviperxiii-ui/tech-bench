@@ -84,8 +84,11 @@ namespace TechBench
             jobFlow.Controls.Add(_serial);
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
             jobFlow.Controls.Add(useJob);
-            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
+            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, -2, 8, 0) };
             jobFlow.Controls.Add(addCode);
+            var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, -2, 8, 0) };
+            jobFlow.Controls.Add(addNoteBtn);
+            addNoteBtn.Click += delegate { AddNote(); };
             _jobSync = new Label
             {
                 Text = "Sync: …",

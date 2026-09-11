@@ -16,13 +16,13 @@ namespace TechBench
         public NoteEditForm()
         {
             Text = "Add a tech note";
-            StartPosition = FormStartPosition.CenterParent;
+            StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false;
             MaximizeBox = false;
             ShowInTaskbar = false;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
-            ClientSize = new Size(520, 340);
+            ClientSize = new Size(480, 320);
             MinimumSize = new Size(400, 280);
 
             var table = new TableLayoutPanel
@@ -55,7 +55,7 @@ namespace TechBench
             var buttons = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
-                FlowDirection = FlowDirection.RightToLeft,
+                FlowDirection = FlowDirection.LeftToRight,
                 AutoSize = true,
                 Padding = new Padding(12, 8, 12, 12)
             };
