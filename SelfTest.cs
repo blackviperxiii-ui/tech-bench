@@ -1093,14 +1093,14 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.1.0");
+        Eq("stamped version", AppVersion.Number, "1.2.0");
         Version parsed;
         Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
-        Check("1.2.0 is newer", Updater.IsNewer("1.2.0", "1.1.0"), "1.2.0 vs 1.1.0");
-        Check("v1.1.1 is newer", Updater.IsNewer("v1.1.1", "1.1.0"), "v prefix");
-        Check("same version is not newer", !Updater.IsNewer("1.1.0", "1.1.0"), "same");
-        Check("older is not newer", !Updater.IsNewer("1.0.9", "1.1.0"), "older");
-        Check("garbage version is not newer", !Updater.IsNewer("nope", "1.1.0"), "garbage");
+        Check("1.3.0 is newer", Updater.IsNewer("1.3.0", "1.2.0"), "1.3.0 vs 1.2.0");
+        Check("v1.2.1 is newer", Updater.IsNewer("v1.2.1", "1.2.0"), "v prefix");
+        Check("same version is not newer", !Updater.IsNewer("1.2.0", "1.2.0"), "same");
+        Check("older is not newer", !Updater.IsNewer("1.1.9", "1.2.0"), "older");
+        Check("garbage version is not newer", !Updater.IsNewer("nope", "1.2.0"), "garbage");
 
         var m = Updater.ParseManifest(
             @"{""version"":""1.2.0"",""sha256"":""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"",""url"":""https://example.com/TechBench.exe"",""notes"":""fix""}");
