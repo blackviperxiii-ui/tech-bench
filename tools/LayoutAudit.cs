@@ -47,26 +47,28 @@ static class LayoutAudit
 
                 clipped += SwitchReport(f);
 
-                TabControl tabs = FindTab(f);
-                foreach (TabPage page in tabs.TabPages)
+                string[] names = { "Search", "Work orders", "INLINE 7", "Adapters" };
+                for (int i = 0; i < names.Length; i++)
                 {
-                    tabs.SelectedTab = page;
+                    Button sw = FindNamed(f, "shellSwitch" + i) as Button;
+                    if (sw != null) sw.PerformClick();
                     Application.DoEvents();
-                    clipped += Report(f, page.Text);
-                    clipped += SplitReport(f, page.Text);
+                    clipped += Report(f, names[i]);
+                    clipped += SplitReport(f, names[i]);
                     if (shotDir != null)
-                        Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(page.Text));
+                        Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(names[i]));
 
-                    TabControl nested = FindTab(page);
+                    Control page = FindNamed(f, "shellPage" + i);
+                    TabControl nested = page == null ? null : FindTab(page);
                     if (nested == null) continue;
                     foreach (TabPage inner in nested.TabPages)
                     {
                         nested.SelectedTab = inner;
                         Application.DoEvents();
-                        clipped += Report(f, page.Text + " / " + inner.Text);
-                        clipped += SplitReport(f, page.Text + " / " + inner.Text);
+                        clipped += Report(f, names[i] + " / " + inner.Text);
+                        clipped += SplitReport(f, names[i] + " / " + inner.Text);
                         if (shotDir != null)
-                            Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(page.Text) + "-" + Safe(inner.Text));
+                            Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(names[i]) + "-" + Safe(inner.Text));
                     }
                 }
 
@@ -130,7 +132,7 @@ static class LayoutAudit
                 Console.WriteLine("  CLIP  shell  switch \"" + need[i] + "\"  " + why);
                 hits++;
             }
-            else if (b.Height < 28 || b.Width < 40)
+            else if (b.Height < 40 || b.Width < 80)
             {
                 Console.WriteLine("  CLIP  shell  switch \"" + need[i] + "\"  tiny " + b.Size);
                 hits++;
@@ -249,6 +251,7 @@ static class LayoutAudit
                 TabControl tabs = page.Parent as TabControl;
                 if (tabs != null && tabs.SelectedTab != page) return false;
             }
+            if (c.Name != null && c.Name.StartsWith("shellPage") && !c.Visible) return false;
             c = c.Parent;
         }
         return true;
