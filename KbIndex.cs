@@ -122,20 +122,58 @@ namespace TechBench
                 return;
             }
             var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            J1939Reader.Names.Reset();
+            var spn = new Dictionary<int, string>();
+            var pgn = new Dictionary<int, string>();
+            var sa = new Dictionary<int, string>();
 
             // Each file is loaded on its own so one bad JSON file costs that section only, instead of
             // leaving the tech with a completely empty index and no idea why.
-            int nCode = Try("kb.json", delegate { return LoadCodes(ser, Path.Combine(root, "data", "kb.json")); })
-                      + Try("user-codes.json", delegate { return LoadCodes(ser, Path.Combine(root, "data", "user-codes.json")); });
+            int nCode = Try("kb.json", delegate { return LoadCodes(ser, Path.Combine(root, "data", "kb.json"), "", null, null, null); });
             int nPwd = Try("ifix-passwords.json", delegate { return LoadPasswords(ser, Path.Combine(root, "data", "passwords", "ifix-passwords.json")); });
             int nMan = Try("usb-manuals.json", delegate { return LoadManuals(ser, Path.Combine(root, "data", "usb-manuals.json")); });
             int nFil = Try("rental-portable-filters-oil.json", delegate { return LoadFilters(ser, Path.Combine(root, "data", "rental-portable-filters-oil.json")); });
             int nEq = Try("rental-equipment-info.json", delegate { return LoadEquipment(ser, Path.Combine(root, "data", "rental-equipment-info.json")); });
-            int nNames = Try("j1939-names.json", delegate { return LoadJ1939Names(ser, Path.Combine(root, "data", "j1939-names.json")); });
+            int nNames = Try("j1939-names.json", delegate { return MergeNames(ser, Path.Combine(root, "data", "j1939-names.json"), spn, pgn, sa, false); });
+            int nNotes = Try("notes", delegate { return LoadNoteDir(Path.Combine(root, "data", "notes"), ""); });
+            int nFiles = Try("files", delegate { return LoadFileDir(Path.Combine(root, "data", "files"), ""); });
+
+            Dictionary<string, bool> skipCodes = ShopSync.ResolvedKeys(root);
+            Dictionary<string, bool> keepBoth = ShopSync.KeepBothKeys(root);
+            var seenUser = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            nCode += Try("_resolved\\user-codes.json", delegate
+            {
+                return LoadCodes(ser, Path.Combine(ShopSync.ShopRoot(root), "_resolved", "user-codes.json"), "resolved", null, null, seenUser);
+            });
+            foreach (string tech in ShopSync.TechIds(root))
+            {
+                string shard = ShopSync.ShardDir(root, tech);
+                nCode += Try(tech + "\\user-codes.json", delegate
+                {
+                    return LoadCodes(ser, Path.Combine(shard, "user-codes.json"), tech, skipCodes, keepBoth, seenUser);
+                });
+                nNames += Try(tech + "\\j1939-names.json", delegate
+                {
+                    return MergeNames(ser, Path.Combine(shard, "j1939-names.json"), spn, pgn, sa, false);
+                });
+                nNotes += Try(tech + "\\notes", delegate { return LoadNoteDir(Path.Combine(shard, "notes"), tech); });
+                nFiles += Try(tech + "\\files", delegate { return LoadFileDir(Path.Combine(shard, "files"), tech); });
+            }
+            nCode += Try("user-codes.json", delegate
+            {
+                return LoadCodes(ser, Path.Combine(root, "data", "user-codes.json"), "", null, null, seenUser);
+            });
+            nNames += Try("_resolved\\j1939-names.json", delegate
+            {
+                return MergeNames(ser, Path.Combine(ShopSync.ShopRoot(root), "_resolved", "j1939-names.json"), spn, pgn, sa, true);
+            });
+            J1939Reader.Names.Load(spn, pgn, sa);
 
             Status = string.Format("Codes {0}  ·  Passwords {1}  ·  Manuals {2}  ·  Filters {3}  ·  Equipment {4}",
                 nCode, nPwd, nMan, nFil, nEq);
             if (nNames > 0) Status += "  ·  J1939 names " + nNames;
+            if (nNotes > 0) Status += "  ·  Notes " + nNotes;
+            if (nFiles > 0) Status += "  ·  Files " + nFiles;
             if (All.Count == 0)
                 Status += "  ·  nothing loaded from " + root;
             if (Errors.Count > 0)
@@ -276,7 +314,7 @@ namespace TechBench
             return n;
         }
 
-        int LoadCodes(JavaScriptSerializer ser, string path)
+        int LoadCodes(JavaScriptSerializer ser, string path, string author, Dictionary<string, bool> skip, Dictionary<string, bool> keepBoth, Dictionary<string, bool> seen)
         {
             var rootObj = ReadRoot(ser, path);
             if (rootObj == null) return 0;
@@ -287,6 +325,11 @@ namespace TechBench
                 if (d == null) continue;
                 string brand = S(Get(d, "brand_id"));
                 string code = S(Get(d, "code"));
+                string key = brand.Trim().ToLowerInvariant() + "\u0001" + code.Trim().ToLowerInvariant();
+                if (skip != null && skip.ContainsKey(key) && (keepBoth == null || !keepBoth.ContainsKey(key)))
+                    continue;
+                if (seen != null && seen.ContainsKey(key) && (keepBoth == null || !keepBoth.ContainsKey(key)))
+                    continue;
                 string title = S(Get(d, "title"));
                 string desc = S(Get(d, "description"));
                 var body = new StringBuilder();
@@ -302,32 +345,123 @@ namespace TechBench
                 string safety = S(Get(d, "safety"));
                 if (safety.Length > 0) { body.AppendLine(); body.AppendLine("Safety: " + safety); }
                 string sev = S(Get(d, "severity"));
+                string sub = sev + "  ·  " + S(Get(d, "controller_id")) + "  ·  " + S(Get(d, "confidence"));
+                if (!string.IsNullOrEmpty(author)) sub += "  ·  " + author;
                 Add(new Hit
                 {
                     Kind = "CODE",
                     Title = brand + "  " + code + "  —  " + title,
-                    Subtitle = sev + "  ·  " + S(Get(d, "controller_id")) + "  ·  " + S(Get(d, "confidence")),
+                    Subtitle = sub,
                     Body = body.ToString(),
-                    Hay = (brand + " " + code + " " + title + " " + desc + " " + S(Get(d, "controller_id")) + " " + JoinArr(Get(d, "tags"))).ToLowerInvariant()
+                    Hay = (brand + " " + code + " " + title + " " + desc + " " + S(Get(d, "controller_id")) + " " + author + " " + JoinArr(Get(d, "tags"))).ToLowerInvariant()
                 }, code);
+                n++;
+                if (seen != null) seen[key] = true;
+            }
+            return n;
+        }
+
+        int LoadNoteDir(string dir, string author)
+        {
+            if (!Directory.Exists(dir)) return 0;
+            int n = 0;
+            foreach (string f in Directory.GetFiles(dir))
+            {
+                string ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext != ".txt" && ext != ".md") continue;
+                string body;
+                try { body = File.ReadAllText(f); }
+                catch { continue; }
+                string title = Path.GetFileNameWithoutExtension(f);
+                string first = FirstLine(body);
+                if (first.Length > 0) title = first;
+                string sub = "Tech note";
+                if (!string.IsNullOrEmpty(author)) sub += "  ·  " + author;
+                Add(new Hit
+                {
+                    Kind = "NOTE",
+                    Title = title,
+                    Subtitle = sub,
+                    Body = body,
+                    Path = f,
+                    Hay = (title + " " + author + " " + Path.GetFileName(f) + " " + body).ToLowerInvariant()
+                }, title);
                 n++;
             }
             return n;
+        }
+
+        int LoadFileDir(string dir, string author)
+        {
+            if (!Directory.Exists(dir)) return 0;
+            int n = 0;
+            foreach (string f in Directory.GetFiles(dir))
+            {
+                string name = Path.GetFileName(f);
+                string ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext == ".tmp" || ext == ".bak" || name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string sub = "Shop file";
+                if (!string.IsNullOrEmpty(author)) sub += "  ·  " + author;
+                Add(new Hit
+                {
+                    Kind = "FILE",
+                    Title = name,
+                    Subtitle = sub,
+                    Body = f,
+                    Path = f,
+                    Hay = (name + " " + author).ToLowerInvariant()
+                }, name);
+                n++;
+            }
+            return n;
+        }
+
+        static string FirstLine(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            foreach (string raw in text.Replace("\r\n", "\n").Split('\n'))
+            {
+                string t = raw.Trim();
+                if (t.Length > 0) return t;
+            }
+            return "";
         }
 
         /// <summary>
         /// Optional data\j1939-names.json extends the built-in SPN/PGN/SA labels, so a new SPN gets a
         /// name without a rebuild. Keys may be decimal or 0x-prefixed hex.
         /// </summary>
-        int LoadJ1939Names(JavaScriptSerializer ser, string path)
+        int MergeNames(JavaScriptSerializer ser, string path,
+            Dictionary<int, string> spn, Dictionary<int, string> pgn, Dictionary<int, string> sa, bool overwrite)
         {
             var rootObj = ReadRoot(ser, path);
             if (rootObj == null) return 0;
-            Dictionary<int, string> spn = NameMap(Get(rootObj, "spn"));
-            Dictionary<int, string> pgn = NameMap(Get(rootObj, "pgn"));
-            Dictionary<int, string> sa = NameMap(Get(rootObj, "sa"));
-            J1939Reader.Names.Load(spn, pgn, sa);
-            return spn.Count + pgn.Count + sa.Count;
+            int n = 0;
+            n += MergeNameMap(NameMap(Get(rootObj, "spn")), spn, overwrite);
+            n += MergeNameMap(NameMap(Get(rootObj, "pgn")), pgn, overwrite);
+            n += MergeNameMap(NameMap(Get(rootObj, "sa")), sa, overwrite);
+            return n;
+        }
+
+        static int MergeNameMap(Dictionary<int, string> src, Dictionary<int, string> dest, bool overwrite)
+        {
+            int n = 0;
+            foreach (KeyValuePair<int, string> kv in src)
+            {
+                string existing;
+                if (dest.TryGetValue(kv.Key, out existing))
+                {
+                    if (!overwrite) continue;
+                    if (existing == kv.Value) continue;
+                    dest[kv.Key] = kv.Value;
+                    n++;
+                    continue;
+                }
+                dest[kv.Key] = kv.Value;
+                n++;
+            }
+            return n;
         }
 
         static Dictionary<int, string> NameMap(object o)

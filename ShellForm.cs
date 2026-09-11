@@ -18,9 +18,15 @@ namespace TechBench
         readonly TabPage _pSearch;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
+        readonly ToolStripStatusLabel _syncStatus;
+        readonly Label _jobSync;
+        readonly Timer _watchDebounce = new Timer();
+        readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
         KbIndex _kb;
         UpdateManifest _ready;
         bool _checking;
+        ShopSyncResult _sync;
+        bool _syncing;
 
         public ShellForm(KbIndex kb)
         {
@@ -41,6 +47,22 @@ namespace TechBench
             catch { }
 
             var menu = new MenuStrip();
+            var shop = new ToolStripMenuItem("&Shop");
+            var syncNow = new ToolStripMenuItem("Sync &now");
+            var syncDlg = new ToolStripMenuItem("&Sync…");
+            var addNote = new ToolStripMenuItem("Add &note");
+            var addFile = new ToolStripMenuItem("Add &file…");
+            syncNow.Click += delegate { RunSync(false); };
+            syncDlg.Click += delegate { OpenSync(); };
+            addNote.Click += delegate { AddNote(); };
+            addFile.Click += delegate { AddShopFile(); };
+            shop.DropDownItems.Add(syncNow);
+            shop.DropDownItems.Add(syncDlg);
+            shop.DropDownItems.Add(new ToolStripSeparator());
+            shop.DropDownItems.Add(addNote);
+            shop.DropDownItems.Add(addFile);
+            menu.Items.Add(shop);
+
             var help = new ToolStripMenuItem("&Help");
             var check = new ToolStripMenuItem("&Check for updates");
             _installUpdate = new ToolStripMenuItem("&Install update") { Enabled = false };
@@ -54,6 +76,16 @@ namespace TechBench
             help.DropDownItems.Add(about);
             menu.Items.Add(help);
             MainMenuStrip = menu;
+
+            var strip = new StatusStrip { Dock = DockStyle.Bottom, SizingGrip = false };
+            _syncStatus = new ToolStripStatusLabel
+            {
+                Spring = true,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Text = "Sync: starting…"
+            };
+            strip.Items.Add(_syncStatus);
+            _syncStatus.Click += delegate { OpenSync(); };
 
             var job = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.FromArgb(22, 32, 48) };
             var jobFlow = new FlowLayoutPanel
@@ -71,15 +103,21 @@ namespace TechBench
             jobFlow.Controls.Add(_serial);
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
             jobFlow.Controls.Add(useJob);
-            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, -2, 12, 0) };
+            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, -2, 8, 0) };
             jobFlow.Controls.Add(addCode);
-            jobFlow.Controls.Add(new Label
+            var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, -2, 8, 0) };
+            jobFlow.Controls.Add(addNoteBtn);
+            addNoteBtn.Click += delegate { AddNote(); };
+            _jobSync = new Label
             {
-                Text = "Service passwords are for trained use. INLINE 7: close USB-Link Explorer first.",
-                ForeColor = Color.Silver,
+                Text = "Sync: …",
+                ForeColor = Color.Khaki,
                 AutoSize = true,
-                Margin = new Padding(0, 4, 0, 0)
-            });
+                Cursor = Cursors.Hand,
+                Margin = new Padding(8, 4, 0, 0)
+            };
+            jobFlow.Controls.Add(_jobSync);
+            _jobSync.Click += delegate { OpenSync(); };
             job.Controls.Add(jobFlow);
 
             _tabs = new TabControl { Dock = DockStyle.Fill };
@@ -113,10 +151,11 @@ namespace TechBench
             _tabs.TabPages.Add(pInline);
             _tabs.TabPages.Add(pAdapters);
 
-            // Last-added docks at the top: menu, then job strip, then tabs fill the rest.
+            // Last-added docks at the top: status, menu, job strip, then tabs fill.
             Controls.Add(_tabs);
             Controls.Add(job);
             Controls.Add(menu);
+            Controls.Add(strip);
 
             if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
             if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
@@ -146,6 +185,18 @@ namespace TechBench
             {
                 return _kb == null ? null : _kb.SpnText(spn, fmi);
             };
+            _inline.SessionSaved = delegate(string path)
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(path) || _kb == null) return;
+                    string dtc = Path.Combine(Path.GetDirectoryName(path),
+                        Path.GetFileNameWithoutExtension(path) + "_dtcs.csv");
+                    ShopSync.PublishHistory(_kb.Root, ShopSync.LoadSettings().TechId, dtc);
+                    RunSync(false);
+                }
+                catch { }
+            };
 
             KeyPreview = true;
             KeyDown += delegate(object s, KeyEventArgs e)
@@ -163,10 +214,25 @@ namespace TechBench
                 }
             };
 
+            _watchDebounce.Interval = 900;
+            _watchDebounce.Tick += delegate { _watchDebounce.Stop(); RunSync(false); };
             FormClosing += delegate { PersistSettings(); };
+            FormClosed += delegate
+            {
+                _watchDebounce.Stop();
+                _watchDebounce.Dispose();
+                foreach (FileSystemWatcher w in _watchers)
+                {
+                    try { w.Dispose(); }
+                    catch { }
+                }
+                _watchers.Clear();
+            };
             Shown += delegate
             {
                 SyncJob();
+                RunSync(false);
+                StartWatchers();
                 if (Updater.HasVerifiedPending(AppDomain.CurrentDomain.BaseDirectory))
                     MarkReadyFromPending();
                 ThreadPool.QueueUserWorkItem(delegate { CheckUpdates(false); });
@@ -423,7 +489,7 @@ namespace TechBench
             if (sel != null && sel.Kind == "CODE")
             {
                 // Pre-fill from the highlighted entry so editing an existing code is one click.
-                foreach (UserCode existing in UserCodes.Load(_kb.Root))
+                foreach (UserCode existing in ShopSync.LoadAllCodes(_kb.Root))
                 {
                     string title = (existing.Brand + "  " + existing.Code + "  —  " + existing.Title);
                     if (string.Equals(title, sel.Title, StringComparison.OrdinalIgnoreCase)) { seed = existing; break; }
@@ -438,19 +504,206 @@ namespace TechBench
                 if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result == null) return;
                 try
                 {
-                    List<UserCode> all = UserCodes.Upsert(UserCodes.Load(_kb.Root), dlg.Result);
-                    UserCodes.Save(_kb.Root, all);
+                    ShopSync.SaveUserCode(_kb.Root, ShopSync.LoadSettings().TechId, dlg.Result);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, "Could not write user-codes.json.\n\n" + ex.Message,
+                    MessageBox.Show(this, "Could not write your shop user-codes.json.\n\n" + ex.Message,
                         "Add code", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                RunSync(false);
                 ReloadKb();
                 _tabs.SelectedTab = _pSearch;
                 _search.Prefill((dlg.Result.Code + " " + dlg.Result.Title).Trim());
             }
+        }
+
+        void AddNote()
+        {
+            if (_kb == null || string.IsNullOrEmpty(_kb.Root))
+            {
+                MessageBox.Show(this, "No knowledge base folder is configured, so there is nowhere to save.",
+                    "Add note", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (var dlg = new NoteEditForm())
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    ShopSync.SaveNote(_kb.Root, ShopSync.LoadSettings().TechId, dlg.NoteTitle, dlg.NoteBody);
+                    RunSync(false);
+                    ReloadKb();
+                    _tabs.SelectedTab = _pSearch;
+                    string q = dlg.NoteTitle;
+                    if (string.IsNullOrWhiteSpace(q))
+                    {
+                        foreach (string raw in (dlg.NoteBody ?? "").Replace("\r\n", "\n").Split('\n'))
+                        {
+                            if (raw.Trim().Length > 0) { q = raw.Trim(); break; }
+                        }
+                    }
+                    _search.Prefill(q);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not write the note.\n\n" + ex.Message,
+                        "Add note", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        void AddShopFile()
+        {
+            if (_kb == null || string.IsNullOrEmpty(_kb.Root))
+            {
+                MessageBox.Show(this, "No knowledge base folder is configured, so there is nowhere to save.",
+                    "Add file", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (var dlg = new OpenFileDialog())
+            {
+                dlg.Title = "Add a shop file (PDF, photo, chart…)";
+                dlg.Filter = "All files (*.*)|*.*|PDF (*.pdf)|*.pdf|Images (*.png;*.jpg)|*.png;*.jpg;*.jpeg";
+                dlg.Multiselect = false;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    string dest = ShopSync.AddFile(_kb.Root, ShopSync.LoadSettings().TechId, dlg.FileName);
+                    RunSync(false);
+                    ReloadKb();
+                    _tabs.SelectedTab = _pSearch;
+                    _search.Prefill(Path.GetFileName(dest));
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not copy the file into the knowledge base.\n\n" + ex.Message,
+                        "Add file", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        void OpenSync()
+        {
+            using (var dlg = new SyncForm(_kb == null ? "" : _kb.Root, _sync))
+            {
+                dlg.ShowDialog(this);
+                _sync = dlg.LastResult;
+                if (_kb != null && !string.IsNullOrEmpty(_kb.Root)) ReloadKb();
+                ApplySyncStatus(_sync);
+                RestartWatchers();
+            }
+        }
+
+        void RunSync(bool noisy)
+        {
+            if (_syncing) return;
+            if (_kb == null || string.IsNullOrEmpty(_kb.Root))
+            {
+                _syncStatus.Text = "Sync: no knowledge base folder";
+                if (noisy)
+                    MessageBox.Show(this, "No knowledge base folder is configured.", "Shop sync",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            _syncing = true;
+            try
+            {
+                _sync = ShopSync.Run(_kb.Root);
+                try { ShopSync.ImportHistory(_kb.Root, SessionIo.Folder()); }
+                catch { }
+                ApplySyncStatus(_sync);
+                ReloadKb();
+            }
+            catch (Exception ex)
+            {
+                _syncStatus.Text = "Sync failed: " + ex.Message;
+                if (noisy)
+                    MessageBox.Show(this, ex.Message, "Shop sync", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally { _syncing = false; }
+        }
+
+        void ApplySyncStatus(ShopSyncResult r)
+        {
+            if (r == null)
+            {
+                _syncStatus.Text = "Sync: idle";
+                _jobSync.Text = "Sync: idle";
+                return;
+            }
+            _syncStatus.Text = r.Status;
+            _syncStatus.ForeColor = r.Conflicts > 0 ? Color.DarkRed : Color.Black;
+            _jobSync.ForeColor = r.Conflicts > 0 ? Color.OrangeRed : Color.Khaki;
+            string tech = ShopSync.SanitizeTechId(ShopSync.LoadSettings().TechId);
+            _jobSync.Text = r.Conflicts > 0
+                ? (r.Conflicts + " sync conflict(s) — click")
+                : ("Sync: " + (r.SharedTree ? "sharing KB" : "folder") + "  ·  " + tech + "  ·  click");
+        }
+
+        void RestartWatchers()
+        {
+            foreach (FileSystemWatcher w in _watchers)
+            {
+                try { w.Dispose(); }
+                catch { }
+            }
+            _watchers.Clear();
+            StartWatchers();
+        }
+
+        void StartWatchers()
+        {
+            if (_kb == null || string.IsNullOrEmpty(_kb.Root)) return;
+            WatchDir(Path.Combine(_kb.Root, ShopSync.ShopRel));
+            WatchDir(Path.Combine(_kb.Root, ShopSync.NotesRel));
+            WatchDir(Path.Combine(_kb.Root, ShopSync.FilesRel));
+            ShopSyncSettings s = ShopSync.LoadSettings();
+            if (!ShopSync.IsSharedTree(_kb.Root, s) && Directory.Exists(s.SyncFolder))
+                WatchDir(s.SyncFolder);
+        }
+
+        void WatchDir(string dir)
+        {
+            try
+            {
+                Directory.CreateDirectory(dir);
+                var w = new FileSystemWatcher(dir);
+                w.IncludeSubdirectories = true;
+                w.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
+                    | NotifyFilters.LastWrite | NotifyFilters.Size;
+                FileSystemEventHandler ping = delegate
+                {
+                    try
+                    {
+                        if (IsHandleCreated && !IsDisposed)
+                            BeginInvoke(new Action(OnShopChanged));
+                    }
+                    catch { }
+                };
+                w.Changed += ping;
+                w.Created += ping;
+                w.Deleted += ping;
+                w.Renamed += delegate
+                {
+                    try
+                    {
+                        if (IsHandleCreated && !IsDisposed)
+                            BeginInvoke(new Action(OnShopChanged));
+                    }
+                    catch { }
+                };
+                w.EnableRaisingEvents = true;
+                _watchers.Add(w);
+            }
+            catch { }
+        }
+
+        void OnShopChanged()
+        {
+            _watchDebounce.Stop();
+            _watchDebounce.Start();
         }
 
         void ReloadKb()
