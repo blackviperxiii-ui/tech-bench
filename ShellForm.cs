@@ -361,10 +361,11 @@ namespace TechBench
             MessageBox.Show(this,
                 "Tech Bench " + AppVersion.Number + "\n\n"
                 + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\n\n"
+                + "This copy: " + Application.ExecutablePath + "\n"
                 + "Process: " + bits + "\n"
                 + "Knowledge base: " + kb + "\n"
                 + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\n") : "")
-                + "\nUpdates download a public latest.json and a hashed TechBench.exe.\n"
+                + "\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\n"
                 + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.",
                 "About Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }

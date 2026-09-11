@@ -14,5 +14,7 @@ TechBench.exe.new.sha256
 apply-update.cmd
 latest.json
 layout-shots*/
+dist/
+tools/innosetup/
 .vs/
 *.log
