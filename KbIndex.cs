@@ -384,7 +384,7 @@ namespace TechBench
                     Subtitle = sub,
                     Body = body,
                     Path = f,
-                    Hay = (title + " " + author + " " + body).ToLowerInvariant()
+                    Hay = (title + " " + author + " " + Path.GetFileName(f) + " " + body).ToLowerInvariant()
                 }, title);
                 n++;
             }

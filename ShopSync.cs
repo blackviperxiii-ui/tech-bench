@@ -373,6 +373,15 @@ namespace TechBench
             string dir = Path.Combine(ShardDir(kbRoot, techId), "notes");
             Directory.CreateDirectory(dir);
             string slug = SanitizeTechId(title);
+            if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body))
+            {
+                string first = "";
+                foreach (string raw in body.Replace("\r\n", "\n").Split('\n'))
+                {
+                    if (raw.Trim().Length > 0) { first = raw.Trim(); break; }
+                }
+                if (first.Length > 0) slug = SanitizeTechId(first);
+            }
             if (slug == "tech") slug = "note";
             string name = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + "-" + slug + ".txt";
             string path = Path.Combine(dir, name);
