@@ -35,6 +35,10 @@ static class LayoutAudit
                 f.MinimumSize = new Size(1, 1);
                 f.Location = new Point(20, 40);
                 f.Show();
+                // First layout pass at the default SplitContainer/TabPage size, then the
+                // real shop-laptop size — the lock bug only shows up after this grow.
+                f.Size = new Size(200, 180);
+                Application.DoEvents();
                 f.Size = outer;
                 Application.DoEvents();
 
@@ -47,6 +51,7 @@ static class LayoutAudit
                     tabs.SelectedTab = page;
                     Application.DoEvents();
                     clipped += Report(f, page.Text);
+                    clipped += SplitReport(f, page.Text);
                     if (shotDir != null)
                         Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(page.Text));
 
@@ -57,6 +62,7 @@ static class LayoutAudit
                         nested.SelectedTab = inner;
                         Application.DoEvents();
                         clipped += Report(f, page.Text + " / " + inner.Text);
+                        clipped += SplitReport(f, page.Text + " / " + inner.Text);
                         if (shotDir != null)
                             Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(page.Text) + "-" + Safe(inner.Text));
                     }
@@ -104,6 +110,39 @@ static class LayoutAudit
         Walk(f, f, where, hits);
         foreach (string h in hits) Console.WriteLine("  CLIP  " + h);
         return hits.Count;
+    }
+
+    // Catches UiLayout.Split locking on the default 150×100 handle: a 430/470
+    // request gets clamped to a sliver and never reapplies after the real size lands.
+    static int SplitReport(Form f, string where)
+    {
+        int hits = 0;
+        foreach (SplitContainer sc in Splits(f))
+        {
+            if (!OnSelectedPath(sc) || !sc.Visible) continue;
+            bool vert = sc.Orientation == Orientation.Vertical;
+            int span = vert ? sc.Width : sc.Height;
+            int d = sc.SplitterDistance;
+            if (vert && span >= 500 && d < 140)
+            {
+                Console.WriteLine("  CLIP  " + where + "  vertical splitter locked d=" + d + " w=" + sc.Width);
+                hits++;
+            }
+            if (!vert && span >= 280 && d < 70)
+            {
+                Console.WriteLine("  CLIP  " + where + "  horizontal splitter locked d=" + d + " h=" + sc.Height);
+                hits++;
+            }
+        }
+        return hits;
+    }
+
+    static List<SplitContainer> Splits(Control c)
+    {
+        var list = new List<SplitContainer>();
+        if (c is SplitContainer) list.Add((SplitContainer)c);
+        foreach (Control child in c.Controls) list.AddRange(Splits(child));
+        return list;
     }
 
     static void Walk(Control root, Control c, string where, List<string> hits)
