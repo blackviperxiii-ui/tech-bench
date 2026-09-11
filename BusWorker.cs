@@ -361,12 +361,7 @@ namespace J1939Reader
                     break;
                 case BusCmdKind.ClearPrevious:
                 {
-                    byte[] payload = new byte[8];
-                    _rp.SendJ1939(0xFECC, 0, payload);
-                    _rp.SendJ1939(0xFECC, 255, payload);
-                    _rp.RequestPgn(0xFECC, 0);
-                    _rp.RequestPgn(0xFECC, 255);
-                    Log("Sent DM3 (clear previously active)");
+                    Log(_rp.ClearPreviousFaults(EngineSaLocked()));
                     RequestCodes(true);
                     break;
                 }
@@ -374,7 +369,7 @@ namespace J1939Reader
                 {
                     _busy = true; _busyWhat = "resetting codes";
                     string report;
-                    try { report = _rp.ResetAllFaults(); }
+                    try { report = _rp.ResetAllFaults(EngineSaLocked()); }
                     catch (Exception ex) { report = "Reset failed: " + ex.Message; }
                     finally { _busy = false; _busyWhat = ""; }
                     lock (_gate) _lastResetReport = report;
@@ -437,13 +432,11 @@ namespace J1939Reader
         void RequestCodes(bool log)
         {
             if (!_rp.IsConnected) return;
-            _rp.RequestPgn(0xFECA, 0);
-            _rp.RequestPgn(0xFECA, 255);
-            _rp.RequestPgn(0xFECB, 0);
-            _rp.RequestPgn(0xFECB, 255);
-            _rp.RequestPgn(0xFE56, 0);
+            int engineSa = EngineSaLocked();
+            _rp.RequestDmAfterClear(engineSa);
+            _rp.RequestPgn(0xFE56, Rp1210.Tsc1Dest(engineSa));
             _lastReq = DateTime.UtcNow;
-            if (log) Log("Requested DM1 / DM2 / DEF tank");
+            if (log) Log("Requested DM1 / DM2 / DEF tank (engine + compressor SA " + J1939Clear.CompressorSa + ")");
         }
 
         public BusSnapshot Snapshot()
