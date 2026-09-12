@@ -89,7 +89,15 @@ namespace TechBench
             };
             flow.Layout += delegate { fit(null, EventArgs.Empty); };
             flow.SizeChanged += delegate { fit(null, EventArgs.Empty); };
-            flow.ControlAdded += delegate { fit(null, EventArgs.Empty); };
+            flow.ControlAdded += delegate(object s, ControlEventArgs e)
+            {
+                if (e.Control != null)
+                {
+                    e.Control.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+                    e.Control.TextChanged += delegate { fit(null, EventArgs.Empty); };
+                }
+                fit(null, EventArgs.Empty);
+            };
             flow.ParentChanged += delegate
             {
                 Control p = flow.Parent;
