@@ -103,9 +103,9 @@ namespace TechBench
             _syncStatus.Cursor = Cursors.Hand;
             _syncStatus.Click += delegate { OpenSync(); };
 
-            // WrapBar, not a fixed 82px panel: at 192 DPI the Absolute-36 rows overflowed
-            // and painted over the tab headers, leaving only the Search text box.
-            var job = UiLayout.WrapBar(new Padding(8, 6, 8, 4));
+            // Two wrapping rows: identity (WO/customer/model/serial) then actions.
+            // One row left Serial / Settings / Search this job off the window after sync text grew.
+            var job = UiLayout.WrapBar(new Padding(8, 6, 8, 2));
             job.BackColor = Color.FromArgb(22, 32, 48);
             job.Controls.Add(JobLabel("WO"));
             _woPick = new ComboBox
@@ -121,28 +121,31 @@ namespace TechBench
             _customer = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             _customer.TextChanged += delegate { PushHeader(); };
             job.Controls.Add(_customer);
-            _jobSync = new Label
-            {
-                Text = "Sync: …",
-                ForeColor = Color.Khaki,
-                AutoSize = true,
-                Cursor = Cursors.Hand,
-                Margin = new Padding(8, 8, 12, 0)
-            };
-            job.Controls.Add(_jobSync);
-            _jobSync.Click += delegate { OpenSync(); };
             job.Controls.Add(JobLabel("Model"));
             _model = new TextBox { Width = 130, Margin = new Padding(0, 2, 12, 0) };
             job.Controls.Add(_model);
             job.Controls.Add(JobLabel("Serial"));
             _serial = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             job.Controls.Add(_serial);
+
+            var actions = UiLayout.WrapBar(new Padding(8, 2, 8, 4));
+            actions.BackColor = Color.FromArgb(22, 32, 48);
+            _jobSync = new Label
+            {
+                Text = "Sync: …",
+                ForeColor = Color.Khaki,
+                AutoSize = true,
+                Cursor = Cursors.Hand,
+                Margin = new Padding(0, 8, 12, 0)
+            };
+            actions.Controls.Add(_jobSync);
+            _jobSync.Click += delegate { OpenSync(); };
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
-            job.Controls.Add(useJob);
+            actions.Controls.Add(useJob);
             var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            job.Controls.Add(addCode);
+            actions.Controls.Add(addCode);
             var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            job.Controls.Add(addNoteBtn);
+            actions.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
 
             _search = new SearchControl(kb);
@@ -164,8 +167,9 @@ namespace TechBench
                 delegate(int i) { ShowPage(i); });
             ShowPage(0);
 
-            // Last-added docks nearest the edge: menu, then switches (cannot sit under the job strip), then job.
+            // Last-added docks nearest the edge: menu, switches, identity, then actions.
             Controls.Add(_host);
+            Controls.Add(actions);
             Controls.Add(job);
             Controls.Add(_nav);
             Controls.Add(menu);
@@ -680,7 +684,9 @@ namespace TechBench
             string tech = ShopSync.SanitizeTechId(ShopSync.LoadSettings().TechId);
             _jobSync.Text = r.Conflicts > 0
                 ? (r.Conflicts + " sync conflict(s) — click")
-                : ("Sync: " + (r.SharedTree ? "sharing KB" : "folder") + "  ·  " + tech + "  ·  click");
+                : ("Sync · " + tech + " · click");
+            Control bar = _jobSync.Parent;
+            if (bar != null) bar.PerformLayout();
         }
 
         void RestartWatchers()
