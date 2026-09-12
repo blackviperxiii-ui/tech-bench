@@ -15,7 +15,7 @@ namespace TechBench
         readonly TextBox _number, _segment, _customer, _customerNo;
         readonly TextBox _model, _serial, _stock, _desc, _notes, _report, _clock;
         readonly ListBox _media;
-        readonly Label _status;
+        readonly TextBox _status;
         readonly Button _logOn, _logOff, _signOff;
         string _kbRoot;
         IdSettings _settings;
@@ -113,13 +113,9 @@ namespace TechBench
             right.SetColumnSpan(_clock, 3);
             right.Controls.Add(_clock, 1, 7);
 
-            _status = new Label
-            {
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                ForeColor = Color.DimGray,
-                Margin = new Padding(0, 8, 0, 0)
-            };
+            _status = UiLayout.WrapText("");
+            _status.ForeColor = Color.DimGray;
+            _status.Margin = new Padding(0, 8, 0, 0);
             right.SetColumnSpan(_status, 4);
             right.Controls.Add(_status, 0, 8);
 

@@ -232,6 +232,22 @@ static class LayoutAudit
             if (need.Height > lab.Height + 3)
                 hits.Add(where + "  unread Label h=" + lab.Height + " need=" + need.Height + "  " + Describe(lab));
         }
+        TextBox tb = c as TextBox;
+        if (tb != null && tb.Visible && tb.ReadOnly && tb.Multiline && tb.BorderStyle == BorderStyle.None
+            && tb.Dock != DockStyle.Fill && !string.IsNullOrEmpty(tb.Text) && tb.Height > 0)
+        {
+            string one = tb.Text.Replace("\r", " ").Replace("\n", " ");
+            if (one.Length > 24)
+            {
+                Size line = TextRenderer.MeasureText(one, tb.Font, new Size(int.MaxValue, 0),
+                    TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding);
+                bool multi = tb.Text.IndexOf('\n') >= 0 || tb.Text.IndexOf('\r') >= 0;
+                if (!multi && line.Width > tb.ClientSize.Width + 12 && tb.Height <= tb.Font.Height + 12)
+                    hits.Add(where + "  unread WrapText clipped  " + Describe(tb));
+            }
+            if (one.IndexOf('…') >= 0 || one.IndexOf("...") >= 0)
+                hits.Add(where + "  unread ellipsis  " + Describe(tb));
+        }
         if (c is FlowLayoutPanel)
         {
             var flow = (FlowLayoutPanel)c;

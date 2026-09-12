@@ -12,7 +12,7 @@ namespace TechBench
         readonly ComboBox _kind;
         readonly ListBox _list;
         readonly TextBox _detail;
-        readonly Label _status;
+        readonly TextBox _status;
         readonly Button _open;
         readonly Timer _debounce = new Timer();
         KbIndex _kb;
@@ -30,8 +30,8 @@ namespace TechBench
             Padding = new Padding(8);
 
             // Query stretches; kind/buttons wrap. A fixed 360×20 row left the path as "OneDriv…".
-            var qHost = new Panel { Dock = DockStyle.Top, Height = 28, Padding = new Padding(0, 0, 0, 4) };
-            _q = new TextBox { Dock = DockStyle.Fill };
+            var qHost = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0, 0, 0, 4) };
+            _q = new TextBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle };
             qHost.Controls.Add(_q);
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 4));
             _kind = new ComboBox

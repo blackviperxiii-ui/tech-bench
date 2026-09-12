@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Text;
 using System.Windows.Forms;
 
 namespace TechBench
@@ -72,6 +73,11 @@ namespace TechBench
                 try
                 {
                     int w = flow.ClientSize.Width;
+                    if (flow.Parent != null && flow.Dock == DockStyle.Top)
+                    {
+                        int pw = flow.Parent.ClientSize.Width;
+                        if (pw > 1) w = pw;
+                    }
                     if (w < 1) w = Math.Max(1, flow.Width);
                     Size pref = flow.GetPreferredSize(new Size(w, 0));
                     int bottom = flow.Padding.Top;
@@ -95,36 +101,135 @@ namespace TechBench
         }
 
         /// <summary>
-        /// Wrapping label that grows with parent width instead of painting "C:\Users\jerem\OneDriv…".
+        /// Wrapping read-only box. WinForms WordWrap only breaks on spaces, so a KB path
+        /// like C:\Users\jerem\OneDrive\… still paints "OneDriv…" unless we insert breaks.
         /// </summary>
-        public static Label WrapText(string text)
+        public static TextBox WrapText(string text)
         {
-            var l = new Label
+            var t = new TextBox
             {
-                Text = text ?? "",
-                AutoSize = true,
-                UseMnemonic = false
+                Multiline = true,
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                TabStop = false,
+                WordWrap = true,
+                ScrollBars = ScrollBars.None
             };
+            string raw = text ?? "";
+            bool fitting = false;
             EventHandler fit = delegate
             {
-                Control p = l.Parent;
-                if (p == null) return;
-                int w = p.ClientSize.Width - l.Margin.Horizontal;
-                if (l.Dock == DockStyle.None) w -= l.Left;
-                if (w < 40) w = 40;
-                Size want = new Size(w, 0);
-                if (l.MaximumSize.Width != w)
-                    l.MaximumSize = want;
+                if (fitting) return;
+                fitting = true;
+                try
+                {
+                    Control p = t.Parent;
+                    int w = t.ClientSize.Width;
+                    if (p != null)
+                    {
+                        int avail = p.ClientSize.Width - t.Left - t.Margin.Right - t.Padding.Horizontal;
+                        if (t.Dock != DockStyle.None)
+                            avail = p.ClientSize.Width - t.Margin.Horizontal - t.Padding.Horizontal;
+                        if (avail > 24) w = avail;
+                    }
+                    if (w < 32) w = 32;
+                    string wrapped = BreakLong(raw, t.Font, Math.Max(24, w - 6));
+                    if (t.Text != wrapped) t.Text = wrapped;
+                    Size need = TextRenderer.MeasureText(
+                        string.IsNullOrEmpty(wrapped) ? " " : wrapped,
+                        t.Font,
+                        new Size(w, int.MaxValue),
+                        TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
+                    int h = need.Height + t.Padding.Vertical + 6;
+                    int min = t.Font.Height + t.Padding.Vertical + 6;
+                    if (h < min) h = min;
+                    if (t.Dock == DockStyle.Fill && !(p is TableLayoutPanel)) return;
+                    if (t.Height != h) t.Height = h;
+                }
+                finally { fitting = false; }
             };
-            l.ParentChanged += delegate
+            t.ParentChanged += delegate
             {
-                Control p = l.Parent;
+                Control p = t.Parent;
                 if (p == null) return;
+                t.BackColor = p.BackColor;
                 p.SizeChanged += delegate { fit(null, EventArgs.Empty); };
                 p.Layout += delegate { fit(null, EventArgs.Empty); };
                 fit(null, EventArgs.Empty);
             };
-            return l;
+            t.TextChanged += delegate
+            {
+                if (fitting) return;
+                raw = t.Text ?? "";
+                fit(null, EventArgs.Empty);
+            };
+            t.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+            t.Text = raw;
+            return t;
+        }
+
+        static string BreakLong(string text, Font font, int width)
+        {
+            if (string.IsNullOrEmpty(text) || width < 24) return text ?? "";
+            var sb = new StringBuilder();
+            string[] paras = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            for (int p = 0; p < paras.Length; p++)
+            {
+                if (p > 0) sb.Append("\r\n");
+                AppendWrapped(sb, paras[p], font, width);
+            }
+            return sb.ToString();
+        }
+
+        static int TextW(string s, Font font)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            return TextRenderer.MeasureText(s, font, new Size(int.MaxValue, 0),
+                TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding).Width;
+        }
+
+        static void AppendWrapped(StringBuilder sb, string line, Font font, int width)
+        {
+            if (TextW(line, font) <= width)
+            {
+                sb.Append(line);
+                return;
+            }
+            int i = 0;
+            while (i < line.Length)
+            {
+                int lo = 1, hi = line.Length - i, fitLen = 1;
+                while (lo <= hi)
+                {
+                    int mid = (lo + hi) / 2;
+                    if (TextW(line.Substring(i, mid), font) <= width)
+                    {
+                        fitLen = mid;
+                        lo = mid + 1;
+                    }
+                    else hi = mid - 1;
+                }
+                int take = fitLen;
+                if (i + take < line.Length)
+                {
+                    int br = -1;
+                    int floor = Math.Max(1, take / 3);
+                    for (int k = take; k >= floor; k--)
+                    {
+                        char ch = line[i + k - 1];
+                        if (ch == '\\' || ch == '/' || ch == ' ' || ch == '-' || ch == '_' || ch == '.' || ch == '·')
+                        {
+                            br = k;
+                            break;
+                        }
+                    }
+                    if (br > 0) take = br;
+                }
+                if (take < 1) take = 1;
+                sb.Append(line, i, take);
+                i += take;
+                if (i < line.Length) sb.Append("\r\n");
+            }
         }
 
         /// <summary>

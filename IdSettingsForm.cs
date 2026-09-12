@@ -39,7 +39,7 @@ namespace TechBench
 
             table.RowCount = 1;
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            Label hint = UiLayout.WrapText(
+            TextBox hint = UiLayout.WrapText(
                 "Copy credentials from IntelliDealer → Configuration → API Gateway. "
                 + "Until they are here, work orders are file-backed and sign-off is not posted to the DMS.");
             hint.ForeColor = Color.DimGray;

@@ -23,7 +23,8 @@ namespace J1939Reader
 
         ComboBox _cboAdapter, _cboModule, _cboChannel;
         Button _btnConnect, _btnDisc, _btnRefresh, _btnClearPrev, _btnClearActive, _btnPing;
-        Label _status, _rpm, _lamps, _def, _mon;
+        Label _rpm, _lamps, _def;
+        TextBox _status, _mon;
         ListBox _lstActive, _lstPrev, _lstLive, _lstPgn, _lstSa, _lstTimeline, _lstGuidanz;
         TextBox _log, _codeHelp, _liveHelp, _idBox, _diffBox, _guidanzHelp, _histBox, _trendInfo;
         CheckBox _chkSafe, _chkAuto, _chkTsc800, _chkTsc1200, _chkQuietBus, _chkAutoRe;
@@ -201,7 +202,7 @@ namespace J1939Reader
             var p = new Panel { Dock = DockStyle.Fill };
             p.Controls.Add(body);
             body.Dock = DockStyle.Fill;
-            Label cap = UiLayout.WrapText(title);
+            TextBox cap = UiLayout.WrapText(title);
             cap.Dock = DockStyle.Top;
             cap.Padding = new Padding(0, 0, 0, 2);
             p.Controls.Add(cap);
