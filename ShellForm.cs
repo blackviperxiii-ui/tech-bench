@@ -27,7 +27,7 @@ namespace TechBench
         int _page;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
-        readonly Label _syncStatus;
+        readonly TextBox _syncStatus;
         readonly Label _jobSync;
         readonly System.Windows.Forms.Timer _watchDebounce = new System.Windows.Forms.Timer();
         readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
@@ -111,7 +111,8 @@ namespace TechBench
             _woPick = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 200,
+                Width = 280,
+                DropDownWidth = 480,
                 Margin = new Padding(0, 2, 12, 0)
             };
             _woPick.SelectedIndexChanged += delegate { PickWoFromStrip(); };
