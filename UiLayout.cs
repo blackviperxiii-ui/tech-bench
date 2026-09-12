@@ -113,7 +113,8 @@ namespace TechBench
                 BorderStyle = BorderStyle.None,
                 TabStop = false,
                 WordWrap = true,
-                ScrollBars = ScrollBars.None
+                ScrollBars = ScrollBars.None,
+                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
             };
             string raw = text ?? "";
             bool fitting = false;
@@ -133,6 +134,13 @@ namespace TechBench
                         if (avail > 24) w = avail;
                     }
                     if (w < 32) w = 32;
+                    if (t.Dock == DockStyle.None && p is TableLayoutPanel)
+                    {
+                        int wantW = p.ClientSize.Width - t.Left - t.Margin.Right;
+                        if (wantW > 32 && Math.Abs(t.Width - wantW) > 2)
+                            t.Width = wantW;
+                        w = Math.Max(32, t.ClientSize.Width);
+                    }
                     string wrapped = BreakLong(raw, t.Font, Math.Max(24, w - 6));
                     if (t.Text != wrapped) t.Text = wrapped;
                     Size need = TextRenderer.MeasureText(

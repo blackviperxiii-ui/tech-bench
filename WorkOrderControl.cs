@@ -114,6 +114,7 @@ namespace TechBench
             right.Controls.Add(_clock, 1, 7);
 
             _status = UiLayout.WrapText("");
+            _status.Dock = DockStyle.Fill;
             _status.ForeColor = Color.DimGray;
             _status.Margin = new Padding(0, 8, 0, 0);
             right.SetColumnSpan(_status, 4);

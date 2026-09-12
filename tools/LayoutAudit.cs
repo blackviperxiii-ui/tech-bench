@@ -234,7 +234,7 @@ static class LayoutAudit
         }
         TextBox tb = c as TextBox;
         if (tb != null && tb.Visible && tb.ReadOnly && tb.Multiline && tb.BorderStyle == BorderStyle.None
-            && tb.Dock != DockStyle.Fill && !string.IsNullOrEmpty(tb.Text) && tb.Height > 0)
+            && !string.IsNullOrEmpty(tb.Text) && tb.Height > 0)
         {
             string one = tb.Text.Replace("\r", " ").Replace("\n", " ");
             if (one.Length > 24)
