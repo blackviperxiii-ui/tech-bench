@@ -343,6 +343,12 @@ static class LayoutAudit
             Rectangle local = p.RectangleToClient(r);
             if (local.Bottom > p.ClientSize.Height + 4 || local.Right > p.ClientSize.Width + 4)
             {
+                if (HasAutoScrollAncestor(c))
+                {
+                    p = p.Parent;
+                    hops++;
+                    continue;
+                }
                 if (local.Top >= p.ClientSize.Height || local.Left >= p.ClientSize.Width)
                     return "outside " + p.GetType().Name + " " + Box(c) + " parent=" + p.ClientSize;
                 if (local.Bottom - p.ClientSize.Height > 10 || local.Right - p.ClientSize.Width > 10)

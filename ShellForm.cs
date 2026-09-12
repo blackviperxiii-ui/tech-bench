@@ -105,7 +105,7 @@ namespace TechBench
 
             // Two wrapping rows: identity (WO/customer/model/serial) then actions.
             // One row left Serial / Settings / Search this job off the window after sync text grew.
-            var job = UiLayout.WrapBar(new Padding(8, 6, 8, 2));
+            var job = UiLayout.WrapBar(new Padding(8, 4, 8, 2));
             job.BackColor = Color.FromArgb(22, 32, 48);
             job.Controls.Add(JobLabel("WO"));
             _woPick = new ComboBox
@@ -128,7 +128,7 @@ namespace TechBench
             _serial = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             job.Controls.Add(_serial);
 
-            var actions = UiLayout.WrapBar(new Padding(8, 2, 8, 4));
+            var actions = UiLayout.WrapBar(new Padding(8, 0, 8, 4));
             actions.BackColor = Color.FromArgb(22, 32, 48);
             _jobSync = new Label
             {
