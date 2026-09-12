@@ -20,6 +20,7 @@ static class LayoutAudit
         var cases = new[]
         {
             new Size(1366, 768),
+            new Size(1381, 877),
             new Size(1093, 614), // 1366x768 at 125% DPI, logical
             new Size(1024, 600),
             new Size(900, 560)

@@ -227,7 +227,8 @@ namespace J1939Reader
             _cboAdapter = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 220,
+                Width = 280,
+                DropDownWidth = 520,
                 Margin = new Padding(0, 3, 10, 0)
             };
             foreach (Rp1210Api a in _adapters) _cboAdapter.Items.Add(a);

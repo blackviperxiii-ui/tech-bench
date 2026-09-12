@@ -73,21 +73,13 @@ namespace TechBench
                 try
                 {
                     int w = flow.ClientSize.Width;
-                    if (flow.Parent != null && flow.Dock == DockStyle.Top)
+                    if (flow.Parent != null)
                     {
                         int pw = flow.Parent.ClientSize.Width;
-                        if (pw > 1) w = pw;
+                        if (flow.Dock == DockStyle.Top && pw > 1) w = pw;
                     }
                     if (w < 1) w = Math.Max(1, flow.Width);
-                    Size pref = flow.GetPreferredSize(new Size(w, 0));
-                    int bottom = flow.Padding.Top;
-                    foreach (Control ch in flow.Controls)
-                    {
-                        if (!ch.Visible) continue;
-                        int b = ch.Bottom + ch.Margin.Bottom;
-                        if (b > bottom) bottom = b;
-                    }
-                    int h = Math.Max(pref.Height, bottom + flow.Padding.Bottom);
+                    int h = FlowWrapHeight(flow, w);
                     int minH = 28;
                     if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
                     if (h < minH) h = minH;
@@ -97,7 +89,48 @@ namespace TechBench
             };
             flow.Layout += delegate { fit(null, EventArgs.Empty); };
             flow.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+            flow.ControlAdded += delegate { fit(null, EventArgs.Empty); };
+            flow.ParentChanged += delegate
+            {
+                Control p = flow.Parent;
+                if (p == null) return;
+                p.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+                p.Layout += delegate { fit(null, EventArgs.Empty); };
+            };
             return flow;
+        }
+
+        /// <summary>
+        /// Height that actually fits wrapped children. GetPreferredSize + child.Bottom
+        /// stays one row when maximize layouts before the bar's client width lands.
+        /// </summary>
+        static int FlowWrapHeight(FlowLayoutPanel flow, int width)
+        {
+            int inner = width - flow.Padding.Horizontal;
+            if (inner < 40) inner = 40;
+            int x = 0;
+            int y = flow.Padding.Top;
+            int rowH = 0;
+            foreach (Control ch in flow.Controls)
+            {
+                if (!ch.Visible) continue;
+                Size ps = ch.PreferredSize;
+                int cw = Math.Max(ch.Width, ps.Width) + ch.Margin.Horizontal;
+                int chh = Math.Max(ch.Height, ps.Height) + ch.Margin.Vertical;
+                if (cw < 8) cw = 80;
+                if (chh < 8) chh = 24;
+                if (x > 0 && x + cw > inner)
+                {
+                    y += rowH;
+                    x = 0;
+                    rowH = 0;
+                }
+                x += cw;
+                if (chh > rowH) rowH = chh;
+            }
+            int h = y + rowH + flow.Padding.Bottom;
+            if (h < 28) h = 28;
+            return h;
         }
 
         /// <summary>
