@@ -27,7 +27,7 @@ namespace TechBench
         int _page;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
-        readonly ToolStripStatusLabel _syncStatus;
+        readonly Label _syncStatus;
         readonly Label _jobSync;
         readonly System.Windows.Forms.Timer _watchDebounce = new System.Windows.Forms.Timer();
         readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
@@ -97,14 +97,10 @@ namespace TechBench
             menu.Items.Add(help);
             MainMenuStrip = menu;
 
-            var strip = new StatusStrip { Dock = DockStyle.Bottom, SizingGrip = false };
-            _syncStatus = new ToolStripStatusLabel
-            {
-                Spring = true,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = "Sync: starting…"
-            };
-            strip.Items.Add(_syncStatus);
+            _syncStatus = UiLayout.WrapText("Sync: starting…");
+            _syncStatus.Dock = DockStyle.Bottom;
+            _syncStatus.Padding = new Padding(8, 4, 8, 4);
+            _syncStatus.Cursor = Cursors.Hand;
             _syncStatus.Click += delegate { OpenSync(); };
 
             // WrapBar, not a fixed 82px panel: at 192 DPI the Absolute-36 rows overflowed
@@ -115,13 +111,13 @@ namespace TechBench
             _woPick = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 280,
+                Width = 200,
                 Margin = new Padding(0, 2, 12, 0)
             };
             _woPick.SelectedIndexChanged += delegate { PickWoFromStrip(); };
             job.Controls.Add(_woPick);
             job.Controls.Add(JobLabel("Customer"));
-            _customer = new TextBox { Width = 180, Margin = new Padding(0, 2, 12, 0) };
+            _customer = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             _customer.TextChanged += delegate { PushHeader(); };
             job.Controls.Add(_customer);
             _jobSync = new Label
@@ -135,10 +131,10 @@ namespace TechBench
             job.Controls.Add(_jobSync);
             _jobSync.Click += delegate { OpenSync(); };
             job.Controls.Add(JobLabel("Model"));
-            _model = new TextBox { Width = 170, Margin = new Padding(0, 2, 12, 0) };
+            _model = new TextBox { Width = 130, Margin = new Padding(0, 2, 12, 0) };
             job.Controls.Add(_model);
             job.Controls.Add(JobLabel("Serial"));
-            _serial = new TextBox { Width = 200, Margin = new Padding(0, 2, 12, 0) };
+            _serial = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             job.Controls.Add(_serial);
             var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
             job.Controls.Add(useJob);
@@ -160,7 +156,7 @@ namespace TechBench
             var pInline = ShellPage("shellPage2", _inline);
             var pAdapters = ShellPage("shellPage3", BuildAdaptersPanel());
             _pages = new Control[] { _pSearch, _pOrders, pInline, pAdapters };
-            _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill };
+            _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill, AutoScroll = true };
 
             _nav = UiLayout.SwitchBar(
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
@@ -172,7 +168,7 @@ namespace TechBench
             Controls.Add(job);
             Controls.Add(_nav);
             Controls.Add(menu);
-            Controls.Add(strip);
+            Controls.Add(_syncStatus);
 
             if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
             if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
@@ -352,16 +348,15 @@ namespace TechBench
         {
             string kb = (_kb == null || string.IsNullOrEmpty(_kb.Root)) ? "(none)" : _kb.Root;
             string bits = Rp1210.HostIs32Bit ? "32-bit (correct for RP1210)" : "64-bit — rebuild with build.bat";
-            MessageBox.Show(this,
-                "Tech Bench " + AppVersion.Number + "\n\n"
-                + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\n\n"
-                + "This copy: " + Application.ExecutablePath + "\n"
-                + "Process: " + bits + "\n"
-                + "Knowledge base: " + kb + "\n"
-                + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\n") : "")
-                + "\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\n"
-                + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.",
-                "About Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            UiLayout.ShowReadable(this, "About Tech Bench",
+                "Tech Bench " + AppVersion.Number + "\r\n\r\n"
+                + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\r\n\r\n"
+                + "This copy: " + Application.ExecutablePath + "\r\n"
+                + "Process: " + bits + "\r\n"
+                + "Knowledge base: " + kb + "\r\n"
+                + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\r\n") : "")
+                + "\r\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\r\n"
+                + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.");
         }
 
         void MarkReadyFromPending()

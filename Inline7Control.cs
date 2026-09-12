@@ -28,8 +28,11 @@ namespace J1939Reader
         TextBox _log, _codeHelp, _liveHelp, _idBox, _diffBox, _guidanzHelp, _histBox, _trendInfo;
         CheckBox _chkSafe, _chkAuto, _chkTsc800, _chkTsc1200, _chkQuietBus, _chkAutoRe;
         ToolTip _tip;
-        TabControl _tabs;
-        TabPage _tabTrend, _tabTimeline, _tabHistory;
+        FlowLayoutPanel _innerNav;
+        Panel _innerHost;
+        Control[] _innerPages;
+        Font _innerNorm, _innerBold;
+        int _innerPage;
         TrendChart _chart;
         Button _btnKbLookup;
 
@@ -80,6 +83,7 @@ namespace J1939Reader
         public Inline7Control()
         {
             Dock = DockStyle.Fill;
+            AutoScroll = true;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
             _adapters = BusWorker.Adapters();
@@ -94,21 +98,31 @@ namespace J1939Reader
                 IsBalloon = false
             };
 
-            _tabs = new TabControl { Dock = DockStyle.Fill, Multiline = true };
-            _tabs.TabPages.Add(BuildCodesTab());
-            _tabs.TabPages.Add(BuildAdvancedTab());
-            _tabs.TabPages.Add(BuildBusTab());
-            _tabTrend = BuildTrendTab();
-            _tabs.TabPages.Add(_tabTrend);
-            _tabTimeline = BuildTimelineTab();
-            _tabs.TabPages.Add(_tabTimeline);
-            _tabHistory = BuildHistoryTab();
-            _tabs.TabPages.Add(_tabHistory);
-            _tabs.TabPages.Add(BuildGuidanzTab());
+            _innerNorm = new Font("Segoe UI", 10f, FontStyle.Regular);
+            _innerBold = new Font("Segoe UI", 10f, FontStyle.Bold);
+            _innerPages = new Control[]
+            {
+                BuildCodesTab(),
+                BuildAdvancedTab(),
+                BuildBusTab(),
+                BuildTrendTab(),
+                BuildTimelineTab(),
+                BuildHistoryTab(),
+                BuildGuidanzTab()
+            };
+            _innerHost = new Panel { Name = "inlineHost", Dock = DockStyle.Fill, AutoScroll = true };
+            _innerNav = UiLayout.SwitchBar(
+                new[] { "Codes", "Advanced", "Bus", "Trend", "Timeline", "History", "Guidanz" },
+                ShowInner,
+                "inlineSwitch",
+                new Size(88, 28),
+                9.5f);
+            ShowInner(0);
 
             // Docked children are laid out last-added-first, so the fill control goes in first.
-            Controls.Add(_tabs);
+            Controls.Add(_innerHost);
             Controls.Add(BuildHud());
+            Controls.Add(_innerNav);
             Controls.Add(BuildToolbar());
 
             _ui.Interval = 150;
@@ -129,6 +143,28 @@ namespace J1939Reader
         }
 
         // ---------- layout helpers ----------
+
+        static Panel Page(string name)
+        {
+            return new Panel { Name = name, Dock = DockStyle.Fill, Padding = new Padding(8), AutoScroll = true };
+        }
+
+        void ShowInner(int i)
+        {
+            if (_innerPages == null || i < 0 || i >= _innerPages.Length) return;
+            _innerPage = i;
+            _innerHost.SuspendLayout();
+            _innerHost.Controls.Clear();
+            Control page = _innerPages[i];
+            page.Visible = true;
+            page.Dock = DockStyle.Fill;
+            _innerHost.Controls.Add(page);
+            _innerHost.ResumeLayout(true);
+            UiLayout.MarkSwitch(_innerNav, i, _innerNorm, _innerBold);
+            if (i == 3 && _chart != null) _chart.SetData(_bus.TrendCopy());
+            if (i == 4) RefreshTimeline();
+            if (i == 5) RefreshHistory(false);
+        }
 
         static Button Btn(string text, EventHandler onClick)
         {
@@ -165,7 +201,10 @@ namespace J1939Reader
             var p = new Panel { Dock = DockStyle.Fill };
             p.Controls.Add(body);
             body.Dock = DockStyle.Fill;
-            p.Controls.Add(new Label { Text = title, Dock = DockStyle.Top, AutoSize = false, Height = 20 });
+            Label cap = UiLayout.WrapText(title);
+            cap.Dock = DockStyle.Top;
+            cap.Padding = new Padding(0, 0, 0, 2);
+            p.Controls.Add(cap);
             return p;
         }
 
@@ -256,13 +295,9 @@ namespace J1939Reader
             line.Controls.Add(_lamps);
             line.Controls.Add(_def);
 
-            _status = new Label
-            {
-                Dock = DockStyle.Top,
-                AutoSize = false,
-                Height = 20,
-                Text = "Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect."
-            };
+            _status = UiLayout.WrapText("Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect.");
+            _status.Dock = DockStyle.Top;
+            _status.Padding = new Padding(0, 2, 0, 2);
 
             panel.Controls.Add(_status);
             panel.Controls.Add(line);
@@ -271,9 +306,9 @@ namespace J1939Reader
 
         // ---------- tabs ----------
 
-        TabPage BuildCodesTab()
-        {
-            var p = new TabPage("Codes") { Padding = new Padding(8) };
+            Control BuildCodesTab()
+            {
+            var p = Page("inlinePage0");
 
             _lstActive = List();
             _lstPrev = List();
@@ -295,7 +330,6 @@ namespace J1939Reader
             _btnKbLookup = Btn("Look up in knowledge base", delegate { LookupSelectedInKb(); });
             _btnKbLookup.Enabled = false;
             helpBar.Controls.Add(_btnKbLookup);
-            helpHost.Controls.Add(helpBar);
 
             _log = new TextBox
             {
@@ -309,23 +343,33 @@ namespace J1939Reader
             };
 
             SplitContainer lower = Split(Orientation.Vertical, 560, 200, 160, helpHost, Titled("Log", _log));
-            p.Controls.Add(Split(Orientation.Horizontal, 200, 80, 140, lists, lower));
+            var grid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                AutoScroll = true
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            helpBar.Dock = DockStyle.Fill;
+            grid.Controls.Add(helpBar, 0, 0);
+            grid.Controls.Add(Split(Orientation.Horizontal, 200, 80, 140, lists, lower), 0, 1);
+            p.Controls.Add(grid);
             return p;
         }
 
-        TabPage BuildAdvancedTab()
-        {
-            var p = new TabPage("Advanced diagnostics") { Padding = new Padding(8) };
-
-            var warn = new Label
+            Control BuildAdvancedTab()
             {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                Padding = new Padding(0, 0, 0, 4),
-                Text = "These are standard J1939 diagnostic controls the ECM already understands. " +
-                       "They isolate harness vs computer. They do not add new Cummins calibration bits, " +
-                       "and they do not disable DEF, SCR, Red Stop, or engine protection."
-            };
+            var p = Page("inlinePage1");
+
+            var warn = UiLayout.WrapText(
+                "These are standard J1939 diagnostic controls the ECM already understands. " +
+                "They isolate harness vs computer. They do not add new Cummins calibration bits, " +
+                "and they do not disable DEF, SCR, Red Stop, or engine protection.");
+            warn.Dock = DockStyle.Top;
+            warn.Padding = new Padding(0, 0, 0, 4);
 
             _lstLive = List();
             _liveHelp = HelpBox();
@@ -340,23 +384,18 @@ namespace J1939Reader
                 Titled("Live ECM states (status — click for explanation)", _lstLive),
                 Titled("Explanation", _liveHelp));
 
-            _mon = new Label
-            {
-                Dock = DockStyle.Top,
-                AutoSize = false,
-                Height = 22,
-                Text = "Coolant: —    Oil: —    Battery: —    Fuel rate: —"
-            };
+            _mon = UiLayout.WrapText("Coolant: —    Oil: —    Battery: —    Fuel rate: —");
+            _mon.Dock = DockStyle.Top;
+            _mon.Padding = new Padding(0, 2, 0, 2);
 
             var g = new GroupBox
             {
                 Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                AutoSize = false,
                 Text = "Diagnostic toggles — hover a switch for the full description"
             };
             var toggles = UiLayout.WrapBar(new Padding(8, 4, 8, 6));
-            toggles.Dock = DockStyle.Top;
+            toggles.Dock = DockStyle.Fill;
             _chkSafe = MkToggle(toggles,
                 "Safety: engine already running, compressor unloaded, area clear",
                 "Must be ON before a speed-request toggle will send TSC1. The engine will not start from these switches. TSC1 cannot override Red Stop or DEF inducement.");
@@ -396,14 +435,17 @@ namespace J1939Reader
                 "Request VIN, software ID, component ID, hours, and DM1. If RPM/codes are already live but VIN never appears, this industrial ECM may not publish VIN — the computer is still alive.");
             toggles.Controls.Add(_btnPing);
             g.Controls.Add(toggles);
-            g.Layout += delegate
+            EventHandler fitToggles = delegate
             {
                 int inner = Math.Max(1, g.ClientSize.Width);
                 Size pref = toggles.GetPreferredSize(new Size(inner, 0));
-                int h = pref.Height + 8;
-                if (h < 36) h = 36;
-                if (toggles.Height != h) toggles.Height = h;
+                int h = pref.Height + 22;
+                if (h < 48) h = 48;
+                if (g.Height != h) g.Height = h;
             };
+            g.Layout += delegate { fitToggles(null, EventArgs.Empty); };
+            g.SizeChanged += delegate { fitToggles(null, EventArgs.Empty); };
+            p.SizeChanged += delegate { fitToggles(null, EventArgs.Empty); };
 
             _idBox = HelpBox();
             _idBox.Text = CannotDoText();
@@ -411,12 +453,28 @@ namespace J1939Reader
             var host = new Panel { Dock = DockStyle.Fill };
             host.Controls.Add(Titled("ECM identity / remaining codes after reset", _idBox));
 
-            // Toggles + Ping stay in the tab chrome (not the bottom of a squeezed split) so they
-            // remain clickable on a 1366×768 shop laptop.
-            p.Controls.Add(Split(Orientation.Horizontal, 160, 80, 80, top, host));
-            p.Controls.Add(g);
-            p.Controls.Add(_mon);
-            p.Controls.Add(warn);
+            // Table rows, not a pile of Dock.Top chrome: on a 900×560 shop laptop the
+            // GroupBox used to paint Ping below the page (unreadable / unclickable).
+            var grid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                AutoScroll = true
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            warn.Dock = DockStyle.Fill;
+            _mon.Dock = DockStyle.Fill;
+            g.Dock = DockStyle.Fill;
+            grid.Controls.Add(warn, 0, 0);
+            grid.Controls.Add(_mon, 0, 1);
+            grid.Controls.Add(g, 0, 2);
+            grid.Controls.Add(Split(Orientation.Horizontal, 160, 80, 80, top, host), 0, 3);
+            p.Controls.Add(grid);
             return p;
         }
 
@@ -432,9 +490,9 @@ namespace J1939Reader
             return c;
         }
 
-        TabPage BuildBusTab()
-        {
-            var p = new TabPage("Bus / snapshots") { Padding = new Padding(8) };
+            Control BuildBusTab()
+            {
+            var p = Page("inlinePage2");
 
             _lstPgn = List();
             _lstSa = List();
@@ -470,9 +528,9 @@ namespace J1939Reader
             return p;
         }
 
-        TabPage BuildTrendTab()
-        {
-            var p = new TabPage("Trend") { Padding = new Padding(8) };
+            Control BuildTrendTab()
+            {
+            var p = Page("inlinePage3");
 
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Channel"));
@@ -506,9 +564,9 @@ namespace J1939Reader
             return p;
         }
 
-        TabPage BuildTimelineTab()
-        {
-            var p = new TabPage("Timeline") { Padding = new Padding(8) };
+            Control BuildTimelineTab()
+            {
+            var p = Page("inlinePage4");
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Every code that came and went on this hookup, newest first."));
             bar.Controls.Add(Btn("Export CSV", delegate { ExportTimeline(); }));
@@ -522,9 +580,9 @@ namespace J1939Reader
             return p;
         }
 
-        TabPage BuildHistoryTab()
-        {
-            var p = new TabPage("Unit history") { Padding = new Padding(8) };
+            Control BuildHistoryTab()
+            {
+            var p = Page("inlinePage5");
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Faults this model/serial has shown in saved sessions."));
             bar.Controls.Add(Btn("Rescan", delegate { _history = null; _historyJob = ""; RefreshHistory(true); }));
@@ -536,17 +594,14 @@ namespace J1939Reader
             return p;
         }
 
-        TabPage BuildGuidanzTab()
-        {
-            var p = new TabPage("Guidanz reference") { Padding = new Padding(8) };
-            var note = new Label
+            Control BuildGuidanzTab()
             {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                Padding = new Padding(0, 0, 0, 6),
-                Text = "Cummins Features & Parameters this app does NOT write — reference only, so you know "
-                     + "what lives in Guidanz and what does not belong in a J1939 tool at all."
-            };
+            var p = Page("inlinePage6");
+            var note = UiLayout.WrapText(
+                "Cummins Features & Parameters this app does NOT write — reference only, so you know "
+                + "what lives in Guidanz and what does not belong in a J1939 tool at all.");
+            note.Dock = DockStyle.Top;
+            note.Padding = new Padding(0, 0, 0, 6);
             _guidanzRows = FeatureBook.GuidanzFeatures();
             _lstGuidanz = List();
             foreach (SwitchRow r in _guidanzRows) _lstGuidanz.Items.Add(r.ToString());
@@ -834,9 +889,9 @@ namespace J1939Reader
                 Repopulate(_lstSa, SaItems(s));
             }
 
-            if (_tabs.SelectedTab == _tabTrend) _chart.SetData(_bus.TrendCopy());
-            if (_tabs.SelectedTab == _tabTimeline) RefreshTimeline();
-            if (_tabs.SelectedTab == _tabHistory) RefreshHistory(false);
+            if (_innerPage == 3) _chart.SetData(_bus.TrendCopy());
+            if (_innerPage == 4) RefreshTimeline();
+            if (_innerPage == 5) RefreshHistory(false);
 
             if (s.LastResetReport != _shownResetReport && s.LastResetReport.Length > 0)
             {
@@ -1067,7 +1122,7 @@ namespace J1939Reader
         {
             try
             {
-                string path = SessionIo.Screenshot(_tabs != null ? (Control)_tabs : this);
+                string path = SessionIo.Screenshot(_innerHost != null ? (Control)_innerHost : this);
                 Log("Screenshot " + path);
                 if (AfterScreenshot != null) AfterScreenshot(path);
             }

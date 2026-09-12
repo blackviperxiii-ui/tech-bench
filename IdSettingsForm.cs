@@ -34,18 +34,15 @@ namespace TechBench
                 Padding = new Padding(12),
                 AutoScroll = true
             };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             table.RowCount = 1;
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            Label hint = new Label
-            {
-                AutoSize = true,
-                ForeColor = Color.DimGray,
-                Text = "Copy credentials from IntelliDealer → Configuration → API Gateway. "
-                    + "Until they are here, work orders are file-backed and sign-off is not posted to the DMS."
-            };
+            Label hint = UiLayout.WrapText(
+                "Copy credentials from IntelliDealer → Configuration → API Gateway. "
+                + "Until they are here, work orders are file-backed and sign-off is not posted to the DMS.");
+            hint.ForeColor = Color.DimGray;
             table.SetColumnSpan(hint, 2);
             table.Controls.Add(hint, 0, 0);
 
@@ -110,6 +107,7 @@ namespace TechBench
 
             Controls.Add(table);
             Controls.Add(buttons);
+            Shown += delegate { UiLayout.FitToWorkingArea(this); };
         }
 
         TextBox Row(TableLayoutPanel table, string label, string tip)

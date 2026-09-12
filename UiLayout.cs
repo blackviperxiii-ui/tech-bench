@@ -6,7 +6,7 @@ namespace TechBench
 {
     /// <summary>
     /// Shared WinForms layout helpers so shop-laptop sizes (and DPI-scaled working areas)
-    /// keep primary buttons on screen instead of clipped under a docked strip.
+    /// keep primary buttons and wrapped text on screen instead of a fixed TabControl chrome.
     /// </summary>
     internal static class UiLayout
     {
@@ -64,16 +64,30 @@ namespace TechBench
                 WrapContents = true,
                 Padding = padding
             };
+            bool fitting = false;
             EventHandler fit = delegate
             {
-                int w = flow.ClientSize.Width;
-                if (w < 1) w = Math.Max(1, flow.Width);
-                Size pref = flow.GetPreferredSize(new Size(w, 0));
-                int h = pref.Height;
-                int minH = 28;
-                if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
-                if (h < minH) h = minH;
-                if (flow.Height != h) flow.Height = h;
+                if (fitting) return;
+                fitting = true;
+                try
+                {
+                    int w = flow.ClientSize.Width;
+                    if (w < 1) w = Math.Max(1, flow.Width);
+                    Size pref = flow.GetPreferredSize(new Size(w, 0));
+                    int bottom = flow.Padding.Top;
+                    foreach (Control ch in flow.Controls)
+                    {
+                        if (!ch.Visible) continue;
+                        int b = ch.Bottom + ch.Margin.Bottom;
+                        if (b > bottom) bottom = b;
+                    }
+                    int h = Math.Max(pref.Height, bottom + flow.Padding.Bottom);
+                    int minH = 28;
+                    if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
+                    if (h < minH) h = minH;
+                    if (Math.Abs(flow.Height - h) > 1) flow.Height = h;
+                }
+                finally { fitting = false; }
             };
             flow.Layout += delegate { fit(null, EventArgs.Empty); };
             flow.SizeChanged += delegate { fit(null, EventArgs.Empty); };
@@ -81,28 +95,66 @@ namespace TechBench
         }
 
         /// <summary>
-        /// Large wrapping buttons for Search / Work orders / INLINE 7 / Adapters.
-        /// Native TabControl headers vanish under a fixed job strip at 192 DPI and do not look like switches.
+        /// Wrapping label that grows with parent width instead of painting "C:\Users\jerem\OneDriv…".
+        /// </summary>
+        public static Label WrapText(string text)
+        {
+            var l = new Label
+            {
+                Text = text ?? "",
+                AutoSize = true,
+                UseMnemonic = false
+            };
+            EventHandler fit = delegate
+            {
+                Control p = l.Parent;
+                if (p == null) return;
+                int w = p.ClientSize.Width - l.Margin.Horizontal;
+                if (l.Dock == DockStyle.None) w -= l.Left;
+                if (w < 40) w = 40;
+                Size want = new Size(w, 0);
+                if (l.MaximumSize.Width != w)
+                    l.MaximumSize = want;
+            };
+            l.ParentChanged += delegate
+            {
+                Control p = l.Parent;
+                if (p == null) return;
+                p.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+                p.Layout += delegate { fit(null, EventArgs.Empty); };
+                fit(null, EventArgs.Empty);
+            };
+            return l;
+        }
+
+        /// <summary>
+        /// Large wrapping buttons for Search / Work orders / INLINE 7 / Adapters (and inner INLINE pages).
+        /// Native TabControl headers vanish under a job strip at 192 DPI and do not look like switches.
         /// </summary>
         public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick)
         {
-            var bar = WrapBar(new Padding(8, 8, 8, 8));
+            return SwitchBar(names, onPick, "shellSwitch", new Size(148, 40), 11.5f);
+        }
+
+        public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick, string namePrefix, Size minButton, float fontPt)
+        {
+            var bar = WrapBar(new Padding(8, 6, 8, 6));
             bar.BackColor = Color.FromArgb(36, 48, 68);
-            bar.MinimumSize = new Size(0, 72);
             if (names == null) return bar;
+            if (string.IsNullOrEmpty(namePrefix)) namePrefix = "shellSwitch";
             for (int i = 0; i < names.Length; i++)
             {
                 int idx = i;
                 var b = new Button
                 {
-                    Name = "shellSwitch" + i,
+                    Name = namePrefix + i,
                     Text = names[i],
                     AutoSize = true,
-                    MinimumSize = new Size(170, 48),
-                    Margin = new Padding(0, 0, 10, 4),
-                    Padding = new Padding(12, 8, 12, 8),
+                    MinimumSize = minButton.Width > 0 ? minButton : new Size(100, 32),
+                    Margin = new Padding(0, 0, 8, 4),
+                    Padding = new Padding(10, 6, 10, 6),
                     Tag = idx,
-                    Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                    Font = new Font("Segoe UI", fontPt, FontStyle.Bold),
                     UseVisualStyleBackColor = false
                 };
                 b.Click += delegate { if (onPick != null) onPick(idx); };
@@ -126,6 +178,49 @@ namespace TechBench
             }
         }
 
+        /// <summary>
+        /// Dialog that wraps long paths instead of a MessageBox that paints "…OneDriv".
+        /// </summary>
+        public static void ShowReadable(IWin32Window owner, string title, string body)
+        {
+            using (var f = new Form())
+            {
+                f.Text = title ?? "";
+                f.StartPosition = FormStartPosition.CenterParent;
+                f.MinimizeBox = false;
+                f.MaximizeBox = true;
+                f.ShowInTaskbar = false;
+                f.AutoScaleMode = AutoScaleMode.Font;
+                f.Font = new Font("Segoe UI", 9.5f);
+                f.MinimumSize = new Size(420, 240);
+                f.Size = SizeForScreen(640, 420, 480, 300);
+                var ok = new Button
+                {
+                    Text = "OK",
+                    DialogResult = DialogResult.OK,
+                    AutoSize = true,
+                    Margin = new Padding(0, 4, 0, 0)
+                };
+                var bar = WrapBar(new Padding(12, 4, 12, 12));
+                bar.Dock = DockStyle.Bottom;
+                bar.FlowDirection = FlowDirection.RightToLeft;
+                bar.Controls.Add(ok);
+                var tb = new TextBox
+                {
+                    Dock = DockStyle.Fill,
+                    Multiline = true,
+                    ReadOnly = true,
+                    ScrollBars = ScrollBars.Vertical,
+                    Text = body ?? "",
+                    BorderStyle = BorderStyle.None
+                };
+                f.Controls.Add(tb);
+                f.Controls.Add(bar);
+                f.AcceptButton = ok;
+                f.Shown += delegate { FitToWorkingArea(f); };
+                f.ShowDialog(owner);
+            }
+        }
 
         public static SplitContainer Split(Orientation orientation, int distance, int min1, int min2, Control a, Control b)
         {

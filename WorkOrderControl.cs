@@ -54,12 +54,17 @@ namespace TechBench
                 Padding = new Padding(8),
                 AutoScroll = true
             };
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            right.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            right.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            for (int i = 0; i < 9; i++)
+            for (int i = 0; i < 4; i++)
                 right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             _number = Field(right, 0, 0, "WO number");
             _segment = Field(right, 0, 2, "Segment");

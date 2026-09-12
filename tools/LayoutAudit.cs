@@ -45,32 +45,50 @@ static class LayoutAudit
                 Console.WriteLine();
                 Console.WriteLine("== " + f.Width + "x" + f.Height + " client " + f.ClientSize.Width + "x" + f.ClientSize.Height + " ==");
 
-                clipped += SwitchReport(f);
+                    clipped += SwitchReport(f);
+                    if (FindTab(f) != null)
+                    {
+                        Console.WriteLine("  CLIP  shell  still has a TabControl (use wrapping switches)");
+                        clipped++;
+                    }
 
-                string[] names = { "Search", "Work orders", "INLINE 7", "Adapters" };
-                for (int i = 0; i < names.Length; i++)
-                {
+                    string[] names = { "Search", "Work orders", "INLINE 7", "Adapters" };
+                    string[] shotKey = { "layout-search", "layout-workorders", "layout-inline7", "layout-adapters" };
+                    for (int i = 0; i < names.Length; i++)
+                    {
                     Button sw = FindNamed(f, "shellSwitch" + i) as Button;
                     if (sw != null) sw.PerformClick();
                     Application.DoEvents();
                     clipped += Report(f, names[i]);
                     clipped += SplitReport(f, names[i]);
                     if (shotDir != null)
-                        Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(names[i]));
-
-                    Control page = FindNamed(f, "shellPage" + i);
-                    TabControl nested = page == null ? null : FindTab(page);
-                    if (nested == null) continue;
-                    foreach (TabPage inner in nested.TabPages)
                     {
-                        nested.SelectedTab = inner;
-                        Application.DoEvents();
-                        clipped += Report(f, names[i] + " / " + inner.Text);
-                        clipped += SplitReport(f, names[i] + " / " + inner.Text);
-                        if (shotDir != null)
-                            Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(names[i]) + "-" + Safe(inner.Text));
+                        Shot(f, shotDir, outer.Width + "x" + outer.Height + "-" + Safe(names[i]));
+                        if (outer.Width == 1366 && i < shotKey.Length)
+                            Shot(f, shotDir, shotKey[i]);
                     }
-                }
+
+                    if (i == 2)
+                    {
+                        string[] inner = { "Codes", "Advanced", "Bus", "Trend", "Timeline", "History", "Guidanz" };
+                        for (int k = 0; k < inner.Length; k++)
+                        {
+                            Button inn = FindNamed(f, "inlineSwitch" + k) as Button;
+                            if (inn == null)
+                            {
+                                Console.WriteLine("  CLIP  INLINE 7  missing inner switch \"" + inner[k] + "\"");
+                                clipped++;
+                                continue;
+                            }
+                            inn.PerformClick();
+                            Application.DoEvents();
+                            clipped += Report(f, "INLINE 7 / " + inner[k]);
+                            clipped += SplitReport(f, "INLINE 7 / " + inner[k]);
+                            if (shotDir != null)
+                                Shot(f, shotDir, outer.Width + "x" + outer.Height + "-INLINE-7-" + Safe(inner[k]));
+                        }
+                    }
+                    }
 
                 using (var dlg = new CodeEditForm(new UserCode()))
                 {
@@ -204,6 +222,16 @@ static class LayoutAudit
             string why = ClipReason(root, c);
             if (why != null) hits.Add(where + "  " + Describe(c) + "  " + why);
         }
+        Label lab = c as Label;
+        if (lab != null && lab.Visible && !lab.AutoSize && lab.Height > 0 && lab.Height <= 26
+            && !string.IsNullOrEmpty(lab.Text) && lab.Text.Length > 18)
+        {
+            Size need = TextRenderer.MeasureText(lab.Text, lab.Font,
+                new Size(Math.Max(40, lab.ClientSize.Width), 0),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+            if (need.Height > lab.Height + 3)
+                hits.Add(where + "  unread Label h=" + lab.Height + " need=" + need.Height + "  " + Describe(lab));
+        }
         if (c is FlowLayoutPanel)
         {
             var flow = (FlowLayoutPanel)c;
@@ -252,9 +280,24 @@ static class LayoutAudit
                 if (tabs != null && tabs.SelectedTab != page) return false;
             }
             if (c.Name != null && c.Name.StartsWith("shellPage") && !c.Visible) return false;
+            if (c.Name != null && c.Name.StartsWith("inlinePage") && !c.Visible) return false;
             c = c.Parent;
         }
         return true;
+    }
+
+    static bool HasAutoScrollAncestor(Control c)
+    {
+        Control p = c.Parent;
+        int hops = 0;
+        while (p != null && hops < 12)
+        {
+            ScrollableControl s = p as ScrollableControl;
+            if (s != null && s.AutoScroll) return true;
+            p = p.Parent;
+            hops++;
+        }
+        return false;
     }
 
     static string ClipReason(Control root, Control c)
@@ -265,12 +308,21 @@ static class LayoutAudit
         Rectangle host = root.RectangleToScreen(root.ClientRectangle);
         Rectangle vis = Rectangle.Intersect(host, r);
         if (vis.Width < 16 || vis.Height < 12)
+        {
+            if (HasAutoScrollAncestor(c)) return null;
             return "off form vis=" + vis.Size + " " + Box(c) + " form=" + root.ClientSize;
+        }
 
         Control p = c.Parent;
         int hops = 0;
         while (p != null && hops < 8)
         {
+            if (p is ScrollableControl && ((ScrollableControl)p).AutoScroll)
+            {
+                p = p.Parent;
+                hops++;
+                continue;
+            }
             Rectangle local = p.RectangleToClient(r);
             if (local.Bottom > p.ClientSize.Height + 4 || local.Right > p.ClientSize.Width + 4)
             {
