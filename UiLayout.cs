@@ -209,12 +209,22 @@ namespace TechBench
             t.TextChanged += delegate
             {
                 if (fitting) return;
-                raw = t.Text ?? "";
+                string incoming = t.Text ?? "";
+                // BreakLong writes \r\n into Text; that is display, not a new source string.
+                if (FlatText(incoming) == FlatText(raw) && incoming != raw)
+                    return;
+                raw = incoming;
                 fit(null, EventArgs.Empty);
             };
             t.SizeChanged += delegate { fit(null, EventArgs.Empty); };
             t.Text = raw;
             return t;
+        }
+
+        static string FlatText(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\r\n", "").Replace("\n", "").Replace("\r", "");
         }
 
         static string BreakLong(string text, Font font, int width)

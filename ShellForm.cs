@@ -160,7 +160,7 @@ namespace TechBench
             var pInline = ShellPage("shellPage2", _inline);
             var pAdapters = ShellPage("shellPage3", BuildAdaptersPanel());
             _pages = new Control[] { _pSearch, _pOrders, pInline, pAdapters };
-            _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill, AutoScroll = true };
+            _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill };
 
             _nav = UiLayout.SwitchBar(
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
