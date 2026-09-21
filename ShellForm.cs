@@ -27,7 +27,7 @@ namespace TechBench
         int _page;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
-        readonly ToolStripStatusLabel _syncStatus;
+        readonly TextBox _syncStatus;
         readonly Label _jobSync;
         readonly System.Windows.Forms.Timer _watchDebounce = new System.Windows.Forms.Timer();
         readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
@@ -97,55 +97,55 @@ namespace TechBench
             menu.Items.Add(help);
             MainMenuStrip = menu;
 
-            var strip = new StatusStrip { Dock = DockStyle.Bottom, SizingGrip = false };
-            _syncStatus = new ToolStripStatusLabel
-            {
-                Spring = true,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = "Sync: starting…"
-            };
-            strip.Items.Add(_syncStatus);
+            _syncStatus = UiLayout.WrapText("Sync: starting…");
+            _syncStatus.Dock = DockStyle.Bottom;
+            _syncStatus.Padding = new Padding(8, 4, 8, 4);
+            _syncStatus.Cursor = Cursors.Hand;
             _syncStatus.Click += delegate { OpenSync(); };
 
-            // WrapBar, not a fixed 82px panel: at 192 DPI the Absolute-36 rows overflowed
-            // and painted over the tab headers, leaving only the Search text box.
-            var job = UiLayout.WrapBar(new Padding(8, 6, 8, 4));
+            // Two wrapping rows: identity (WO/customer/model/serial) then actions.
+            // One row left Serial / Settings / Search this job off the window after sync text grew.
+            var job = UiLayout.WrapBar(new Padding(8, 4, 8, 2));
             job.BackColor = Color.FromArgb(22, 32, 48);
             job.Controls.Add(JobLabel("WO"));
             _woPick = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Width = 280,
+                DropDownWidth = 480,
                 Margin = new Padding(0, 2, 12, 0)
             };
             _woPick.SelectedIndexChanged += delegate { PickWoFromStrip(); };
             job.Controls.Add(_woPick);
             job.Controls.Add(JobLabel("Customer"));
-            _customer = new TextBox { Width = 180, Margin = new Padding(0, 2, 12, 0) };
+            _customer = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             _customer.TextChanged += delegate { PushHeader(); };
             job.Controls.Add(_customer);
+            job.Controls.Add(JobLabel("Model"));
+            _model = new TextBox { Width = 130, Margin = new Padding(0, 2, 12, 0) };
+            job.Controls.Add(_model);
+            job.Controls.Add(JobLabel("Serial"));
+            _serial = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
+            job.Controls.Add(_serial);
+
+            var actions = UiLayout.WrapBar(new Padding(8, 0, 8, 4));
+            actions.BackColor = Color.FromArgb(22, 32, 48);
             _jobSync = new Label
             {
                 Text = "Sync: …",
                 ForeColor = Color.Khaki,
                 AutoSize = true,
                 Cursor = Cursors.Hand,
-                Margin = new Padding(8, 8, 12, 0)
+                Margin = new Padding(0, 8, 12, 0)
             };
-            job.Controls.Add(_jobSync);
+            actions.Controls.Add(_jobSync);
             _jobSync.Click += delegate { OpenSync(); };
-            job.Controls.Add(JobLabel("Model"));
-            _model = new TextBox { Width = 170, Margin = new Padding(0, 2, 12, 0) };
-            job.Controls.Add(_model);
-            job.Controls.Add(JobLabel("Serial"));
-            _serial = new TextBox { Width = 200, Margin = new Padding(0, 2, 12, 0) };
-            job.Controls.Add(_serial);
-            var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
-            job.Controls.Add(useJob);
-            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            job.Controls.Add(addCode);
-            var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-            job.Controls.Add(addNoteBtn);
+            var useJob = new Button { Text = "Search this job", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 12, 0) };
+            actions.Controls.Add(useJob);
+            var addCode = new Button { Text = "Add code to KB", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 8, 0) };
+            actions.Controls.Add(addCode);
+            var addNoteBtn = new Button { Text = "Add note", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 8, 0) };
+            actions.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
 
             _search = new SearchControl(kb);
@@ -167,12 +167,13 @@ namespace TechBench
                 delegate(int i) { ShowPage(i); });
             ShowPage(0);
 
-            // Last-added docks nearest the edge: menu, then switches (cannot sit under the job strip), then job.
+            // Last-added docks nearest the edge: menu, switches, identity, then actions.
             Controls.Add(_host);
+            Controls.Add(actions);
             Controls.Add(job);
             Controls.Add(_nav);
             Controls.Add(menu);
-            Controls.Add(strip);
+            Controls.Add(_syncStatus);
 
             if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
             if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
@@ -352,16 +353,15 @@ namespace TechBench
         {
             string kb = (_kb == null || string.IsNullOrEmpty(_kb.Root)) ? "(none)" : _kb.Root;
             string bits = Rp1210.HostIs32Bit ? "32-bit (correct for RP1210)" : "64-bit — rebuild with build.bat";
-            MessageBox.Show(this,
-                "Tech Bench " + AppVersion.Number + "\n\n"
-                + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\n\n"
-                + "This copy: " + Application.ExecutablePath + "\n"
-                + "Process: " + bits + "\n"
-                + "Knowledge base: " + kb + "\n"
-                + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\n") : "")
-                + "\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\n"
-                + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.",
-                "About Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            UiLayout.ShowReadable(this, "About Tech Bench",
+                "Tech Bench " + AppVersion.Number + "\r\n\r\n"
+                + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\r\n\r\n"
+                + "This copy: " + Application.ExecutablePath + "\r\n"
+                + "Process: " + bits + "\r\n"
+                + "Knowledge base: " + kb + "\r\n"
+                + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\r\n") : "")
+                + "\r\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\r\n"
+                + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.");
         }
 
         void MarkReadyFromPending()
@@ -485,7 +485,7 @@ namespace TechBench
                 Font = new Font("Consolas", 9.5f)
             };
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 8));
-            var rescan = new Button { Text = "Rescan", AutoSize = true };
+            var rescan = new Button { Text = "Rescan", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false };
             bar.Controls.Add(rescan);
             rescan.Click += delegate { box.Text = DescribeAdapters(); };
             box.Text = DescribeAdapters();
@@ -684,7 +684,9 @@ namespace TechBench
             string tech = ShopSync.SanitizeTechId(ShopSync.LoadSettings().TechId);
             _jobSync.Text = r.Conflicts > 0
                 ? (r.Conflicts + " sync conflict(s) — click")
-                : ("Sync: " + (r.SharedTree ? "sharing KB" : "folder") + "  ·  " + tech + "  ·  click");
+                : ("Sync · " + tech + " · click");
+            Control bar = _jobSync.Parent;
+            if (bar != null) bar.PerformLayout();
         }
 
         void RestartWatchers()

@@ -1,12 +1,13 @@
 using System;
 using System.Drawing;
+using System.Text;
 using System.Windows.Forms;
 
 namespace TechBench
 {
     /// <summary>
     /// Shared WinForms layout helpers so shop-laptop sizes (and DPI-scaled working areas)
-    /// keep primary buttons on screen instead of clipped under a docked strip.
+    /// keep primary buttons and wrapped text on screen instead of a fixed TabControl chrome.
     /// </summary>
     internal static class UiLayout
     {
@@ -64,45 +65,292 @@ namespace TechBench
                 WrapContents = true,
                 Padding = padding
             };
+            bool fitting = false;
             EventHandler fit = delegate
             {
-                int w = flow.ClientSize.Width;
-                if (w < 1) w = Math.Max(1, flow.Width);
-                Size pref = flow.GetPreferredSize(new Size(w, 0));
-                int h = pref.Height;
-                int minH = 28;
-                if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
-                if (h < minH) h = minH;
-                if (flow.Height != h) flow.Height = h;
+                if (fitting) return;
+                fitting = true;
+                try
+                {
+                    int w = flow.ClientSize.Width;
+                    if (flow.Parent != null)
+                    {
+                        int pw = flow.Parent.ClientSize.Width;
+                        if (flow.Dock == DockStyle.Top && pw > 1) w = pw;
+                    }
+                    if (w < 1) w = Math.Max(1, flow.Width);
+                    int h = FlowWrapHeight(flow, w);
+                    int minH = 28;
+                    if (flow.MinimumSize.Height > minH) minH = flow.MinimumSize.Height;
+                    if (h < minH) h = minH;
+                    if (Math.Abs(flow.Height - h) > 1) flow.Height = h;
+                }
+                finally { fitting = false; }
             };
             flow.Layout += delegate { fit(null, EventArgs.Empty); };
             flow.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+            flow.ControlAdded += delegate(object s, ControlEventArgs e)
+            {
+                if (e.Control != null)
+                {
+                    SizeToCaption(e.Control);
+                    e.Control.TextChanged += delegate { SizeToCaption(e.Control); fit(null, EventArgs.Empty); };
+                    e.Control.FontChanged += delegate { SizeToCaption(e.Control); fit(null, EventArgs.Empty); };
+                }
+                fit(null, EventArgs.Empty);
+            };
+            flow.ParentChanged += delegate
+            {
+                Control p = flow.Parent;
+                if (p == null) return;
+                p.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+                p.Layout += delegate { fit(null, EventArgs.Empty); };
+            };
             return flow;
         }
 
         /// <summary>
-        /// Large wrapping buttons for Search / Work orders / INLINE 7 / Adapters.
-        /// Native TabControl headers vanish under a fixed job strip at 192 DPI and do not look like switches.
+        /// Keep a button, toggle, or label at least as wide as its caption so WrapBar
+        /// wraps the whole control onto the next row instead of painting an ellipsis.
+        /// </summary>
+        public static void SizeToCaption(Control c)
+        {
+            if (c == null) return;
+            string text = c.Text ?? "";
+            if (text.Length == 0) return;
+            Button button = c as Button;
+            CheckBox box = c as CheckBox;
+            Label label = c as Label;
+            if (button == null && box == null && label == null) return;
+            c.AutoSize = true;
+            if (button != null) button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            ButtonBase basis = c as ButtonBase;
+            if (basis != null) basis.AutoEllipsis = false;
+            Size need = TextRenderer.MeasureText(text, c.Font);
+            int extra = 6;
+            if (button != null) extra = button.Padding.Horizontal + 22;
+            else if (box != null) extra = 24;
+            int w = need.Width + extra;
+            if (w < 8) return;
+            int minH = c.MinimumSize.Height;
+            if (button != null && minH < 28) minH = 28;
+            if (c.MinimumSize.Width < w || c.MinimumSize.Height < minH)
+                c.MinimumSize = new Size(Math.Max(c.MinimumSize.Width, w), minH);
+        }
+
+        /// <summary>
+        /// Height that actually fits wrapped children. GetPreferredSize + child.Bottom
+        /// stays one row when maximize layouts before the bar's client width lands.
+        /// </summary>
+        static int FlowWrapHeight(FlowLayoutPanel flow, int width)
+        {
+            int inner = width - flow.Padding.Horizontal;
+            if (inner < 40) inner = 40;
+            int x = 0;
+            int y = flow.Padding.Top;
+            int rowH = 0;
+            foreach (Control ch in flow.Controls)
+            {
+                if (!ch.Visible) continue;
+                Size ps = ch.PreferredSize;
+                int cw = Math.Max(ch.Width, ps.Width) + ch.Margin.Horizontal;
+                int chh = Math.Max(ch.Height, ps.Height) + ch.Margin.Vertical;
+                if (cw < 8) cw = 80;
+                if (chh < 8) chh = 24;
+                if (x > 0 && x + cw > inner)
+                {
+                    y += rowH;
+                    x = 0;
+                    rowH = 0;
+                }
+                x += cw;
+                if (chh > rowH) rowH = chh;
+            }
+            int h = y + rowH + flow.Padding.Bottom;
+            if (h < 28) h = 28;
+            return h;
+        }
+
+        /// <summary>
+        /// Wrapping read-only box. WinForms WordWrap only breaks on spaces, so a KB path
+        /// like C:\Users\jerem\OneDrive\… still paints "OneDriv…" unless we insert breaks.
+        /// </summary>
+        public static TextBox WrapText(string text)
+        {
+            var t = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                TabStop = false,
+                WordWrap = true,
+                ScrollBars = ScrollBars.None,
+                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+            };
+            string raw = text ?? "";
+            bool fitting = false;
+            EventHandler fit = delegate
+            {
+                if (fitting) return;
+                fitting = true;
+                try
+                {
+                    Control p = t.Parent;
+                    int w = t.ClientSize.Width;
+                    if (p != null)
+                    {
+                        int avail = p.ClientSize.Width - t.Left - t.Margin.Right - t.Padding.Horizontal;
+                        if (t.Dock != DockStyle.None)
+                            avail = p.ClientSize.Width - t.Margin.Horizontal - t.Padding.Horizontal;
+                        if (avail > 24) w = avail;
+                    }
+                    if (w < 32) w = 32;
+                    if (t.Dock == DockStyle.None && p is TableLayoutPanel)
+                    {
+                        int wantW = p.ClientSize.Width - t.Left - t.Margin.Right;
+                        if (wantW > 32 && Math.Abs(t.Width - wantW) > 2)
+                            t.Width = wantW;
+                        w = Math.Max(32, t.ClientSize.Width);
+                    }
+                    string wrapped = BreakLong(raw, t.Font, Math.Max(24, w - 6));
+                    if (t.Text != wrapped) t.Text = wrapped;
+                    Size need = TextRenderer.MeasureText(
+                        string.IsNullOrEmpty(wrapped) ? " " : wrapped,
+                        t.Font,
+                        new Size(w, int.MaxValue),
+                        TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
+                    int h = need.Height + t.Padding.Vertical + 6;
+                    int min = t.Font.Height + t.Padding.Vertical + 6;
+                    if (h < min) h = min;
+                    if (t.Dock == DockStyle.Fill && !(p is TableLayoutPanel)) return;
+                    if (t.Height != h) t.Height = h;
+                }
+                finally { fitting = false; }
+            };
+            t.ParentChanged += delegate
+            {
+                Control p = t.Parent;
+                if (p == null) return;
+                t.BackColor = p.BackColor;
+                p.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+                p.Layout += delegate { fit(null, EventArgs.Empty); };
+                fit(null, EventArgs.Empty);
+            };
+            t.TextChanged += delegate
+            {
+                if (fitting) return;
+                string incoming = t.Text ?? "";
+                // BreakLong writes \r\n into Text; that is display, not a new source string.
+                if (FlatText(incoming) == FlatText(raw) && incoming != raw)
+                    return;
+                raw = incoming;
+                fit(null, EventArgs.Empty);
+            };
+            t.SizeChanged += delegate { fit(null, EventArgs.Empty); };
+            t.Text = raw;
+            return t;
+        }
+
+        static string FlatText(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\r\n", "").Replace("\n", "").Replace("\r", "");
+        }
+
+        static string BreakLong(string text, Font font, int width)
+        {
+            if (string.IsNullOrEmpty(text) || width < 24) return text ?? "";
+            var sb = new StringBuilder();
+            string[] paras = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            for (int p = 0; p < paras.Length; p++)
+            {
+                if (p > 0) sb.Append("\r\n");
+                AppendWrapped(sb, paras[p], font, width);
+            }
+            return sb.ToString();
+        }
+
+        static int TextW(string s, Font font)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            return TextRenderer.MeasureText(s, font, new Size(int.MaxValue, 0),
+                TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding).Width;
+        }
+
+        static void AppendWrapped(StringBuilder sb, string line, Font font, int width)
+        {
+            if (TextW(line, font) <= width)
+            {
+                sb.Append(line);
+                return;
+            }
+            int i = 0;
+            while (i < line.Length)
+            {
+                int lo = 1, hi = line.Length - i, fitLen = 1;
+                while (lo <= hi)
+                {
+                    int mid = (lo + hi) / 2;
+                    if (TextW(line.Substring(i, mid), font) <= width)
+                    {
+                        fitLen = mid;
+                        lo = mid + 1;
+                    }
+                    else hi = mid - 1;
+                }
+                int take = fitLen;
+                if (i + take < line.Length)
+                {
+                    int br = -1;
+                    int floor = Math.Max(1, take / 3);
+                    for (int k = take; k >= floor; k--)
+                    {
+                        char ch = line[i + k - 1];
+                        if (ch == '\\' || ch == '/' || ch == ' ' || ch == '-' || ch == '_' || ch == '.' || ch == '·')
+                        {
+                            br = k;
+                            break;
+                        }
+                    }
+                    if (br > 0) take = br;
+                }
+                if (take < 1) take = 1;
+                sb.Append(line, i, take);
+                i += take;
+                if (i < line.Length) sb.Append("\r\n");
+            }
+        }
+
+        /// <summary>
+        /// Large wrapping buttons for Search / Work orders / INLINE 7 / Adapters (and inner INLINE pages).
+        /// Native TabControl headers vanish under a job strip at 192 DPI and do not look like switches.
         /// </summary>
         public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick)
         {
-            var bar = WrapBar(new Padding(8, 8, 8, 8));
+            return SwitchBar(names, onPick, "shellSwitch", new Size(148, 40), 11.5f);
+        }
+
+        public static FlowLayoutPanel SwitchBar(string[] names, Action<int> onPick, string namePrefix, Size minButton, float fontPt)
+        {
+            var bar = WrapBar(new Padding(8, 6, 8, 6));
             bar.BackColor = Color.FromArgb(36, 48, 68);
-            bar.MinimumSize = new Size(0, 72);
             if (names == null) return bar;
+            if (string.IsNullOrEmpty(namePrefix)) namePrefix = "shellSwitch";
             for (int i = 0; i < names.Length; i++)
             {
                 int idx = i;
                 var b = new Button
                 {
-                    Name = "shellSwitch" + i,
+                    Name = namePrefix + i,
                     Text = names[i],
                     AutoSize = true,
-                    MinimumSize = new Size(170, 48),
-                    Margin = new Padding(0, 0, 10, 4),
-                    Padding = new Padding(12, 8, 12, 8),
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    AutoEllipsis = false,
+                    MinimumSize = minButton.Width > 0 ? minButton : new Size(100, 32),
+                    Margin = new Padding(0, 0, 8, 4),
+                    Padding = new Padding(10, 6, 10, 6),
                     Tag = idx,
-                    Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                    Font = new Font("Segoe UI", fontPt, FontStyle.Bold),
                     UseVisualStyleBackColor = false
                 };
                 b.Click += delegate { if (onPick != null) onPick(idx); };
@@ -126,6 +374,49 @@ namespace TechBench
             }
         }
 
+        /// <summary>
+        /// Dialog that wraps long paths instead of a MessageBox that paints "…OneDriv".
+        /// </summary>
+        public static void ShowReadable(IWin32Window owner, string title, string body)
+        {
+            using (var f = new Form())
+            {
+                f.Text = title ?? "";
+                f.StartPosition = FormStartPosition.CenterParent;
+                f.MinimizeBox = false;
+                f.MaximizeBox = true;
+                f.ShowInTaskbar = false;
+                f.AutoScaleMode = AutoScaleMode.Font;
+                f.Font = new Font("Segoe UI", 9.5f);
+                f.MinimumSize = new Size(420, 240);
+                f.Size = SizeForScreen(640, 420, 480, 300);
+                var ok = new Button
+                {
+                    Text = "OK",
+                    DialogResult = DialogResult.OK,
+                    AutoSize = true,
+                    Margin = new Padding(0, 4, 0, 0)
+                };
+                var bar = WrapBar(new Padding(12, 4, 12, 12));
+                bar.Dock = DockStyle.Bottom;
+                bar.FlowDirection = FlowDirection.RightToLeft;
+                bar.Controls.Add(ok);
+                var tb = new TextBox
+                {
+                    Dock = DockStyle.Fill,
+                    Multiline = true,
+                    ReadOnly = true,
+                    ScrollBars = ScrollBars.Vertical,
+                    Text = body ?? "",
+                    BorderStyle = BorderStyle.None
+                };
+                f.Controls.Add(tb);
+                f.Controls.Add(bar);
+                f.AcceptButton = ok;
+                f.Shown += delegate { FitToWorkingArea(f); };
+                f.ShowDialog(owner);
+            }
+        }
 
         public static SplitContainer Split(Orientation orientation, int distance, int min1, int min2, Control a, Control b)
         {

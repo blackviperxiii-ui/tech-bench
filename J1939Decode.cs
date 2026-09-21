@@ -120,6 +120,71 @@ namespace J1939Reader
                    (d[1] >= 0xFB ? "n/a" : ((d[1] - 40).ToString() + " C"));
         }
 
+        /// <summary>
+        /// PGN 65110 (0xFE56) Aftertreatment 1 DEF Tank 1, the layout industrial ECMs
+        /// still broadcast: byte 1 SPN 1761 at 0.4 %/bit, byte 2 SPN 3031 at 1 °C offset -40,
+        /// byte 5 bits 6–8 SPN 5245, byte 6 bits 6–8 SPN 5246. Missing bytes stay "no data".
+        /// </summary>
+        public static AftState ParseAftertreatment(byte[] d)
+        {
+            var a = new AftState();
+            if (d == null || d.Length < 1) return a;
+            a.Level = SlotByte(d, 0, delegate(int raw) { return (raw * 0.4).ToString("0.0") + "%"; });
+            if (d.Length < 2) return a;
+            a.Temp = SlotByte(d, 1, delegate(int raw) { return (raw - 40).ToString() + " C"; });
+            if (d.Length < 5) return a;
+            a.LowLampRaw = SaeBits(d[4], 6, 3);
+            a.LowLamp = LowLevel5245(a.LowLampRaw);
+            if (d.Length < 6) return a;
+            a.SeverityRaw = SaeBits(d[5], 6, 3);
+            a.Severity = Severity5246(a.SeverityRaw);
+            return a;
+        }
+
+        /// <summary>SAE bit 1 is the least significant bit.</summary>
+        public static int SaeBits(byte b, int bit1, int width)
+        {
+            if (bit1 < 1) bit1 = 1;
+            if (width < 1) width = 1;
+            int mask = (1 << width) - 1;
+            return (b >> (bit1 - 1)) & mask;
+        }
+
+        static string SlotByte(byte[] d, int index, Func<int, string> format)
+        {
+            if (d == null || index >= d.Length) return AftState.NoData;
+            if (d[index] >= 0xFB) return "not available";
+            return format(d[index]);
+        }
+
+        public static string LowLevel5245(int v)
+        {
+            switch (v)
+            {
+                case 0: return "off — DEF level adequate";
+                case 1: return "on solid — DEF low";
+                case 4: return "fast blink — DEF lower";
+                case 7: return "not available";
+                default: return "reserved (" + v + ")";
+            }
+        }
+
+        public static string Severity5246(int v)
+        {
+            switch (v)
+            {
+                case 0: return "not active";
+                case 1: return "level 1 — DEF warning";
+                case 2: return "level 2 — second warning";
+                case 3: return "level 3 — low-level inducement";
+                case 4: return "level 4 — severe pre-trigger";
+                case 5: return "level 5 — final inducement";
+                case 6: return "ECM reports a temporary override";
+                case 7: return "not available";
+                default: return "reserved (" + v + ")";
+            }
+        }
+
         public static string TempC(byte b)
         {
             if (b >= 0xFB) return "n/a";
@@ -183,6 +248,33 @@ namespace J1939Reader
                 if (b >= 32 && b < 127) sb.Append((char)b);
             }
             return sb.ToString().Trim().Trim('·').Trim();
+        }
+    }
+
+    /// <summary>DEF/SCR fields from PGN 65110. Each line stays "no data" until that byte arrives.</summary>
+    internal sealed class AftState
+    {
+        public const string NoData = "no data";
+        public string Level = NoData;
+        public string Temp = NoData;
+        public string Severity = NoData;
+        public string LowLamp = NoData;
+        public int LowLampRaw = -1;
+        public int SeverityRaw = -1;
+
+        public static int AttentionBand(int severityRaw, int lowLampRaw)
+        {
+            if (severityRaw == 5 || severityRaw == 4 || lowLampRaw == 4) return 2;
+            if (severityRaw == 1 || severityRaw == 2 || severityRaw == 3 || lowLampRaw == 1) return 1;
+            return 0;
+        }
+
+        public string Text()
+        {
+            return "DEF level SPN 1761: " + Level
+                + "\r\nDEF tank temp SPN 3031: " + Temp
+                + "\r\nSCR inducement SPN 5246: " + Severity
+                + "\r\nDEF low-level SPN 5245: " + LowLamp;
         }
     }
 }

@@ -42,7 +42,7 @@ namespace TechBench
                 AutoSize = true,
                 Padding = new Padding(12, 12, 12, 4)
             };
-            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -58,16 +58,13 @@ namespace TechBench
             browse.Click += delegate { Browse(); };
             top.Controls.Add(browse, 2, 1);
 
-            var hint = new Label
-            {
-                Dock = DockStyle.Top,
-                Padding = new Padding(12, 0, 12, 8),
-                Height = 52,
-                ForeColor = Color.DimGray,
-                Text = "Leave the folder blank if this knowledge base is already the shared tree (OneDrive). "
-                     + "Otherwise pick a USB stick, network share, or a folder both techs copy to. "
-                     + "Conflicts are listed below — nothing overwrites a note without you picking."
-            };
+            var hint = UiLayout.WrapText(
+                "Leave the folder blank if this knowledge base is already the shared tree (OneDrive). "
+                + "Otherwise pick a USB stick, network share, or a folder both techs copy to. "
+                + "Conflicts are listed below — nothing overwrites a note without you picking.");
+            hint.Dock = DockStyle.Top;
+            hint.ForeColor = Color.DimGray;
+            hint.Padding = new Padding(12, 0, 12, 8);
 
             var buttons = new FlowLayoutPanel
             {
@@ -133,6 +130,7 @@ namespace TechBench
             Controls.Add(resolveBar);
 
             ShowResult(_last);
+            Shown += delegate { UiLayout.FitToWorkingArea(this); };
         }
 
         void Browse()

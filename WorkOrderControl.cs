@@ -15,7 +15,7 @@ namespace TechBench
         readonly TextBox _number, _segment, _customer, _customerNo;
         readonly TextBox _model, _serial, _stock, _desc, _notes, _report, _clock;
         readonly ListBox _media;
-        readonly Label _status;
+        readonly TextBox _status;
         readonly Button _logOn, _logOff, _signOff;
         string _kbRoot;
         IdSettings _settings;
@@ -54,12 +54,17 @@ namespace TechBench
                 Padding = new Padding(8),
                 AutoScroll = true
             };
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            right.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            right.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            for (int i = 0; i < 9; i++)
+            for (int i = 0; i < 4; i++)
                 right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             _number = Field(right, 0, 0, "WO number");
             _segment = Field(right, 0, 2, "Segment");
@@ -108,13 +113,10 @@ namespace TechBench
             right.SetColumnSpan(_clock, 3);
             right.Controls.Add(_clock, 1, 7);
 
-            _status = new Label
-            {
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                ForeColor = Color.DimGray,
-                Margin = new Padding(0, 8, 0, 0)
-            };
+            _status = UiLayout.WrapText("");
+            _status.Dock = DockStyle.Fill;
+            _status.ForeColor = Color.DimGray;
+            _status.Margin = new Padding(0, 8, 0, 0);
             right.SetColumnSpan(_status, 4);
             right.Controls.Add(_status, 0, 8);
 

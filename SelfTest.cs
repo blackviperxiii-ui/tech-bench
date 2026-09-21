@@ -74,6 +74,7 @@ static class SelfTest
         // DEF tank: byte0 level 0.4%/bit, byte1 temp -40 offset. 50% -> 125, 20C -> 60
         Eq("DEF 50% 20C", J1939Decode.DefText(new byte[] { 125, 60 }), "50.0%  temp 20 C");
         Eq("DEF header silent", J1939Decode.DefText(new byte[] { 0xFF, 0xFF }), "n/a (not talking)");
+        AftertreatmentTests();
         // hours: 0.05 h/bit over 4 bytes. 1234.5 h -> raw 24690 -> 0x6072
         Eq("engine hours", J1939Decode.Hours(new byte[] { 0x72, 0x60, 0x00, 0x00 }), "1234.5 h");
         Eq("hours not available", J1939Decode.Hours(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }), null);
@@ -408,6 +409,8 @@ ProtocolDescription=ISO 15765
         m.Feed(F(0xFE56, 17, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0), t);
         Check("DEF silence detected", m.DefSilent, "reported talking");
         Eq("DEF text when silent", m.DefText(), "n/a (not talking)");
+        Check("silent tank leaves level as not available",
+            m.AftText().IndexOf("DEF level SPN 1761: not available", StringComparison.Ordinal) >= 0, m.AftText());
 
         // DM1 from two different modules must both be kept.
         m.Feed(F(0xFECA, 17, 0x10, 0xFF, 0x7E, 0x14, 0x00, 0x01, 0xFF, 0xFF), t);
@@ -509,6 +512,8 @@ ProtocolDescription=ISO 15765
         Check("disconnected snapshot blanks rpm", double.IsNaN(s.Rpm), "held " + s.Rpm);
         Check("disconnected snapshot blanks coolant", double.IsNaN(s.CoolantC), "held");
         Eq("disconnected snapshot blanks DEF", s.DefText, "—");
+        Check("disconnected snapshot restores no-data aftertreatment",
+            s.AftText.IndexOf("no data", StringComparison.Ordinal) >= 0, s.AftText);
         Eq("disconnected snapshot blanks VIN", s.Vin, "");
         Eq("disconnected snapshot clears lamps", s.Red, false);
         Eq("disconnected snapshot clears active list", s.Active.Count, 0);
@@ -529,6 +534,65 @@ ProtocolDescription=ISO 15765
         var parts = new string[d.Length];
         for (int i = 0; i < d.Length; i++) parts[i] = d[i].ToString();
         return string.Join(",", parts);
+    }
+
+    static void AftertreatmentTests()
+    {
+        AftState empty = J1939Decode.ParseAftertreatment(null);
+        Eq("no frame is no data", empty.Level, AftState.NoData);
+        Eq("no frame temp is no data", empty.Temp, AftState.NoData);
+        Eq("no frame inducement is no data", empty.Severity, AftState.NoData);
+        Eq("no frame low-level is no data", empty.LowLamp, AftState.NoData);
+        Check("panel names SPN 1761", empty.Text().IndexOf("SPN 1761", StringComparison.Ordinal) >= 0, empty.Text());
+        Check("panel names SPN 5246", empty.Text().IndexOf("SPN 5246", StringComparison.Ordinal) >= 0, empty.Text());
+
+        AftState shortMsg = J1939Decode.ParseAftertreatment(new byte[] { 125, 60 });
+        Eq("short tank level", shortMsg.Level, "50.0%");
+        Eq("short tank temp", shortMsg.Temp, "20 C");
+        Eq("short tank leaves inducement no data", shortMsg.Severity, AftState.NoData);
+        Eq("short tank leaves low-level no data", shortMsg.LowLamp, AftState.NoData);
+
+        byte low = (byte)(1 << 5);
+        byte severe = (byte)(5 << 5);
+        AftState full = J1939Decode.ParseAftertreatment(new byte[] { 125, 60, 0xFF, 0xFF, low, severe });
+        Eq("full tank level", full.Level, "50.0%");
+        Eq("full tank temp", full.Temp, "20 C");
+        Eq("SPN 5245 low lamp", full.LowLamp, "on solid — DEF low");
+        Eq("SPN 5246 final inducement", full.Severity, "level 5 — final inducement");
+
+        AftState na = J1939Decode.ParseAftertreatment(new byte[] { 0xFF, 0xFF });
+        Eq("NA level slot", na.Level, "not available");
+        Eq("NA temp slot", na.Temp, "not available");
+        Eq("NA short message still has no inducement byte", na.Severity, AftState.NoData);
+
+        Eq("full tank SeverityRaw", full.SeverityRaw, 5);
+        Eq("full tank LowLampRaw", full.LowLampRaw, 1);
+        Eq("band severe severity 5", AftState.AttentionBand(5, 0), 2);
+        Eq("band severe severity 4", AftState.AttentionBand(4, -1), 2);
+        Eq("band severe lamp 4", AftState.AttentionBand(0, 4), 2);
+        Eq("band warn severity 1", AftState.AttentionBand(1, 0), 1);
+        Eq("band warn severity 3", AftState.AttentionBand(3, -1), 1);
+        Eq("band warn lamp 1", AftState.AttentionBand(0, 1), 1);
+        Eq("band quiet zeros", AftState.AttentionBand(0, 0), 0);
+        Eq("band quiet missing", AftState.AttentionBand(-1, -1), 0);
+        Eq("band quiet not available", AftState.AttentionBand(7, 7), 0);
+
+        Eq("5246 not active", J1939Decode.Severity5246(0), "not active");
+        Eq("5246 not available code", J1939Decode.Severity5246(7), "not available");
+        Eq("5245 fast blink", J1939Decode.LowLevel5245(4), "fast blink — DEF lower");
+
+        var mon = new BusMonitor();
+        Check("monitor starts at no data",
+            mon.AftText().IndexOf("DEF level SPN 1761: no data", StringComparison.Ordinal) >= 0, mon.AftText());
+        DateTime t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        mon.Feed(F(0xFE56, 0, 125, 60, 0xFF, 0xFF, low, severe, 0, 0), t);
+        Check("monitor shows 50 percent",
+            mon.AftText().IndexOf("DEF level SPN 1761: 50.0%", StringComparison.Ordinal) >= 0, mon.AftText());
+        Check("monitor shows final inducement",
+            mon.AftText().IndexOf("level 5 — final inducement", StringComparison.Ordinal) >= 0, mon.AftText());
+        mon.ClearLive();
+        Check("clear live returns no data",
+            mon.AftText().IndexOf("SCR inducement SPN 5246: no data", StringComparison.Ordinal) >= 0, mon.AftText());
     }
 
     static void ClearCodesTests()
@@ -599,14 +663,22 @@ ProtocolDescription=ISO 15765
         Eq("refresh DM1 from broadcast", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 255), 1);
         Eq("refresh DM2 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm2, 0), 1);
 
+        Eq("post-clear DEF tank request to engine",
+            J1939Clear.CountRequest(cap, J1939Clear.DefTank, 0), 1);
+        Eq("post-clear DEF tank request to compressor SA 48",
+            J1939Clear.CountRequest(cap, J1939Clear.DefTank, J1939Clear.CompressorSa), 1);
+        Eq("post-clear DEF tank request to broadcast",
+            J1939Clear.CountRequest(cap, J1939Clear.DefTank, 255), 1);
+        Check("report says this is not a dosing reset",
+            report.IndexOf("not a DEF dosing reset", StringComparison.Ordinal) >= 0, report);
+
         if (cap.Count >= 2)
         {
             J1939Tx last = cap[cap.Count - 1];
             J1939Tx prev = cap[cap.Count - 2];
-            Check("last frames are DM1/DM2 requests",
+            Check("last frames re-request the DEF/SCR tank",
                 last.Pgn == J1939Clear.Request && prev.Pgn == J1939Clear.Request &&
-                (last.RequestedPgn == J1939Clear.Dm1 || last.RequestedPgn == J1939Clear.Dm2) &&
-                (prev.RequestedPgn == J1939Clear.Dm1 || prev.RequestedPgn == J1939Clear.Dm2),
+                last.RequestedPgn == J1939Clear.DefTank && prev.RequestedPgn == J1939Clear.DefTank,
                 "last pgn=" + last.Pgn + " req=" + last.RequestedPgn);
         }
 

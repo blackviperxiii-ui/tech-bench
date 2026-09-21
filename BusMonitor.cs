@@ -42,6 +42,7 @@ namespace J1939Reader
         public double DefPct = double.NaN;
         public double DefTempC = double.NaN;
         public bool DefSilent = true;
+        public AftState Aft = new AftState();
         public string Vin = "";
         public string Sw = "";
         public string CompId = "";
@@ -88,6 +89,7 @@ namespace J1939Reader
             Rpm = CoolantC = OilKpa = BatteryV = FuelLph = double.NaN;
             DefPct = DefTempC = double.NaN;
             DefSilent = true;
+            Aft = new AftState();
             Vin = Sw = CompId = HoursText = "";
             _modules.Clear();
             LastFrame = DateTime.MinValue;
@@ -141,6 +143,7 @@ namespace J1939Reader
                         DefSilent = f.Data.Length < 2 || f.Data[0] >= 0xFB;
                         DefPct = f.Data.Length > 0 && f.Data[0] < 0xFB ? f.Data[0] * 0.4 : double.NaN;
                         DefTempC = f.Data.Length > 1 && f.Data[1] < 0xFB ? f.Data[1] - 40 : double.NaN;
+                        Aft = J1939Decode.ParseAftertreatment(f.Data);
                     }
                     return false;
                 case 0xFEEE:
@@ -288,6 +291,11 @@ namespace J1939Reader
             string pct = TrendSample.Has(DefPct) ? DefPct.ToString("0.0") + "%" : "n/a";
             string t = TrendSample.Has(DefTempC) ? DefTempC.ToString("0") + " C" : "n/a";
             return pct + "  temp " + t;
+        }
+
+        public string AftText()
+        {
+            return (Aft ?? new AftState()).Text();
         }
 
         public static string Fmt(double v, string unit, string fmt)
