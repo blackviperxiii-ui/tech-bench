@@ -43,8 +43,8 @@ namespace TechBench
             foreach (string k in new[] { "ALL", "CODE", "PASSWORD", "MANUAL", "FILTER", "EQUIP", "NOTE", "FILE" })
                 _kind.Items.Add(k);
             _kind.SelectedIndex = 0;
-            var go = new Button { Text = "Search", AutoSize = true, Margin = new Padding(0, 1, 8, 4) };
-            _open = new Button { Text = "Open file", AutoSize = true, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
+            var go = new Button { Text = "Search", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 1, 8, 4) };
+            _open = new Button { Text = "Open file", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
             bar.Controls.Add(_kind);
             bar.Controls.Add(go);
             bar.Controls.Add(_open);

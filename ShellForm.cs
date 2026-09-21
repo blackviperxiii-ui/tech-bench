@@ -140,11 +140,11 @@ namespace TechBench
             };
             actions.Controls.Add(_jobSync);
             _jobSync.Click += delegate { OpenSync(); };
-            var useJob = new Button { Text = "Search this job", AutoSize = true, Margin = new Padding(0, 0, 12, 0) };
+            var useJob = new Button { Text = "Search this job", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 12, 0) };
             actions.Controls.Add(useJob);
-            var addCode = new Button { Text = "Add code to KB", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
+            var addCode = new Button { Text = "Add code to KB", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 8, 0) };
             actions.Controls.Add(addCode);
-            var addNoteBtn = new Button { Text = "Add note", AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
+            var addNoteBtn = new Button { Text = "Add note", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 8, 0) };
             actions.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
 
@@ -485,7 +485,7 @@ namespace TechBench
                 Font = new Font("Consolas", 9.5f)
             };
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 8));
-            var rescan = new Button { Text = "Rescan", AutoSize = true };
+            var rescan = new Button { Text = "Rescan", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false };
             bar.Controls.Add(rescan);
             rescan.Click += delegate { box.Text = DescribeAdapters(); };
             box.Text = DescribeAdapters();

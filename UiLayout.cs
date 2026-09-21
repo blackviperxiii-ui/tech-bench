@@ -93,8 +93,9 @@ namespace TechBench
             {
                 if (e.Control != null)
                 {
-                    e.Control.SizeChanged += delegate { fit(null, EventArgs.Empty); };
-                    e.Control.TextChanged += delegate { fit(null, EventArgs.Empty); };
+                    SizeToCaption(e.Control);
+                    e.Control.TextChanged += delegate { SizeToCaption(e.Control); fit(null, EventArgs.Empty); };
+                    e.Control.FontChanged += delegate { SizeToCaption(e.Control); fit(null, EventArgs.Empty); };
                 }
                 fit(null, EventArgs.Empty);
             };
@@ -106,6 +107,35 @@ namespace TechBench
                 p.Layout += delegate { fit(null, EventArgs.Empty); };
             };
             return flow;
+        }
+
+        /// <summary>
+        /// Keep a button, toggle, or label at least as wide as its caption so WrapBar
+        /// wraps the whole control onto the next row instead of painting an ellipsis.
+        /// </summary>
+        public static void SizeToCaption(Control c)
+        {
+            if (c == null) return;
+            string text = c.Text ?? "";
+            if (text.Length == 0) return;
+            Button button = c as Button;
+            CheckBox box = c as CheckBox;
+            Label label = c as Label;
+            if (button == null && box == null && label == null) return;
+            c.AutoSize = true;
+            if (button != null) button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            ButtonBase basis = c as ButtonBase;
+            if (basis != null) basis.AutoEllipsis = false;
+            Size need = TextRenderer.MeasureText(text, c.Font);
+            int extra = 6;
+            if (button != null) extra = button.Padding.Horizontal + 22;
+            else if (box != null) extra = 24;
+            int w = need.Width + extra;
+            if (w < 8) return;
+            int minH = c.MinimumSize.Height;
+            if (button != null && minH < 28) minH = 28;
+            if (c.MinimumSize.Width < w || c.MinimumSize.Height < minH)
+                c.MinimumSize = new Size(Math.Max(c.MinimumSize.Width, w), minH);
         }
 
         /// <summary>
@@ -314,6 +344,8 @@ namespace TechBench
                     Name = namePrefix + i,
                     Text = names[i],
                     AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    AutoEllipsis = false,
                     MinimumSize = minButton.Width > 0 ? minButton : new Size(100, 32),
                     Margin = new Padding(0, 0, 8, 4),
                     Padding = new Padding(10, 6, 10, 6),
