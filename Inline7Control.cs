@@ -450,11 +450,13 @@ namespace J1939Reader
                 "Request VIN, software ID, component ID, hours, and DM1. If RPM/codes are already live but VIN never appears, this industrial ECM may not publish VIN — the computer is still alive.");
             toggles.Controls.Add(_btnPing);
             g.Controls.Add(toggles);
+            toggles.Dock = DockStyle.None;
             EventHandler fitToggles = delegate
             {
-                int inner = Math.Max(1, g.ClientSize.Width);
-                Size pref = toggles.GetPreferredSize(new Size(inner, 0));
-                int h = pref.Height + 22;
+                int pageW = p.ClientSize.Width;
+                if (pageW < 200) pageW = 200;
+                if (toggles.Width != pageW) toggles.Width = pageW;
+                int h = toggles.Height + 22;
                 if (h < 48) h = 48;
                 if (g.Height != h) g.Height = h;
             };
@@ -468,14 +470,14 @@ namespace J1939Reader
             var host = new Panel { Dock = DockStyle.Fill };
             host.Controls.Add(Titled("ECM identity / remaining codes after reset", _idBox));
 
-            // Table rows, not a pile of Dock.Top chrome: on a 900×560 shop laptop the
-            // GroupBox used to paint Ping below the page (unreadable / unclickable).
+            // GroupBox first so Ping stays in the client. Warning and coolant follow
+            // and must not sit above it. No AutoScroll — a 0×0 intersection still fails.
             var grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 4,
-                AutoScroll = true
+                AutoScroll = false
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -485,9 +487,12 @@ namespace J1939Reader
             warn.Dock = DockStyle.Fill;
             _mon.Dock = DockStyle.Fill;
             g.Dock = DockStyle.Fill;
-            grid.Controls.Add(warn, 0, 0);
-            grid.Controls.Add(_mon, 0, 1);
-            grid.Controls.Add(g, 0, 2);
+            int toggleW = p.ClientSize.Width;
+            if (toggleW < 200) toggleW = 200;
+            toggles.Width = toggleW;
+            grid.Controls.Add(g, 0, 0);
+            grid.Controls.Add(warn, 0, 1);
+            grid.Controls.Add(_mon, 0, 2);
             grid.Controls.Add(Split(Orientation.Horizontal, 160, 80, 80, top, host), 0, 3);
             p.Controls.Add(grid);
             return p;
@@ -537,9 +542,12 @@ namespace J1939Reader
 
             var lower = new Panel { Dock = DockStyle.Fill };
             lower.Controls.Add(_diffBox);
-            lower.Controls.Add(bar);
 
-            p.Controls.Add(Split(Orientation.Horizontal, 220, 80, 110, lists, lower));
+            // Bar docks above the split (add the fill split first). Distance 120 and a
+            // small Panel2 minimum so the bar plus the split fit in a 513px client.
+            bar.Dock = DockStyle.Top;
+            p.Controls.Add(Split(Orientation.Horizontal, 120, 80, 40, lists, lower));
+            p.Controls.Add(bar);
             return p;
         }
 
