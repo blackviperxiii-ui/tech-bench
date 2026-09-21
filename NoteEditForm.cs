@@ -32,16 +32,16 @@ namespace TechBench
                 Padding = new Padding(12),
                 RowCount = 2
             };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            table.Controls.Add(new Label { Text = "Title", AutoSize = false, Height = 22, Margin = new Padding(0, 5, 8, 0) }, 0, 0);
+            table.Controls.Add(new Label { Text = "Title", AutoSize = true, Margin = new Padding(0, 5, 8, 0) }, 0, 0);
             _title = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 0, 6) };
             table.Controls.Add(_title, 1, 0);
 
-            table.Controls.Add(new Label { Text = "Note", AutoSize = false, Height = 22, Margin = new Padding(0, 5, 8, 0) }, 0, 1);
+            table.Controls.Add(new Label { Text = "Note", AutoSize = true, Margin = new Padding(0, 5, 8, 0) }, 0, 1);
             _body = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -67,18 +67,15 @@ namespace TechBench
             AcceptButton = save;
             CancelButton = cancel;
 
-            var hint = new Label
-            {
-                Dock = DockStyle.Bottom,
-                Height = 28,
-                Padding = new Padding(12, 0, 12, 0),
-                ForeColor = Color.DimGray,
-                Text = "Saved under data\\shop\\{you}\\notes so other techs pick it up on sync."
-            };
+            var hint = UiLayout.WrapText("Saved under data\\shop\\{you}\\notes so other techs pick it up on sync.");
+            hint.Dock = DockStyle.Bottom;
+            hint.ForeColor = Color.DimGray;
+            hint.Padding = new Padding(12, 0, 12, 4);
 
             Controls.Add(table);
             Controls.Add(hint);
             Controls.Add(buttons);
+            Shown += delegate { UiLayout.FitToWorkingArea(this); };
         }
 
         void Collect()

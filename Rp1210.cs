@@ -341,6 +341,10 @@ namespace J1939Reader
                 if (!string.IsNullOrEmpty(uds)) sb.AppendLine(uds);
             }
             RequestDmAfterClear(engineSa);
+            List<J1939Tx> aft = J1939Clear.AftertreatmentReadFrames(engineSa);
+            for (int i = 0; i < aft.Count; i++)
+                SendJ1939(aft[i].Pgn, aft[i].Dest, aft[i].Data, aft[i].Priority);
+            sb.AppendLine("Re-requested DM1/DM2 and DEF/SCR tank PGN FE56. This is a code clear, not a DEF dosing reset.");
             return sb.ToString();
         }
 

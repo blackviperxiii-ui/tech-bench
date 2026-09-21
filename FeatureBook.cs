@@ -36,7 +36,7 @@ namespace J1939Reader
 
             list.Add(Row("induc", "SCR inducement (SPN 5246)", hasInducement ? "LOCKED" : "off",
                 hasInducement ? "Most-severe inducement — will not fuel." : "Not reporting severe inducement.",
-                "T4F aftertreatment protection. Stages go warning → derate → idle/no-restart. LOCKED means the ECM is protecting the SCR by refusing to fuel. Keep DEF working. Do not add a switch to disable this. After the tank header is really on the bus, Guidanz aftertreatment reset is the legal way to unlock it."));
+                "T4F aftertreatment protection. Stages go warning → derate → idle/no-restart. LOCKED means the ECM is protecting the SCR by refusing to fuel. Keep DEF working. Do not add a switch to disable this. After the tank header is on the bus, Clear codes after repair sends DM11/DM3 and re-reads DEF/SCR. It does not reset dosing. There is no public SAE routine that resets DEF dosing without disabling SCR."));
 
             list.Add(Row("tank", "DEF tank header (level/temp/quality)", hasTankFmi9 ? "NOT TALKING" : "check data",
                 hasTankFmi9 ? "FMI 9 on 1761/3031/3364 — module offline." : "No FMI 9 on tank SPNs in the last DM1.",

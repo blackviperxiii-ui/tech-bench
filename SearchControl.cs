@@ -12,7 +12,7 @@ namespace TechBench
         readonly ComboBox _kind;
         readonly ListBox _list;
         readonly TextBox _detail;
-        readonly Label _status;
+        readonly TextBox _status;
         readonly Button _open;
         readonly Timer _debounce = new Timer();
         KbIndex _kb;
@@ -29,10 +29,11 @@ namespace TechBench
             Font = new Font("Segoe UI", 9.5f);
             Padding = new Padding(8);
 
-            // Docked/flow containers rather than absolute coordinates plus a hand-written Resize
-            // handler: the two used to fight each other, and neither survived DPI scaling.
+            // Query stretches; kind/buttons wrap. A fixed 360×20 row left the path as "OneDriv…".
+            var qHost = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0, 0, 0, 4) };
+            _q = new TextBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle };
+            qHost.Controls.Add(_q);
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 4));
-            _q = new TextBox { Width = 360, Margin = new Padding(0, 2, 8, 4) };
             _kind = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -42,14 +43,16 @@ namespace TechBench
             foreach (string k in new[] { "ALL", "CODE", "PASSWORD", "MANUAL", "FILTER", "EQUIP", "NOTE", "FILE" })
                 _kind.Items.Add(k);
             _kind.SelectedIndex = 0;
-            var go = new Button { Text = "Search", AutoSize = true, Margin = new Padding(0, 1, 8, 4) };
-            _open = new Button { Text = "Open file", AutoSize = true, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
-            bar.Controls.Add(_q);
+            var go = new Button { Text = "Search", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 1, 8, 4) };
+            _open = new Button { Text = "Open file", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Enabled = false, Margin = new Padding(0, 1, 0, 4) };
             bar.Controls.Add(_kind);
             bar.Controls.Add(go);
             bar.Controls.Add(_open);
 
-            _status = new Label { Dock = DockStyle.Top, AutoSize = false, Height = 20, ForeColor = Color.DimGray };
+            _status = UiLayout.WrapText("");
+            _status.Dock = DockStyle.Top;
+            _status.ForeColor = Color.DimGray;
+            _status.Padding = new Padding(0, 0, 0, 4);
 
             _list = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
             _detail = new TextBox
@@ -69,6 +72,7 @@ namespace TechBench
             Controls.Add(split);
             Controls.Add(_status);
             Controls.Add(bar);
+            Controls.Add(qHost);
 
             go.Click += delegate { RunSearch(); };
             _q.KeyDown += delegate(object s, KeyEventArgs e)

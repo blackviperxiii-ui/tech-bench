@@ -34,7 +34,7 @@ namespace TechBench
                 Padding = new Padding(12),
                 AutoScroll = true
             };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             _brand = Row(table, "Brand", "DOOSAN / IR / SULLAIR — free text");
@@ -77,16 +77,12 @@ namespace TechBench
             AcceptButton = save;
             CancelButton = cancel;
 
-            var note = new Label
-            {
-                Dock = DockStyle.Bottom,
-                AutoSize = false,
-                Height = 34,
-                Padding = new Padding(12, 0, 12, 0),
-                ForeColor = Color.DimGray,
-                Text = "Writes data\\shop\\{you}\\user-codes.json so other techs can sync it. "
-                     + "The index reloads when you save."
-            };
+            var note = UiLayout.WrapText(
+                "Writes data\\shop\\{you}\\user-codes.json so other techs can sync it. "
+                + "The index reloads when you save.");
+            note.Dock = DockStyle.Bottom;
+            note.ForeColor = Color.DimGray;
+            note.Padding = new Padding(12, 0, 12, 4);
 
             Controls.Add(table);
             Controls.Add(note);
@@ -151,7 +147,7 @@ namespace TechBench
 
         static Label Caption(string text)
         {
-            return new Label { Text = text, AutoSize = false, Height = 22, Margin = new Padding(0, 5, 8, 0) };
+            return new Label { Text = text, AutoSize = true, Margin = new Padding(0, 5, 8, 0) };
         }
     }
 }

@@ -49,6 +49,9 @@ namespace J1939Reader
         public double BatteryV = double.NaN;
         public double FuelLph = double.NaN;
         public string DefText = "—";
+        public string AftText = new AftState().Text();
+        public int SeverityRaw = -1;
+        public int LowLampRaw = -1;
         public string OilText = "—";
         public string Vin = "";
         public string Sw = "";
@@ -71,6 +74,9 @@ namespace J1939Reader
         {
             Rpm = CoolantC = OilKpa = BatteryV = FuelLph = double.NaN;
             DefText = "—";
+            AftText = new AftState().Text();
+            SeverityRaw = -1;
+            LowLampRaw = -1;
             OilText = "—";
             Vin = "";
             Sw = "";
@@ -471,6 +477,10 @@ namespace J1939Reader
                 s.BatteryV = _mon.BatteryV;
                 s.FuelLph = _mon.FuelLph;
                 s.DefText = _mon.DefText();
+                s.AftText = _mon.AftText();
+                AftState aft = _mon.Aft ?? new AftState();
+                s.SeverityRaw = aft.SeverityRaw;
+                s.LowLampRaw = aft.LowLampRaw;
                 s.OilText = _mon.OilText();
                 s.Vin = _mon.Vin; s.Sw = _mon.Sw; s.CompId = _mon.CompId; s.Hours = _mon.HoursText;
                 s.HasSpn5246 = _mon.HasSpn(5246);
