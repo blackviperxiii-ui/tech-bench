@@ -224,9 +224,10 @@ namespace J1939Reader
 
         Control BuildToolbar()
         {
-            var flow = UiLayout.WrapBar(new Padding(8, 4, 8, 2));
+            var connect = UiLayout.WrapBar(new Padding(8, 4, 8, 2));
+            var service = UiLayout.WrapBar(new Padding(8, 2, 8, 2));
 
-            flow.Controls.Add(Lbl("Adapter"));
+            connect.Controls.Add(Lbl("Adapter"));
             _cboAdapter = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -239,31 +240,32 @@ namespace J1939Reader
             _cboAdapter.SelectedIndex = 0;
             _tip.SetToolTip(_cboAdapter,
                 "RP1210 adapters this PC has installed, read from RP121032.INI. Cummins INLINE 7 is listed first when present.");
-            flow.Controls.Add(_cboAdapter);
+            connect.Controls.Add(_cboAdapter);
 
             _btnConnect = Btn("Connect", delegate { DoConnect(); });
             _btnDisc = Btn("Disconnect", delegate { DoDisconnect(); });
+            connect.Controls.Add(_btnConnect);
+            connect.Controls.Add(_btnDisc);
+
             _btnRefresh = Btn("Refresh codes", delegate { _bus.Enqueue(new BusCommand(BusCmdKind.RequestCodes)); });
             _btnClearPrev = Btn("Clear previous", delegate { DoClearPrevious(); });
             _btnClearActive = Btn("Reset all codes", delegate { DoResetAll(); });
             _btnPostRepair = Btn("Clear codes after repair", delegate { DoClearAfterRepair(); });
+            _btnPostRepair.Font = new Font(_btnPostRepair.Font, FontStyle.Bold);
             _tip.SetToolTip(_btnPostRepair,
                 "DM11 + DM3 to the engine and compressor SA 48, then re-request DM1 and the DEF/SCR tank message. Not a DEF delete.");
-            flow.Controls.Add(_btnConnect);
-            flow.Controls.Add(_btnDisc);
-            flow.Controls.Add(_btnRefresh);
-            flow.Controls.Add(_btnClearPrev);
-            flow.Controls.Add(_btnClearActive);
-            flow.Controls.Add(_btnPostRepair);
+            service.Controls.Add(_btnRefresh);
+            service.Controls.Add(_btnClearPrev);
+            service.Controls.Add(_btnClearActive);
+            service.Controls.Add(_btnPostRepair);
+            service.Controls.Add(Btn("Save", delegate { SaveSession(); }));
+            service.Controls.Add(Btn("Report", delegate { PrintReport(true); }));
+            service.Controls.Add(Btn("Shot", delegate { TakeShot(); }));
+            service.Controls.Add(Btn("KEY-ON", delegate { Mark("KEY-ON"); }));
+            service.Controls.Add(Btn("CRANK", delegate { Mark("CRANK"); }));
+            service.Controls.Add(Btn("RELEASE", delegate { Mark("RELEASE"); }));
 
-            flow.Controls.Add(Btn("Save", delegate { SaveSession(); }));
-            flow.Controls.Add(Btn("Report", delegate { PrintReport(true); }));
-            flow.Controls.Add(Btn("Shot", delegate { TakeShot(); }));
-            flow.Controls.Add(Btn("KEY-ON", delegate { Mark("KEY-ON"); }));
-            flow.Controls.Add(Btn("CRANK", delegate { Mark("CRANK"); }));
-            flow.Controls.Add(Btn("RELEASE", delegate { Mark("RELEASE"); }));
-
-            flow.Controls.Add(Lbl("Module"));
+            connect.Controls.Add(Lbl("Module"));
             _cboModule = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -275,9 +277,22 @@ namespace J1939Reader
             _cboModule.SelectedIndexChanged += delegate { ApplyModuleSelection(); };
             _tip.SetToolTip(_cboModule,
                 "Whose DM1/DM2 the code lists show. On a portable compressor the controller at SA 48 has its own faults.");
-            flow.Controls.Add(_cboModule);
+            connect.Controls.Add(_cboModule);
 
-            return flow;
+            var stack = new Panel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+            stack.Controls.Add(service);
+            stack.Controls.Add(connect);
+            return stack;
+        }
+
+        static readonly Color AftQuiet = Color.FromArgb(20, 28, 38);
+
+        static Color AftHudColor(int severityRaw, int lowLampRaw)
+        {
+            int band = AftState.AttentionBand(severityRaw, lowLampRaw);
+            if (band == 2) return Color.Firebrick;
+            if (band == 1) return Color.DarkGoldenrod;
+            return AftQuiet;
         }
 
         Control BuildHud()
@@ -306,7 +321,7 @@ namespace J1939Reader
 
             _aft = UiLayout.WrapText(new AftState().Text());
             _aft.Dock = DockStyle.Top;
-            _aft.ForeColor = Color.FromArgb(20, 28, 38);
+            _aft.ForeColor = AftQuiet;
             _aft.Padding = new Padding(0, 2, 0, 4);
 
             _status = UiLayout.WrapText("Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect.");
@@ -907,6 +922,9 @@ namespace J1939Reader
                 + (s.Protect ? "   Protect: ON" : "") + (s.Mil ? "   MIL: ON" : "");
             _lamps.ForeColor = s.Red ? Color.Firebrick : Color.Black;
             _def.Text = "DEF: " + s.DefText;
+            Color aftColor = AftHudColor(s.SeverityRaw, s.LowLampRaw);
+            if (_def.ForeColor != aftColor) _def.ForeColor = aftColor;
+            if (_aft != null && _aft.ForeColor != aftColor) _aft.ForeColor = aftColor;
             if (_aft != null && s.AftText != null && _hudAft != s.AftText) { _hudAft = s.AftText; _aft.Text = s.AftText; }
             string mon = "Coolant: " + BusMonitor.Fmt(s.CoolantC, " C", "0")
                 + "    Oil: " + s.OilText
