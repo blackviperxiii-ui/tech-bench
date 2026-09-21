@@ -565,6 +565,18 @@ ProtocolDescription=ISO 15765
         Eq("NA temp slot", na.Temp, "not available");
         Eq("NA short message still has no inducement byte", na.Severity, AftState.NoData);
 
+        Eq("full tank SeverityRaw", full.SeverityRaw, 5);
+        Eq("full tank LowLampRaw", full.LowLampRaw, 1);
+        Eq("band severe severity 5", AftState.AttentionBand(5, 0), 2);
+        Eq("band severe severity 4", AftState.AttentionBand(4, -1), 2);
+        Eq("band severe lamp 4", AftState.AttentionBand(0, 4), 2);
+        Eq("band warn severity 1", AftState.AttentionBand(1, 0), 1);
+        Eq("band warn severity 3", AftState.AttentionBand(3, -1), 1);
+        Eq("band warn lamp 1", AftState.AttentionBand(0, 1), 1);
+        Eq("band quiet zeros", AftState.AttentionBand(0, 0), 0);
+        Eq("band quiet missing", AftState.AttentionBand(-1, -1), 0);
+        Eq("band quiet not available", AftState.AttentionBand(7, 7), 0);
+
         Eq("5246 not active", J1939Decode.Severity5246(0), "not active");
         Eq("5246 not available code", J1939Decode.Severity5246(7), "not available");
         Eq("5245 fast blink", J1939Decode.LowLevel5245(4), "fast blink — DEF lower");

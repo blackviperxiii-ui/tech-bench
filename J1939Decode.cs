@@ -133,9 +133,11 @@ namespace J1939Reader
             if (d.Length < 2) return a;
             a.Temp = SlotByte(d, 1, delegate(int raw) { return (raw - 40).ToString() + " C"; });
             if (d.Length < 5) return a;
-            a.LowLamp = LowLevel5245(SaeBits(d[4], 6, 3));
+            a.LowLampRaw = SaeBits(d[4], 6, 3);
+            a.LowLamp = LowLevel5245(a.LowLampRaw);
             if (d.Length < 6) return a;
-            a.Severity = Severity5246(SaeBits(d[5], 6, 3));
+            a.SeverityRaw = SaeBits(d[5], 6, 3);
+            a.Severity = Severity5246(a.SeverityRaw);
             return a;
         }
 
@@ -257,6 +259,15 @@ namespace J1939Reader
         public string Temp = NoData;
         public string Severity = NoData;
         public string LowLamp = NoData;
+        public int LowLampRaw = -1;
+        public int SeverityRaw = -1;
+
+        public static int AttentionBand(int severityRaw, int lowLampRaw)
+        {
+            if (severityRaw == 5 || severityRaw == 4 || lowLampRaw == 4) return 2;
+            if (severityRaw == 1 || severityRaw == 2 || severityRaw == 3 || lowLampRaw == 1) return 1;
+            return 0;
+        }
 
         public string Text()
         {
