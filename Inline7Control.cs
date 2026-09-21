@@ -22,9 +22,9 @@ namespace J1939Reader
         readonly List<Rp1210Api> _adapters;
 
         ComboBox _cboAdapter, _cboModule, _cboChannel;
-        Button _btnConnect, _btnDisc, _btnRefresh, _btnClearPrev, _btnClearActive, _btnPing;
+        Button _btnConnect, _btnDisc, _btnRefresh, _btnClearPrev, _btnClearActive, _btnPostRepair, _btnPing;
         Label _rpm, _lamps, _def;
-        TextBox _status, _mon;
+        TextBox _status, _mon, _aft;
         ListBox _lstActive, _lstPrev, _lstLive, _lstPgn, _lstSa, _lstTimeline, _lstGuidanz;
         TextBox _log, _codeHelp, _liveHelp, _idBox, _diffBox, _guidanzHelp, _histBox, _trendInfo;
         CheckBox _chkSafe, _chkAuto, _chkTsc800, _chkTsc1200, _chkQuietBus, _chkAutoRe;
@@ -243,11 +243,15 @@ namespace J1939Reader
             _btnRefresh = Btn("Refresh codes", delegate { _bus.Enqueue(new BusCommand(BusCmdKind.RequestCodes)); });
             _btnClearPrev = Btn("Clear previous", delegate { DoClearPrevious(); });
             _btnClearActive = Btn("Reset all codes", delegate { DoResetAll(); });
+            _btnPostRepair = Btn("Clear codes after repair", delegate { DoClearAfterRepair(); });
+            _tip.SetToolTip(_btnPostRepair,
+                "DM11 + DM3 to the engine and compressor SA 48, then re-request DM1 and the DEF/SCR tank message. Not a DEF delete.");
             flow.Controls.Add(_btnConnect);
             flow.Controls.Add(_btnDisc);
             flow.Controls.Add(_btnRefresh);
             flow.Controls.Add(_btnClearPrev);
             flow.Controls.Add(_btnClearActive);
+            flow.Controls.Add(_btnPostRepair);
 
             flow.Controls.Add(Btn("Save", delegate { SaveSession(); }));
             flow.Controls.Add(Btn("Report", delegate { PrintReport(true); }));
@@ -297,11 +301,17 @@ namespace J1939Reader
             line.Controls.Add(_lamps);
             line.Controls.Add(_def);
 
+            _aft = UiLayout.WrapText(new AftState().Text());
+            _aft.Dock = DockStyle.Top;
+            _aft.ForeColor = Color.FromArgb(20, 28, 38);
+            _aft.Padding = new Padding(0, 2, 0, 4);
+
             _status = UiLayout.WrapText("Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect.");
             _status.Dock = DockStyle.Top;
             _status.Padding = new Padding(0, 2, 0, 2);
 
             panel.Controls.Add(_status);
+            panel.Controls.Add(_aft);
             panel.Controls.Add(line);
             return panel;
         }
@@ -666,6 +676,7 @@ namespace J1939Reader
             _btnRefresh.Enabled = on;
             _btnClearPrev.Enabled = on;
             _btnClearActive.Enabled = on;
+            if (_btnPostRepair != null) _btnPostRepair.Enabled = on;
             _btnPing.Enabled = on;
             _cboAdapter.Enabled = !on;
             _chkTsc800.Enabled = on;
@@ -740,6 +751,20 @@ namespace J1939Reader
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
             Log("Reset all codes queued — runs on the bus thread, window stays live.");
+            _bus.Enqueue(new BusCommand(BusCmdKind.ResetAll));
+        }
+
+        void DoClearAfterRepair()
+        {
+            var r = MessageBox.Show(this,
+                "Clear codes after repair?\n\n" +
+                "Sends the existing J1939 DM11 (clear active) and DM3 (clear previously active) to the engine and compressor controller (SA 48), then asks again for DM1 and the DEF/SCR tank message (PGN FE56: level 1761, temp 3031, inducement 5246, low-level 5245).\n\n" +
+                "This is a code clear. It does not reset DEF dosing, disable SCR, turn sensors off, or defeat lamps. There is no public SAE routine that resets DEF dosing without disabling SCR, so this button does not send one.\n\n" +
+                "If the fault is still true, those codes come back on the next DM1.\n\nContinue?",
+                "Clear codes after repair",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (r != DialogResult.Yes) return;
+            Log("Clear codes after repair queued — DM11/DM3, then re-read DM1 and DEF/SCR. Not a DEF delete.");
             _bus.Enqueue(new BusCommand(BusCmdKind.ResetAll));
         }
 
@@ -871,6 +896,7 @@ namespace J1939Reader
                 + (s.Protect ? "   Protect: ON" : "") + (s.Mil ? "   MIL: ON" : "");
             _lamps.ForeColor = s.Red ? Color.Firebrick : Color.Black;
             _def.Text = "DEF: " + s.DefText;
+            if (_aft != null && s.AftText != null && _aft.Text != s.AftText) _aft.Text = s.AftText;
             _mon.Text = "Coolant: " + BusMonitor.Fmt(s.CoolantC, " C", "0")
                 + "    Oil: " + s.OilText
                 + "    Battery: " + BusMonitor.Fmt(s.BatteryV, " V", "0.00")

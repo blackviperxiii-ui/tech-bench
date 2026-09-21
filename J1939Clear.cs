@@ -15,6 +15,8 @@ namespace J1939Reader
         public const int Dm3 = 0xFECC;
         public const int Dm11 = 0xFED3;
         public const int Request = 0xEA00;
+        /// <summary>PGN 65110 AT1T1I — DEF level 1761, temp 3031, low-level 5245, inducement 5246.</summary>
+        public const int DefTank = 0xFE56;
 
         public const byte EngineSa = 0;
         public const byte CompressorSa = 48;
@@ -142,6 +144,16 @@ namespace J1939Reader
                 list.Add(Tx(Dm3, da, zeros, Priority));
                 list.Add(Tx(Request, da, RequestPayload(Dm3), Priority));
             }
+            return list;
+        }
+
+        /// <summary>Request the DEF/SCR tank PGN from every shop dest after a code clear.</summary>
+        public static List<J1939Tx> AftertreatmentReadFrames(int engineSa)
+        {
+            var list = new List<J1939Tx>();
+            byte[] dests = Destinations(engineSa);
+            for (int d = 0; d < dests.Length; d++)
+                list.Add(Tx(Request, dests[d], RequestPayload(DefTank), Priority));
             return list;
         }
 
