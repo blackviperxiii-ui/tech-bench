@@ -23,7 +23,8 @@ static class LayoutAudit
             new Size(1381, 877),
             new Size(1093, 614), // 1366x768 at 125% DPI, logical
             new Size(1024, 600),
-            new Size(900, 560)
+            new Size(900, 560),
+            new Size(960, 540) // 192 DPI (200%) shop laptop
         };
 
         int clipped = 0;
@@ -47,7 +48,7 @@ static class LayoutAudit
                 Console.WriteLine("== " + f.Width + "x" + f.Height + " client " + f.ClientSize.Width + "x" + f.ClientSize.Height + " ==");
 
                     clipped += SwitchReport(f);
-                    if (FindTab(f) != null)
+                    if (FindShellTab(f) != null)
                     {
                         Console.WriteLine("  CLIP  shell  still has a TabControl (use wrapping switches)");
                         clipped++;
@@ -71,22 +72,29 @@ static class LayoutAudit
 
                     if (i == 2)
                     {
-                        string[] inner = { "Codes", "Advanced", "Bus", "Trend", "Timeline", "History", "Guidanz" };
-                        for (int k = 0; k < inner.Length; k++)
+                        Control page = FindNamed(f, "shellPage2");
+                        TabControl nested = page == null ? null : FindTab(page);
+                        if (nested == null)
                         {
-                            Button inn = FindNamed(f, "inlineSwitch" + k) as Button;
-                            if (inn == null)
+                            Console.WriteLine("  CLIP  INLINE 7  missing nested TabControl");
+                            clipped++;
+                        }
+                        else
+                        {
+                            if (nested.TabPages.Count != 7)
                             {
-                                Console.WriteLine("  CLIP  INLINE 7  missing inner switch \"" + inner[k] + "\"");
+                                Console.WriteLine("  CLIP  INLINE 7  expected 7 nested tabs, have " + nested.TabPages.Count);
                                 clipped++;
-                                continue;
                             }
-                            inn.PerformClick();
-                            Application.DoEvents();
-                            clipped += Report(f, "INLINE 7 / " + inner[k]);
-                            clipped += SplitReport(f, "INLINE 7 / " + inner[k]);
-                            if (shotDir != null)
-                                Shot(f, shotDir, outer.Width + "x" + outer.Height + "-INLINE-7-" + Safe(inner[k]));
+                            foreach (TabPage inner in nested.TabPages)
+                            {
+                                nested.SelectedTab = inner;
+                                Application.DoEvents();
+                                clipped += Report(f, "INLINE 7 / " + inner.Text);
+                                clipped += SplitReport(f, "INLINE 7 / " + inner.Text);
+                                if (shotDir != null)
+                                    Shot(f, shotDir, outer.Width + "x" + outer.Height + "-INLINE-7-" + Safe(inner.Text));
+                            }
                         }
                     }
                     }
@@ -303,20 +311,6 @@ static class LayoutAudit
         return true;
     }
 
-    static bool HasAutoScrollAncestor(Control c)
-    {
-        Control p = c.Parent;
-        int hops = 0;
-        while (p != null && hops < 12)
-        {
-            ScrollableControl s = p as ScrollableControl;
-            if (s != null && s.AutoScroll) return true;
-            p = p.Parent;
-            hops++;
-        }
-        return false;
-    }
-
     static string ClipReason(Control root, Control c)
     {
         if (!c.Visible) return "not visible";
@@ -325,30 +319,15 @@ static class LayoutAudit
         Rectangle host = root.RectangleToScreen(root.ClientRectangle);
         Rectangle vis = Rectangle.Intersect(host, r);
         if (vis.Width < 16 || vis.Height < 12)
-        {
-            if (HasAutoScrollAncestor(c)) return null;
             return "off form vis=" + vis.Size + " " + Box(c) + " form=" + root.ClientSize;
-        }
 
         Control p = c.Parent;
         int hops = 0;
         while (p != null && hops < 8)
         {
-            if (p is ScrollableControl && ((ScrollableControl)p).AutoScroll)
-            {
-                p = p.Parent;
-                hops++;
-                continue;
-            }
             Rectangle local = p.RectangleToClient(r);
             if (local.Bottom > p.ClientSize.Height + 4 || local.Right > p.ClientSize.Width + 4)
             {
-                if (HasAutoScrollAncestor(c))
-                {
-                    p = p.Parent;
-                    hops++;
-                    continue;
-                }
                 if (local.Top >= p.ClientSize.Height || local.Left >= p.ClientSize.Width)
                     return "outside " + p.GetType().Name + " " + Box(c) + " parent=" + p.ClientSize;
                 if (local.Bottom - p.ClientSize.Height > 10 || local.Right - p.ClientSize.Width > 10)
@@ -384,6 +363,19 @@ static class LayoutAudit
         foreach (Control child in c.Controls)
         {
             TabControl t = FindTab(child);
+            if (t != null) return t;
+        }
+        return null;
+    }
+
+    // Shell chrome must stay on wrap buttons. Nested INLINE 7 tabs are required.
+    static TabControl FindShellTab(Control c)
+    {
+        if (c.Name == "shellPage2") return null;
+        if (c is TabControl) return (TabControl)c;
+        foreach (Control child in c.Controls)
+        {
+            TabControl t = FindShellTab(child);
             if (t != null) return t;
         }
         return null;

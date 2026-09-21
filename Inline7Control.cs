@@ -29,11 +29,8 @@ namespace J1939Reader
         TextBox _log, _codeHelp, _liveHelp, _idBox, _diffBox, _guidanzHelp, _histBox, _trendInfo;
         CheckBox _chkSafe, _chkAuto, _chkTsc800, _chkTsc1200, _chkQuietBus, _chkAutoRe;
         ToolTip _tip;
-        FlowLayoutPanel _innerNav;
-        Panel _innerHost;
-        Control[] _innerPages;
-        Font _innerNorm, _innerBold;
-        int _innerPage;
+        TabControl _tabs;
+        TabPage _tabTrend, _tabTimeline, _tabHistory;
         TrendChart _chart;
         Button _btnKbLookup;
 
@@ -49,6 +46,9 @@ namespace J1939Reader
         int _tscRpm;
         History _history;
         string _historyJob = "";
+        string _hudStatus = "";
+        string _hudAft = "";
+        string _hudMon = "";
 
         /// <summary>Set by the shell so a DTC can be handed to the knowledge-base search.</summary>
         public Action<string> OpenInSearch;
@@ -84,7 +84,6 @@ namespace J1939Reader
         public Inline7Control()
         {
             Dock = DockStyle.Fill;
-            AutoScroll = true;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
             _adapters = BusWorker.Adapters();
@@ -99,31 +98,21 @@ namespace J1939Reader
                 IsBalloon = false
             };
 
-            _innerNorm = new Font("Segoe UI", 10f, FontStyle.Regular);
-            _innerBold = new Font("Segoe UI", 10f, FontStyle.Bold);
-            _innerPages = new Control[]
-            {
-                BuildCodesTab(),
-                BuildAdvancedTab(),
-                BuildBusTab(),
-                BuildTrendTab(),
-                BuildTimelineTab(),
-                BuildHistoryTab(),
-                BuildGuidanzTab()
-            };
-            _innerHost = new Panel { Name = "inlineHost", Dock = DockStyle.Fill, AutoScroll = true };
-            _innerNav = UiLayout.SwitchBar(
-                new[] { "Codes", "Advanced", "Bus", "Trend", "Timeline", "History", "Guidanz" },
-                ShowInner,
-                "inlineSwitch",
-                new Size(88, 28),
-                9.5f);
-            ShowInner(0);
+            _tabs = new TabControl { Dock = DockStyle.Fill, Multiline = true };
+            _tabs.TabPages.Add(BuildCodesTab());
+            _tabs.TabPages.Add(BuildAdvancedTab());
+            _tabs.TabPages.Add(BuildBusTab());
+            _tabTrend = BuildTrendTab();
+            _tabs.TabPages.Add(_tabTrend);
+            _tabTimeline = BuildTimelineTab();
+            _tabs.TabPages.Add(_tabTimeline);
+            _tabHistory = BuildHistoryTab();
+            _tabs.TabPages.Add(_tabHistory);
+            _tabs.TabPages.Add(BuildGuidanzTab());
 
             // Docked children are laid out last-added-first, so the fill control goes in first.
-            Controls.Add(_innerHost);
+            Controls.Add(_tabs);
             Controls.Add(BuildHud());
-            Controls.Add(_innerNav);
             Controls.Add(BuildToolbar());
 
             _ui.Interval = 150;
@@ -144,28 +133,6 @@ namespace J1939Reader
         }
 
         // ---------- layout helpers ----------
-
-        static Panel Page(string name)
-        {
-            return new Panel { Name = name, Dock = DockStyle.Fill, Padding = new Padding(8), AutoScroll = true };
-        }
-
-        void ShowInner(int i)
-        {
-            if (_innerPages == null || i < 0 || i >= _innerPages.Length) return;
-            _innerPage = i;
-            _innerHost.SuspendLayout();
-            _innerHost.Controls.Clear();
-            Control page = _innerPages[i];
-            page.Visible = true;
-            page.Dock = DockStyle.Fill;
-            _innerHost.Controls.Add(page);
-            _innerHost.ResumeLayout(true);
-            UiLayout.MarkSwitch(_innerNav, i, _innerNorm, _innerBold);
-            if (i == 3 && _chart != null) _chart.SetData(_bus.TrendCopy());
-            if (i == 4) RefreshTimeline();
-            if (i == 5) RefreshHistory(false);
-        }
 
         static Button Btn(string text, EventHandler onClick)
         {
@@ -318,9 +285,9 @@ namespace J1939Reader
 
         // ---------- tabs ----------
 
-            Control BuildCodesTab()
-            {
-            var p = Page("inlinePage0");
+        TabPage BuildCodesTab()
+        {
+            var p = new TabPage("Codes") { Padding = new Padding(8) };
 
             _lstActive = List();
             _lstPrev = List();
@@ -372,9 +339,9 @@ namespace J1939Reader
             return p;
         }
 
-            Control BuildAdvancedTab()
-            {
-            var p = Page("inlinePage1");
+        TabPage BuildAdvancedTab()
+        {
+            var p = new TabPage("Advanced diagnostics") { Padding = new Padding(8) };
 
             var warn = UiLayout.WrapText(
                 "These are standard J1939 diagnostic controls the ECM already understands. " +
@@ -502,9 +469,9 @@ namespace J1939Reader
             return c;
         }
 
-            Control BuildBusTab()
-            {
-            var p = Page("inlinePage2");
+        TabPage BuildBusTab()
+        {
+            var p = new TabPage("Bus / snapshots") { Padding = new Padding(8) };
 
             _lstPgn = List();
             _lstSa = List();
@@ -540,9 +507,9 @@ namespace J1939Reader
             return p;
         }
 
-            Control BuildTrendTab()
-            {
-            var p = Page("inlinePage3");
+        TabPage BuildTrendTab()
+        {
+            var p = new TabPage("Trend") { Padding = new Padding(8) };
 
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Channel"));
@@ -576,9 +543,9 @@ namespace J1939Reader
             return p;
         }
 
-            Control BuildTimelineTab()
-            {
-            var p = Page("inlinePage4");
+        TabPage BuildTimelineTab()
+        {
+            var p = new TabPage("Timeline") { Padding = new Padding(8) };
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Every code that came and went on this hookup, newest first."));
             bar.Controls.Add(Btn("Export CSV", delegate { ExportTimeline(); }));
@@ -592,9 +559,9 @@ namespace J1939Reader
             return p;
         }
 
-            Control BuildHistoryTab()
-            {
-            var p = Page("inlinePage5");
+        TabPage BuildHistoryTab()
+        {
+            var p = new TabPage("Unit history") { Padding = new Padding(8) };
             var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 6));
             bar.Controls.Add(Lbl("Faults this model/serial has shown in saved sessions."));
             bar.Controls.Add(Btn("Rescan", delegate { _history = null; _historyJob = ""; RefreshHistory(true); }));
@@ -606,9 +573,9 @@ namespace J1939Reader
             return p;
         }
 
-            Control BuildGuidanzTab()
-            {
-            var p = Page("inlinePage6");
+        TabPage BuildGuidanzTab()
+        {
+            var p = new TabPage("Guidanz reference") { Padding = new Padding(8) };
             var note = UiLayout.WrapText(
                 "Cummins Features & Parameters this app does NOT write — reference only, so you know "
                 + "what lives in Guidanz and what does not belong in a J1939 tool at all.");
@@ -888,7 +855,11 @@ namespace J1939Reader
                        + (s.Stale ? "  —  NO FRAMES for " + s.QuietSeconds.ToString("0") + "s, readings below are stale" : "");
             else if (_bus.WantConnected) status = "Connecting… " + s.LastError;
             else status = "Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect.";
-            if (_status.Text != status) _status.Text = status;
+            if (_hudStatus != status)
+            {
+                _hudStatus = status;
+                _status.Text = status;
+            }
 
             _rpm.ForeColor = s.Stale ? Color.DimGray : Color.Black;
             _rpm.Text = double.IsNaN(s.Rpm) ? "RPM: —" : ("RPM: " + s.Rpm.ToString("0") + (s.Stale ? " (stale)" : ""));
@@ -896,12 +867,21 @@ namespace J1939Reader
                 + (s.Protect ? "   Protect: ON" : "") + (s.Mil ? "   MIL: ON" : "");
             _lamps.ForeColor = s.Red ? Color.Firebrick : Color.Black;
             _def.Text = "DEF: " + s.DefText;
-            if (_aft != null && s.AftText != null && _aft.Text != s.AftText) _aft.Text = s.AftText;
-            _mon.Text = "Coolant: " + BusMonitor.Fmt(s.CoolantC, " C", "0")
+            if (_aft != null && s.AftText != null && _hudAft != s.AftText)
+            {
+                _hudAft = s.AftText;
+                _aft.Text = s.AftText;
+            }
+            string mon = "Coolant: " + BusMonitor.Fmt(s.CoolantC, " C", "0")
                 + "    Oil: " + s.OilText
                 + "    Battery: " + BusMonitor.Fmt(s.BatteryV, " V", "0.00")
                 + "    Fuel rate: " + BusMonitor.Fmt(s.FuelLph, " L/h", "0.00")
                 + (s.TscRpm > 0 ? "    TSC1 holding " + s.TscRpm + " RPM" : "    TSC1 released");
+            if (_hudMon != mon)
+            {
+                _hudMon = mon;
+                _mon.Text = mon;
+            }
 
             FillList(_lstActive, s.Active, ref _sigActive);
             FillList(_lstPrev, s.Prev, ref _sigPrev);
@@ -917,9 +897,9 @@ namespace J1939Reader
                 Repopulate(_lstSa, SaItems(s));
             }
 
-            if (_innerPage == 3) _chart.SetData(_bus.TrendCopy());
-            if (_innerPage == 4) RefreshTimeline();
-            if (_innerPage == 5) RefreshHistory(false);
+            if (_tabs.SelectedTab == _tabTrend) _chart.SetData(_bus.TrendCopy());
+            if (_tabs.SelectedTab == _tabTimeline) RefreshTimeline();
+            if (_tabs.SelectedTab == _tabHistory) RefreshHistory(false);
 
             if (s.LastResetReport != _shownResetReport && s.LastResetReport.Length > 0)
             {
@@ -1150,7 +1130,7 @@ namespace J1939Reader
         {
             try
             {
-                string path = SessionIo.Screenshot(_innerHost != null ? (Control)_innerHost : this);
+                string path = SessionIo.Screenshot(_tabs != null ? (Control)_tabs : this);
                 Log("Screenshot " + path);
                 if (AfterScreenshot != null) AfterScreenshot(path);
             }
