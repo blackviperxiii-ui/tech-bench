@@ -224,6 +224,8 @@ static class LayoutAudit
             string why = ClipReason(root, c);
             if (why != null) hits.Add(where + "  " + Describe(c) + "  " + why);
         }
+        string cut = CaptionCut(c);
+        if (cut != null) hits.Add(where + "  " + cut);
         Label lab = c as Label;
         if (lab != null && lab.Visible && !lab.AutoSize && lab.Height > 0 && lab.Height <= 26
             && !string.IsNullOrEmpty(lab.Text) && lab.Text.Length > 18)
@@ -316,6 +318,24 @@ static class LayoutAudit
             hops++;
         }
         return false;
+    }
+
+    // Full caption must fit. AutoSize does not skip this. An empty form intersection still fails in ClipReason.
+    static string CaptionCut(Control c)
+    {
+        if (!c.Visible) return null;
+        if (!(c is Button) && !(c is Label) && !(c is CheckBox)) return null;
+        string text = c.Text ?? "";
+        if (text.Length == 0) return null;
+        if (text.IndexOf('\n') >= 0 || text.IndexOf('\r') >= 0) return null;
+        Size need = TextRenderer.MeasureText(text, c.Font, new Size(int.MaxValue, 0),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        int avail = c.ClientSize.Width;
+        if (c is CheckBox) avail -= 18;
+        if (need.Width > avail + 8)
+            return "caption cut \"" + (text.Length > 42 ? text.Substring(0, 42) + "…" : text)
+                + "\" need=" + need.Width + " clientW=" + c.ClientSize.Width + " " + Box(c);
+        return null;
     }
 
     static string ClipReason(Control root, Control c)

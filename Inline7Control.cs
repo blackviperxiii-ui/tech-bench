@@ -172,7 +172,16 @@ namespace J1939Reader
 
         static Button Btn(string text, EventHandler onClick)
         {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(0, 0, 6, 0), MinimumSize = new Size(0, 28) };
+            var b = new Button
+            {
+                Text = text,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                AutoEllipsis = false,
+                Margin = new Padding(0, 0, 6, 0),
+                MinimumSize = new Size(0, 28)
+            };
+            UiLayout.SizeToCaption(b);
             if (onClick != null) b.Click += onClick;
             return b;
         }
@@ -426,6 +435,11 @@ namespace J1939Reader
             };
             var toggles = UiLayout.WrapBar(new Padding(8, 4, 8, 6));
             toggles.Dock = DockStyle.Fill;
+            _btnPing = Btn("Ping ECM identity", delegate { PingEcm(); });
+            _btnPing.Margin = new Padding(8, 2, 8, 2);
+            _tip.SetToolTip(_btnPing,
+                "Request VIN, software ID, component ID, hours, and DM1. If RPM/codes are already live but VIN never appears, this industrial ECM may not publish VIN — the computer is still alive.");
+            toggles.Controls.Add(_btnPing);
             _chkSafe = MkToggle(toggles,
                 "Safety: engine already running, compressor unloaded, area clear",
                 "Must be ON before a speed-request toggle will send TSC1. The engine will not start from these switches. TSC1 cannot override Red Stop or DEF inducement.");
@@ -459,11 +473,6 @@ namespace J1939Reader
                 _bus.Enqueue(new BusCommand(BusCmdKind.Dm13, _chkQuietBus.Checked));
             };
 
-            _btnPing = Btn("Ping ECM identity", delegate { PingEcm(); });
-            _btnPing.Margin = new Padding(8, 2, 0, 2);
-            _tip.SetToolTip(_btnPing,
-                "Request VIN, software ID, component ID, hours, and DM1. If RPM/codes are already live but VIN never appears, this industrial ECM may not publish VIN — the computer is still alive.");
-            toggles.Controls.Add(_btnPing);
             g.Controls.Add(toggles);
             toggles.Dock = DockStyle.None;
             EventHandler fitToggles = delegate
@@ -515,7 +524,14 @@ namespace J1939Reader
 
         CheckBox MkToggle(Control parent, string label, string hover)
         {
-            var c = new CheckBox { Text = label, AutoSize = true, Margin = new Padding(0, 2, 16, 2) };
+            var c = new CheckBox
+            {
+                Text = label,
+                AutoSize = true,
+                AutoEllipsis = false,
+                Margin = new Padding(0, 2, 16, 2)
+            };
+            UiLayout.SizeToCaption(c);
             parent.Controls.Add(c);
             _tip.SetToolTip(c, hover);
             c.MouseEnter += delegate
@@ -540,6 +556,7 @@ namespace J1939Reader
             {
                 Text = "Auto-reconnect if the adapter drops",
                 AutoSize = true,
+                AutoEllipsis = false,
                 Checked = true,
                 Margin = new Padding(0, 5, 16, 0)
             };
