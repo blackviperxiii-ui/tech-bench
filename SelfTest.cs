@@ -1552,7 +1552,9 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.4");
+        Eq("stamped version", AppVersion.Number, "1.2.5");
+        Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
+        Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;
         Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
         Check("1.3.0 is newer", Updater.IsNewer("1.3.0", "1.2.0"), "1.3.0 vs 1.2.0");
@@ -1820,6 +1822,9 @@ ProtocolDescription=ISO 15765
             Check("PE assert rejects AnyCPU",
                 pe.IndexOf("AnyCPU", StringComparison.OrdinalIgnoreCase) >= 0
                 && pe.IndexOf("32BITREQUIRED", StringComparison.OrdinalIgnoreCase) >= 0, "no AnyCPU / 32BITREQUIRED check");
+            Check("PE assert native path still requires 0x014C",
+                pe.IndexOf("[switch]$Native", StringComparison.Ordinal) >= 0
+                && pe.IndexOf("OK native PE Machine=0x014C", StringComparison.Ordinal) >= 0, "no native fail-close");
         }
 
         string publish = Path.Combine(root, "tools", "publish-dist.ps1");
@@ -1841,6 +1846,14 @@ ProtocolDescription=ISO 15765
             string yml = File.ReadAllText(workflow);
             Check("CI asserts PE i386",
                 yml.IndexOf("assert-pe-i386.ps1", StringComparison.OrdinalIgnoreCase) >= 0, "no PE assert step");
+            Check("CI TechBench.exe assert keeps the CLR check",
+                yml.IndexOf("assert-pe-i386.ps1 .\\TechBench.exe", StringComparison.OrdinalIgnoreCase) >= 0
+                && yml.IndexOf("assert-pe-i386.ps1 -Native .\\TechBench.exe", StringComparison.OrdinalIgnoreCase) < 0,
+                "TechBench.exe assert lost 32BITREQUIRED");
+            Check("CI fail-closes a non-i386 setup exe",
+                yml.IndexOf("assert-pe-i386.ps1 -Native", StringComparison.OrdinalIgnoreCase) >= 0
+                && yml.IndexOf("TechBench-Setup-", StringComparison.OrdinalIgnoreCase) >= 0,
+                "setup exe is not fail-closed");
             Check("CI documents DIST_REPO_TOKEN",
                 yml.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) >= 0, "no secret name");
             Check("CI does not invent a new installer workflow path",
