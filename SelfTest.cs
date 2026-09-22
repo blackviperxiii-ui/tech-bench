@@ -3,7 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Text;
+using System.Threading;
 using J1939Reader;
 using TechBench;
 
@@ -1292,7 +1294,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.2");
+        Eq("stamped version", AppVersion.Number, "1.2.3");
         Version parsed;
         Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
         Check("1.3.0 is newer", Updater.IsNewer("1.3.0", "1.2.0"), "1.3.0 vs 1.2.0");
@@ -1344,7 +1346,150 @@ ProtocolDescription=ISO 15765
             && script.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) < 0, "token");
         Check("default feed is public HTTPS",
             Updater.DefaultManifestUrl.StartsWith("https://"), Updater.DefaultManifestUrl);
+
+        // Newer defaults to false. That used to be the "is current" branch.
+        var unset = new UpdateCheck();
+        Check("unset check is not current", !Updater.IsCurrent(unset), Updater.StatusText(unset));
+        Check("unset check reads as failed",
+            Updater.StatusText(unset).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
+            && Updater.StatusText(unset).IndexOf("is current", StringComparison.Ordinal) < 0,
+            Updater.StatusText(unset));
+        var http404 = new UpdateCheck { Error = "HTTP 404 Not Found" };
+        Check("404 is not current", !Updater.IsCurrent(http404) && !Updater.IsAvailable(http404), Updater.StatusText(http404));
+        Check("404 reads as failed",
+            Updater.StatusText(http404).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
+            && Updater.StatusText(http404).IndexOf("404", StringComparison.Ordinal) >= 0
+            && Updater.StatusText(http404).IndexOf("is current", StringComparison.Ordinal) < 0,
+            Updater.StatusText(http404));
+
+        string missingUrl = new Uri(Path.Combine(dir, "missing-latest.json")).AbsoluteUri;
+        Check("file url stays allowed", missingUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase), missingUrl);
+        UpdateCheck missing = Updater.Check(missingUrl);
+        Check("missing manifest is not current", !Updater.IsCurrent(missing), Updater.StatusText(missing));
+        Check("missing manifest reads as failed",
+            Updater.StatusText(missing).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
+            && Updater.StatusText(missing).IndexOf("is current", StringComparison.Ordinal) < 0,
+            Updater.StatusText(missing));
+
+        string badPath = Path.Combine(dir, "bad-latest.json");
+        File.WriteAllText(badPath, "{ this is not json");
+        UpdateCheck bad = Updater.Check(new Uri(badPath).AbsoluteUri);
+        Check("unreadable latest.json is not current", !Updater.IsCurrent(bad), Updater.StatusText(bad));
+        Check("unreadable latest.json reads as failed",
+            Updater.StatusText(bad).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
+            && Updater.StatusText(bad).IndexOf("is current", StringComparison.Ordinal) < 0,
+            Updater.StatusText(bad));
+
+        string junkVer = Path.Combine(dir, "junk-ver.json");
+        File.WriteAllText(junkVer, ManifestJson("nope", "http://127.0.0.1/TechBench.exe"));
+        UpdateCheck junk = Updater.Check(new Uri(junkVer).AbsoluteUri);
+        Check("unreadable version is not current", !Updater.IsCurrent(junk), Updater.StatusText(junk));
+
+        string samePath = Path.Combine(dir, "same-latest.json");
+        File.WriteAllText(samePath, ManifestJson(AppVersion.Number, "file:///C:/TechBench.exe"));
+        UpdateCheck same = Updater.Check(new Uri(samePath).AbsoluteUri);
+        Check("same version file feed is current", Updater.IsCurrent(same), Updater.StatusText(same));
+        Check("same version says current",
+            Updater.StatusText(same).IndexOf("is current", StringComparison.Ordinal) >= 0, Updater.StatusText(same));
+
+        string newerPath = Path.Combine(dir, "newer-latest.json");
+        File.WriteAllText(newerPath, ManifestJson("9.9.9", "http://127.0.0.1/TechBench.exe"));
+        UpdateCheck newer = Updater.Check(new Uri(newerPath).AbsoluteUri);
+        Check("newer file feed is available", Updater.IsAvailable(newer) && !Updater.IsCurrent(newer), Updater.StatusText(newer));
+        Check("newer file feed is not worded as current",
+            Updater.StatusText(newer).IndexOf("is current", StringComparison.Ordinal) < 0, Updater.StatusText(newer));
+
+        HttpFeedTests();
         try { Directory.Delete(dir, true); } catch { }
+    }
+
+    static string ManifestJson(string version, string url)
+    {
+        return "{\"version\":\"" + version
+            + "\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"url\":\""
+            + url + "\"}";
+    }
+
+    static void HttpFeedTests()
+    {
+        HttpListener listener = null;
+        int port = 0;
+        var rng = new Random();
+        for (int i = 0; i < 8 && listener == null; i++)
+        {
+            port = 18000 + rng.Next(2000);
+            var attempt = new HttpListener();
+            try
+            {
+                attempt.Prefixes.Add("http://127.0.0.1:" + port + "/");
+                attempt.Start();
+                listener = attempt;
+            }
+            catch
+            {
+                try { attempt.Close(); } catch { }
+            }
+        }
+        Check("local http feed", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        try
+        {
+            string root = "http://127.0.0.1:" + port + "/";
+            UpdateCheck denied = CheckHttp(listener, 404, "missing", root + "latest.json");
+            Check("http 404 is not current", !Updater.IsCurrent(denied), Updater.StatusText(denied));
+            Check("http 404 reads as failed",
+                Updater.StatusText(denied).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
+                && Updater.StatusText(denied).IndexOf("404", StringComparison.Ordinal) >= 0
+                && Updater.StatusText(denied).IndexOf("is current", StringComparison.Ordinal) < 0,
+                Updater.StatusText(denied));
+
+            UpdateCheck broken = CheckHttp(listener, 200, "{ not json", root + "bad.json");
+            Check("http 200 unreadable json is not current", !Updater.IsCurrent(broken), Updater.StatusText(broken));
+
+            UpdateCheck err = CheckHttp(listener, 500, "nope", root + "err.json");
+            Check("http 500 is not current", !Updater.IsCurrent(err), Updater.StatusText(err));
+            Check("http 500 reads as failed",
+                Updater.StatusText(err).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
+                && Updater.StatusText(err).IndexOf("is current", StringComparison.Ordinal) < 0,
+                Updater.StatusText(err));
+
+            UpdateCheck offer = CheckHttp(listener, 200, ManifestJson("9.9.9", root + "TechBench.exe"), root + "ok.json");
+            Check("http feed can report a newer build", Updater.IsAvailable(offer), Updater.StatusText(offer));
+            Check("http is not forced to https", root.StartsWith("http://", StringComparison.OrdinalIgnoreCase), root);
+        }
+        finally
+        {
+            try { listener.Close(); } catch { }
+        }
+    }
+
+    static UpdateCheck CheckHttp(HttpListener listener, int status, string body, string url)
+    {
+        Exception boom = null;
+        var worker = new Thread(delegate()
+        {
+            try
+            {
+                HttpListenerContext ctx = listener.GetContext();
+                byte[] bytes = Encoding.UTF8.GetBytes(body ?? "");
+                ctx.Response.StatusCode = status;
+                ctx.Response.ContentType = "application/json";
+                ctx.Response.ContentLength64 = bytes.Length;
+                ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+                ctx.Response.OutputStream.Close();
+            }
+            catch (Exception ex)
+            {
+                boom = ex;
+            }
+        });
+        worker.IsBackground = true;
+        worker.Start();
+        UpdateCheck result = Updater.Check(url);
+        worker.Join(12000);
+        if (boom != null)
+            Check("http feed server", false, boom.Message);
+        return result;
     }
 
     static void InstallerTests()

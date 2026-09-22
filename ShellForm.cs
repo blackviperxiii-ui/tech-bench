@@ -401,23 +401,13 @@ namespace TechBench
         void FinishCheck(UpdateCheck result, bool interactive)
         {
             _checking = false;
-            if (result == null)
+            if (!Updater.IsAvailable(result))
             {
-                if (interactive)
-                    MessageBox.Show(this, "Update check failed.", "Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (!result.Ok)
-            {
-                if (interactive)
-                    MessageBox.Show(this, result.Error, "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            if (!result.Newer)
-            {
-                if (interactive)
-                    MessageBox.Show(this, "Tech Bench " + AppVersion.Number + " is current.",
-                        "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (!interactive) return;
+                MessageBoxIcon icon = Updater.IsCurrent(result)
+                    ? MessageBoxIcon.Information
+                    : MessageBoxIcon.Warning;
+                MessageBox.Show(this, Updater.StatusText(result), "Updates", MessageBoxButtons.OK, icon);
                 return;
             }
 
