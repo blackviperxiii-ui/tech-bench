@@ -21,6 +21,11 @@ namespace TechBench
     {
         public string Error;
         public UpdateManifest Manifest;
+        /// <summary>
+        /// True only after a manifest was read and its version parsed against this build.
+        /// Newer defaults to false; that default is not "up to date".
+        /// </summary>
+        public bool Checked;
         public bool Newer;
         public bool Ok { get { return Manifest != null && string.IsNullOrEmpty(Error); } }
     }
@@ -78,6 +83,34 @@ namespace TechBench
             if (!TryParseVersion(remote, out a) || !TryParseVersion(local, out b))
                 return false;
             return a > b;
+        }
+
+        /// <summary>
+        /// "Up to date" only after a readable manifest compared as not newer.
+        /// A missing file, HTTP error, 404, or unreadable latest.json leaves Checked false.
+        /// </summary>
+        public static bool IsCurrent(UpdateCheck result)
+        {
+            return result != null && result.Checked && result.Ok && !result.Newer;
+        }
+
+        public static bool IsAvailable(UpdateCheck result)
+        {
+            return result != null && result.Checked && result.Ok && result.Newer;
+        }
+
+        public static string StatusText(UpdateCheck result)
+        {
+            if (IsAvailable(result))
+                return "Version " + result.Manifest.Version + " is available (you have " + AppVersion.Number + ").";
+            if (IsCurrent(result))
+                return "Tech Bench " + AppVersion.Number + " is current.";
+            string detail = result == null || result.Error == null ? "" : result.Error.Trim();
+            if (detail.Length == 0)
+                return "Update check failed.";
+            if (detail.StartsWith("Update check failed", StringComparison.OrdinalIgnoreCase))
+                return detail;
+            return "Update check failed. " + detail;
         }
 
         public static UpdateManifest ParseManifest(string json)
@@ -245,18 +278,35 @@ namespace TechBench
             var result = new UpdateCheck();
             try
             {
+                if (string.IsNullOrWhiteSpace(manifestUrl))
+                    throw new InvalidOperationException("Update URL is empty.");
                 EnsureTls();
                 string json = DownloadString(manifestUrl);
                 result.Manifest = ParseManifest(json);
                 if (result.Manifest == null)
                 {
-                    result.Error = "latest.json was missing version, url, or sha256.";
+                    result.Error = "latest.json was missing or unreadable (version, url, or sha256).";
+                    return result;
+                }
+                Version parsed;
+                if (!TryParseVersion(result.Manifest.Version, out parsed)
+                    || !TryParseVersion(AppVersion.Number, out parsed)
+                    || parsed == null)
+                {
+                    result.Manifest = null;
+                    result.Newer = false;
+                    result.Checked = false;
+                    result.Error = "latest.json version could not be read.";
                     return result;
                 }
                 result.Newer = IsNewer(result.Manifest.Version, AppVersion.Number);
+                result.Checked = true;
             }
             catch (Exception ex)
             {
+                result.Manifest = null;
+                result.Newer = false;
+                result.Checked = false;
                 result.Error = FriendlyNetError(ex);
             }
             return result;
@@ -295,6 +345,8 @@ namespace TechBench
         {
             var req = (HttpWebRequest)WebRequest.Create(url);
             req.UserAgent = "TechBench/" + AppVersion.Number;
+            if (req.RequestUri != null && req.RequestUri.IsLoopback)
+                req.Proxy = null;
             req.Timeout = 8000;
             req.ReadWriteTimeout = 60000;
             req.AllowAutoRedirect = true;
@@ -320,15 +372,39 @@ namespace TechBench
             if (url.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
             {
                 string path = new Uri(url).LocalPath;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                    throw new FileNotFoundException("latest.json was not found.", path ?? "");
                 return File.ReadAllBytes(path);
             }
             var req = MakeRequest(url);
-            using (var resp = (HttpWebResponse)req.GetResponse())
+            HttpWebResponse resp = null;
+            try
+            {
+                resp = (HttpWebResponse)req.GetResponse();
+            }
+            catch (WebException ex)
+            {
+                var http = ex.Response as HttpWebResponse;
+                if (http != null)
+                {
+                    int code = (int)http.StatusCode;
+                    string desc = http.StatusDescription ?? "";
+                    try { http.Close(); } catch { }
+                    throw new InvalidOperationException("HTTP " + code + " " + desc);
+                }
+                throw;
+            }
+            using (resp)
             using (var s = resp.GetResponseStream())
             using (var ms = new MemoryStream())
             {
+                int code = (int)resp.StatusCode;
+                if (code < 200 || code >= 300)
+                    throw new InvalidOperationException("HTTP " + code + " " + (resp.StatusDescription ?? ""));
                 if (s == null) throw new InvalidOperationException("Empty response.");
                 s.CopyTo(ms);
+                if (ms.Length == 0)
+                    throw new InvalidOperationException("Update feed was empty.");
                 return ms.ToArray();
             }
         }
