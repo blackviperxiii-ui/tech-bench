@@ -1,0 +1,5091 @@
+{
+  "meta": {
+    "name": "Air Compressor Troubleshooting Knowledge Base",
+    "version": "1.0.0",
+    "created": "2026-08-11T16:38:06.373Z",
+    "location": "C:\\Users\\jerem\\Documents\\air-compressor-kb",
+    "purpose": "Local offline-friendly DB of compressor fault codes, controller tips, and symptom playbooks for field service with Grok.",
+    "disclaimer": "NOT a substitute for OEM manuals, training, or site safety procedures. Codes vary by software revision and options. Verify against the manual for the exact serial/controller before parts replacement. Always LOTO and depressurize.",
+    "how_to_use_with_grok": [
+      "Ask: \"Look up IR Xe code 31\" or \"Kaeser 0004\" or \"high temp rotary screw\"",
+      "Paste a photo of the controller + nameplate (Alt+V on Windows)",
+      "Add your own codes: node scripts/add-code.js --interactive  OR edit data/user-codes.json",
+      "Search locally: node scripts/query.js 31",
+      "Search: node scripts/query.js --brand kaeser motor"
+    ],
+    "stats": {
+      "brands": 13,
+      "controllers": 6,
+      "codes": 155,
+      "access_topics": 6
+    }
+  },
+  "brands": [
+    {
+      "id": "atlas-copco",
+      "name": "Atlas Copco",
+      "aliases": [
+        "AC",
+        "GA",
+        "GX",
+        "GAVSD",
+        "Elektronikon"
+      ]
+    },
+    {
+      "id": "ingersoll-rand",
+      "name": "Ingersoll Rand",
+      "aliases": [
+        "IR",
+        "Ingersoll",
+        "Xe-90",
+        "Xe-145",
+        "R-Series",
+        "Nirvana",
+        "SSR"
+      ]
+    },
+    {
+      "id": "kaeser",
+      "name": "Kaeser",
+      "aliases": [
+        "Sigma Control",
+        "Sigma Control 2",
+        "SC2",
+        "SCB"
+      ]
+    },
+    {
+      "id": "sullair",
+      "name": "Sullair",
+      "aliases": [
+        "Supervisor",
+        "Supervisor II",
+        "WS Controller"
+      ]
+    },
+    {
+      "id": "gardner-denver",
+      "name": "Gardner Denver",
+      "aliases": [
+        "GD",
+        "AirSmart",
+        "Auto Sentry",
+        "Electra-Screw"
+      ]
+    },
+    {
+      "id": "quincy",
+      "name": "Quincy",
+      "aliases": [
+        "QSI",
+        "QGV",
+        "QR"
+      ]
+    },
+    {
+      "id": "hitachi",
+      "name": "Hitachi",
+      "aliases": [
+        "SRL",
+        "DSP"
+      ]
+    },
+    {
+      "id": "kobelco",
+      "name": "Kobelco",
+      "aliases": [
+        "Kobe Steel"
+      ]
+    },
+    {
+      "id": "compair",
+      "name": "CompAir",
+      "aliases": [
+        "Gardner Denver CompAir",
+        "L-Series"
+      ]
+    },
+    {
+      "id": "chicago-pneumatic",
+      "name": "Chicago Pneumatic",
+      "aliases": [
+        "CP"
+      ]
+    },
+    {
+      "id": "fs-curtis",
+      "name": "FS-Curtis",
+      "aliases": [
+        "Curtis"
+      ]
+    },
+    {
+      "id": "champion",
+      "name": "Champion",
+      "aliases": []
+    },
+    {
+      "id": "generic",
+      "name": "Generic / Multi-Brand",
+      "aliases": [
+        "rotary screw",
+        "recip",
+        "piston"
+      ]
+    }
+  ],
+  "controllers": [
+    {
+      "id": "elektronikon",
+      "brand_id": "atlas-copco",
+      "name": "Elektronikon (Mk IV / Mk5 / Graphic)",
+      "series": [
+        "GA",
+        "GA VSD",
+        "GX",
+        "ZR",
+        "ZT"
+      ],
+      "panel_notes": "Touch or key panel; shows alarm/warning text and numeric codes depending on generation. Event history under menu. Reset usually requires correcting fault then Reset/Enter.",
+      "access_levels": "Operator menus open; service/setup levels require service access (authorized tech / service tool). Do not change regulation setpoints without understanding process demand.",
+      "how_to_read_codes": "Note exact on-screen text AND numeric code if present. Capture photo of Event History. Distinguish Warning vs Shutdown.",
+      "sources": [
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ]
+    },
+    {
+      "id": "xe-90-145",
+      "brand_id": "ingersoll-rand",
+      "name": "Xe-90M / Xe-145M",
+      "series": [
+        "R-Series",
+        "RS-Series",
+        "Nirvana (related)"
+      ],
+      "panel_notes": "Graphic controller. Warning flashes; Trip/Alarm solid. Event log lists first-out. Web pages available on some units for logs.",
+      "access_levels": "Service levels 0-2 on controller. Level 2 is service. Use only with training. Field Service Tool (FST) for deeper access.",
+      "how_to_read_codes": "Warning/Trip codes are numeric (01-55, 200, VSD 100+). Record both code number and full on-screen text.",
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ]
+    },
+    {
+      "id": "sigma-control-2",
+      "brand_id": "kaeser",
+      "name": "SIGMA CONTROL 2",
+      "series": [
+        "AS",
+        "BSD",
+        "CSD",
+        "DSD",
+        "ESD",
+        "FSD",
+        "SFC"
+      ],
+      "panel_notes": "Messages often plain text plus numeric message IDs. Alarm history stored. RFID/service card used for higher access on many units.",
+      "access_levels": "Access level 1 operator; level 2 service (service card or authorized code per site policy). Do not reset high-temp trips without finding root cause.",
+      "how_to_read_codes": "Photograph display. Note message ID (e.g. 0001 A Direction of rotation) and whether Alarm (A) vs Warning (W).",
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 user manuals"
+      ]
+    },
+    {
+      "id": "sullair-supervisor",
+      "brand_id": "sullair",
+      "name": "Supervisor / Supervisor II / WS",
+      "series": [
+        "LS",
+        "TS",
+        "ShopTek",
+        "V-Series"
+      ],
+      "panel_notes": "Fault messages on main display line. ? key often shows probable cause. Fault log holds last faults with hours.",
+      "access_levels": "Menus for control parameters, maintenance timers, factory setup. Service passwords vary by software/revision — confirm with OEM/manual for your serial.",
+      "how_to_read_codes": "Write exact message text. For VSD packages also read drive fault code.",
+      "sources": [
+        "Sullair Supervisor Controller User Manuals"
+      ]
+    },
+    {
+      "id": "airsmart",
+      "brand_id": "gardner-denver",
+      "name": "AirSmart / Auto Sentry / Governor",
+      "series": [
+        "Electra-Saver",
+        "Electra-Screw",
+        "VS series"
+      ],
+      "panel_notes": "Major.minor alarm codes (e.g. A1.x airend). Shutdown LED red; Service LED yellow.",
+      "access_levels": "Diagnostics menus under controller. Service access per manual / authorized distributor.",
+      "how_to_read_codes": "Record major code and minor code, plus advisory text (#301 style on some software).",
+      "sources": [
+        "Gardner Denver AirSmart Controller User Manual"
+      ]
+    },
+    {
+      "id": "quincy-qsi",
+      "brand_id": "quincy",
+      "name": "QSI / QGV graphic controller",
+      "series": [
+        "QSI",
+        "QGV"
+      ],
+      "panel_notes": "Service LED, general alarm LED, automatic operation LED.",
+      "access_levels": "Operator vs modify menus; follow instruction manual for service.",
+      "how_to_read_codes": "Common text faults: TEMP FAULT, PRES FAULT, HIGH Temp, H.A.P. SHDN, CONT. FAULT, DRYER CONT.",
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ]
+    }
+  ],
+  "codes": [
+    {
+      "id": "ingersoll-rand-xe-90-145-01",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "01",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 1AVPT",
+      "description": "Sensor Failure 1AVPT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Inlet vacuum sensor open/short",
+        "Wiring"
+      ],
+      "checks": [
+        "Check 1AVPT connector",
+        "Inspect harness"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-02",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "02",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 3APT",
+      "description": "Sensor Failure 3APT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Pressure sensor fault"
+      ],
+      "checks": [
+        "Check 3APT wiring and supply",
+        "Compare to gauge"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-03",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "03",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 4APT",
+      "description": "Sensor Failure 4APT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Pressure transducer fault"
+      ],
+      "checks": [
+        "Inspect 4APT connector"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-04",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "04",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 5CPT",
+      "description": "Sensor Failure 5CPT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Coolant filter inlet pressure sensor"
+      ],
+      "checks": [
+        "Check 5CPT wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-05",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "05",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 6CPT",
+      "description": "Sensor Failure 6CPT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Coolant filter outlet pressure sensor"
+      ],
+      "checks": [
+        "Check 6CPT wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-06",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "06",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 10APT (Remote)",
+      "description": "Sensor Failure 10APT (Remote) (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Remote pressure sensor missing/failed"
+      ],
+      "checks": [
+        "Disable remote sensor if unused",
+        "Check 10APT wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-07",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "07",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 2APT",
+      "description": "Sensor Failure 2APT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Sump/package pressure sensor"
+      ],
+      "checks": [
+        "Inspect 2APT"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-08",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "08",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 7APT",
+      "description": "Sensor Failure 7APT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dryer-related pressure sensor"
+      ],
+      "checks": [
+        "Check dryer option sensors"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-09",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "09",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 2CTT",
+      "description": "Sensor Failure 2CTT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Coolant temperature sensor"
+      ],
+      "checks": [
+        "Check 2CTT probe/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-10",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "10",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 2ATT",
+      "description": "Sensor Failure 2ATT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Airend temperature sensor failure"
+      ],
+      "checks": [
+        "Inspect 2ATT at airend"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-11",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "11",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure 4ATT",
+      "description": "Sensor Failure 4ATT (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Aftercooler/discharge air temp sensor"
+      ],
+      "checks": [
+        "Check 4ATT"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-17",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "17",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "High Inlet Vacuum",
+      "description": "High Inlet Vacuum (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dirty inlet filter",
+        "Blocked intake",
+        "Inlet valve problem"
+      ],
+      "checks": [
+        "Replace inlet filter",
+        "Check intake restriction",
+        "Inspect inlet valve"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-18",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "18",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Motor Overload (Main)",
+      "description": "Motor Overload (Main) (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "OL trip",
+        "Low voltage",
+        "Mechanical bind"
+      ],
+      "checks": [
+        "OL setting vs FLA",
+        "Phase currents",
+        "Free rotation LOTO"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-19",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "19",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Fan Motor Overload",
+      "description": "Fan Motor Overload (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Fan OL",
+        "Fan bearing",
+        "Debris"
+      ],
+      "checks": [
+        "Fan free spin",
+        "Clean cooler",
+        "Verify fan OL"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-22",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "22",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Check Motor Rotation",
+      "description": "Check Motor Rotation (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Wrong phase sequence"
+      ],
+      "checks": [
+        "Swap two power leads LOTO"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-25",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "25",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Remote Stop Failure",
+      "description": "Remote Stop Failure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Remote stop circuit issue"
+      ],
+      "checks": [
+        "Check remote stop wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-26",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "26",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Remote Start Failure",
+      "description": "Remote Start Failure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Remote start circuit issue"
+      ],
+      "checks": [
+        "Verify remote start enable/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-28",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "28",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Low Sump Pressure",
+      "description": "Low Sump Pressure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Oil loss",
+        "Separator issues",
+        "Blowdown stuck"
+      ],
+      "checks": [
+        "Oil level procedure",
+        "Scavenge line",
+        "External leaks"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-29",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "29",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "High Air Pressure",
+      "description": "High Air Pressure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Inlet valve stuck loaded",
+        "Regulation fault",
+        "Setpoint high"
+      ],
+      "checks": [
+        "Online/offline setpoints",
+        "Inlet valve/solenoid",
+        "System demand"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-30",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "30",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "High Coolant Filter Pressure Drop",
+      "description": "High Coolant Filter Pressure Drop (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Plugged coolant filter"
+      ],
+      "checks": [
+        "Replace coolant filter",
+        "Check oil condition"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-31",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "31",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "High A/E Discharge Temperature",
+      "description": "High A/E Discharge Temperature (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dirty cooler",
+        "Low oil",
+        "Thermal valve",
+        "High ambient",
+        "Fan failure"
+      ],
+      "checks": [
+        "Oil level",
+        "Clean coolers",
+        "Fan operation",
+        "Thermal valve",
+        "Ambient"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-32",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "32",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Emergency Stop",
+      "description": "Emergency Stop (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "E-stop pressed/open"
+      ],
+      "checks": [
+        "Reset E-stop",
+        "Check E-stop string"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-33",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "33",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Change Inlet Filter",
+      "description": "Change Inlet Filter (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Maintenance interval/DP"
+      ],
+      "checks": [
+        "Replace inlet filter",
+        "Reset service timer"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-34",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "34",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Change Separator Element",
+      "description": "Change Separator Element (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Separator DP/hours"
+      ],
+      "checks": [
+        "Replace separator",
+        "Check carryover"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-35",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "35",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Change Coolant Filter",
+      "description": "Change Coolant Filter (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Filter DP/hours"
+      ],
+      "checks": [
+        "Replace coolant filter"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-36",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "36",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Error (Calibration)",
+      "description": "Sensor Error (Calibration) (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Calibration invalid"
+      ],
+      "checks": [
+        "Recalibrate per service procedure"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-38",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "38",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "100 Hours To Service",
+      "description": "100 Hours To Service (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Service due soon"
+      ],
+      "checks": [
+        "Plan PM"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-39",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "39",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Service Required",
+      "description": "Service Required (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Service interval elapsed"
+      ],
+      "checks": [
+        "Perform scheduled service"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-40",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "40",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Alarm – Service Required",
+      "description": "Alarm – Service Required (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Service overdue"
+      ],
+      "checks": [
+        "Schedule PM"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-41",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "41",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Auxiliary 2",
+      "description": "Auxiliary 2 (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Aux digital input 2"
+      ],
+      "checks": [
+        "Check aux 2 device/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-42",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "42",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Auxiliary 1",
+      "description": "Auxiliary 1 (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Aux digital input 1"
+      ],
+      "checks": [
+        "Check aux 1 device/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-43",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "43",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Condensate Drain Error",
+      "description": "Condensate Drain Error (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Auto drain failed"
+      ],
+      "checks": [
+        "Test drain valve",
+        "Clear lines"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-48",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "48",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Unit Too Cold To Start",
+      "description": "Unit Too Cold To Start (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Low ambient"
+      ],
+      "checks": [
+        "Warm package",
+        "Check heaters/options"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-49",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "49",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "High Sump Pressure",
+      "description": "High Sump Pressure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Blowdown failed",
+        "MPV",
+        "Separator blockage"
+      ],
+      "checks": [
+        "Blowdown solenoid",
+        "MPV",
+        "Separator DP"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-50",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "50",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "High Interstage Pressure",
+      "description": "High Interstage Pressure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "2-stage interstage high"
+      ],
+      "checks": [
+        "Interstage cooler/valves"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-51",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "51",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Dryer High Pressure",
+      "description": "Dryer High Pressure (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Integrated dryer issue"
+      ],
+      "checks": [
+        "Service dryer"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-52",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "52",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Dryer Freeze Warning",
+      "description": "Dryer Freeze Warning (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dryer freeze risk"
+      ],
+      "checks": [
+        "Dryer settings/ambient"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-53",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "53",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Condenser Low (Dryer)",
+      "description": "Condenser Low (Dryer) (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dryer condenser low"
+      ],
+      "checks": [
+        "Dryer service"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-54",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "54",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Condenser High (Dryer)",
+      "description": "Condenser High (Dryer) (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dryer condenser high"
+      ],
+      "checks": [
+        "Clean condenser",
+        "Dryer fan"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-55",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "55",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Change HE Filter (Dryer)",
+      "description": "Change HE Filter (Dryer) (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "Dryer HE filter due"
+      ],
+      "checks": [
+        "Replace filter"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-200",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "200",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Check SD Card",
+      "description": "Check SD Card (Xe-90M/145M fixed-speed trip/warning map)",
+      "likely_causes": [
+        "SD card missing/corrupt"
+      ],
+      "checks": [
+        "Reseat/replace SD card"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "r-series",
+        "fixed-speed"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-18",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-18",
+      "code_aliases": [
+        "18"
+      ],
+      "severity": "trip",
+      "title": "High VSD Temperature",
+      "description": "High VSD Temperature",
+      "likely_causes": [
+        "Drive overheating"
+      ],
+      "checks": [
+        "Clean VSD heat sink/filters",
+        "VSD fans",
+        "Ambient"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-19",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-19",
+      "code_aliases": [
+        "19"
+      ],
+      "severity": "trip",
+      "title": "Blower Fault",
+      "description": "Blower Fault",
+      "likely_causes": [
+        "Blower drive alarm"
+      ],
+      "checks": [
+        "Read blower drive LCP/HIM code"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-20",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-20",
+      "code_aliases": [
+        "20"
+      ],
+      "severity": "trip",
+      "title": "VSD Communication Failure",
+      "description": "VSD Communication Failure",
+      "likely_causes": [
+        "Comm loss controller↔drive"
+      ],
+      "checks": [
+        "Comm cable/termination",
+        "Power cycle procedure"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-23",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-23",
+      "code_aliases": [
+        "23"
+      ],
+      "severity": "trip",
+      "title": "Stop Failure",
+      "description": "Stop Failure",
+      "likely_causes": [
+        "Did not stop as commanded"
+      ],
+      "checks": [
+        "Contactor feedback",
+        "Drive inhibit"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-24",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-24",
+      "code_aliases": [
+        "24"
+      ],
+      "severity": "trip",
+      "title": "Check Incoming Power",
+      "description": "Check Incoming Power",
+      "likely_causes": [
+        "Supply voltage issue"
+      ],
+      "checks": [
+        "Measure L1-L2-L3",
+        "Phase loss"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-27",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-27",
+      "code_aliases": [
+        "27"
+      ],
+      "severity": "trip",
+      "title": "Incorrect VSD Type",
+      "description": "Incorrect VSD Type",
+      "likely_causes": [
+        "Wrong drive type/parameters"
+      ],
+      "checks": [
+        "Verify drive PN matches package"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-vsd-49",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "VSD-49",
+      "code_aliases": [
+        "49"
+      ],
+      "severity": "trip",
+      "title": "Power Module Timeout",
+      "description": "Power Module Timeout",
+      "likely_causes": [
+        "Drive power module timeout"
+      ],
+      "checks": [
+        "Drive diagnostics required"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "xe",
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "high",
+      "notes": "Variable-speed map. VSD Fault 100-144 need the drive keypad code.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": true
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-100",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "100",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 0",
+      "description": "Xe VSD fault slot 0. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-101",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "101",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 1",
+      "description": "Xe VSD fault slot 1. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-102",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "102",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 2",
+      "description": "Xe VSD fault slot 2. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-103",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "103",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 3",
+      "description": "Xe VSD fault slot 3. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-104",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "104",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 4",
+      "description": "Xe VSD fault slot 4. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-105",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "105",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 5",
+      "description": "Xe VSD fault slot 5. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-106",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "106",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 6",
+      "description": "Xe VSD fault slot 6. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-107",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "107",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 7",
+      "description": "Xe VSD fault slot 7. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-108",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "108",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 8",
+      "description": "Xe VSD fault slot 8. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-109",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "109",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 9",
+      "description": "Xe VSD fault slot 9. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-110",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "110",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 10",
+      "description": "Xe VSD fault slot 10. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-111",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "111",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 11",
+      "description": "Xe VSD fault slot 11. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-112",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "112",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 12",
+      "description": "Xe VSD fault slot 12. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-113",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "113",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 13",
+      "description": "Xe VSD fault slot 13. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-114",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "114",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 14",
+      "description": "Xe VSD fault slot 14. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-115",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "115",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 15",
+      "description": "Xe VSD fault slot 15. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-116",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "116",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 16",
+      "description": "Xe VSD fault slot 16. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-117",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "117",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 17",
+      "description": "Xe VSD fault slot 17. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-118",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "118",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 18",
+      "description": "Xe VSD fault slot 18. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-119",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "119",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 19",
+      "description": "Xe VSD fault slot 19. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-120",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "120",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 20",
+      "description": "Xe VSD fault slot 20. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-121",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "121",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 21",
+      "description": "Xe VSD fault slot 21. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-122",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "122",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 22",
+      "description": "Xe VSD fault slot 22. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-123",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "123",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 23",
+      "description": "Xe VSD fault slot 23. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-124",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "124",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 24",
+      "description": "Xe VSD fault slot 24. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-125",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "125",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 25",
+      "description": "Xe VSD fault slot 25. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-126",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "126",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 26",
+      "description": "Xe VSD fault slot 26. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-127",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "127",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 27",
+      "description": "Xe VSD fault slot 27. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-128",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "128",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 28",
+      "description": "Xe VSD fault slot 28. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-129",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "129",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 29",
+      "description": "Xe VSD fault slot 29. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-130",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "130",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 30",
+      "description": "Xe VSD fault slot 30. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-131",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "131",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 31",
+      "description": "Xe VSD fault slot 31. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-133",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "133",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 33",
+      "description": "Xe VSD fault slot 33. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-134",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "134",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 34",
+      "description": "Xe VSD fault slot 34. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-135",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "135",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 35",
+      "description": "Xe VSD fault slot 35. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-136",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "136",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 36",
+      "description": "Xe VSD fault slot 36. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-137",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "137",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 37",
+      "description": "Xe VSD fault slot 37. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-138",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "138",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 38",
+      "description": "Xe VSD fault slot 38. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-139",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "139",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 39",
+      "description": "Xe VSD fault slot 39. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-140",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "140",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 40",
+      "description": "Xe VSD fault slot 40. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-141",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "141",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 41",
+      "description": "Xe VSD fault slot 41. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-142",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "142",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 42",
+      "description": "Xe VSD fault slot 42. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-143",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "143",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 43",
+      "description": "Xe VSD fault slot 43. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "ingersoll-rand-xe-90-145-144",
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "code": "144",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "VSD Fault 44",
+      "description": "Xe VSD fault slot 44. Read exact code from VSD keypad/LCP.",
+      "likely_causes": [
+        "Drive-level fault — see VSD manufacturer list"
+      ],
+      "checks": [
+        "Connect to VSD HMI/LCP",
+        "Record exact drive fault number"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://www.ccontrols.com/support/dp/XeMModbusRegisters.pdf"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-a017",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "A017",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Drive Not Healthy",
+      "description": "Drive Not Healthy",
+      "likely_causes": [
+        "VSD not ready/faulted"
+      ],
+      "checks": [
+        "Drive LEDs/HMI",
+        "Interface board",
+        "Power cycle drive+controller"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-f011",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "F011",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Motor Overtemperature",
+      "description": "Motor Overtemperature",
+      "likely_causes": [
+        "Motor winding overtemp"
+      ],
+      "checks": [
+        "Coolers",
+        "Fan",
+        "Ambient",
+        "Sensor wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "motor",
+        "temp"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-f006",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "F006",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Inverter Overtemperature",
+      "description": "Inverter Overtemperature",
+      "likely_causes": [
+        "VSD inverter overheating"
+      ],
+      "checks": [
+        "Heatsink",
+        "VSD fans",
+        "Ambient"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "vsd",
+        "temp"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-f020",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "F020",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Overcurrent",
+      "description": "Overcurrent",
+      "likely_causes": [
+        "Motor overcurrent",
+        "Mechanical bind"
+      ],
+      "checks": [
+        "Free rotation LOTO",
+        "Inlet valve"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "motor",
+        "electrical"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-f023",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "F023",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Overvoltage",
+      "description": "Overvoltage",
+      "likely_causes": [
+        "Supply overvoltage",
+        "Regen/brake issue"
+      ],
+      "checks": [
+        "Measure supply",
+        "Brake resistor"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "electrical"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-101",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "101",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "High Element Outlet Temp (warn class, some FW)",
+      "description": "High Element Outlet Temp (warn class, some FW)",
+      "likely_causes": [
+        "Dirty cooler",
+        "Low oil",
+        "High ambient"
+      ],
+      "checks": [
+        "Oil level",
+        "Clean cooler",
+        "Ventilation"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "temp",
+        "oil"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-102",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "102",
+      "code_aliases": [],
+      "severity": "shutdown",
+      "title": "High Element Outlet Temp (shutdown class, some FW)",
+      "description": "High Element Outlet Temp (shutdown class, some FW)",
+      "likely_causes": [
+        "Severe high element temp"
+      ],
+      "checks": [
+        "Cool fully",
+        "Oil/cooler/fan/thermostat before restart"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "temp",
+        "oil"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-run-enable-open",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "Run Enable Open",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Run Enable Open / Interlock",
+      "description": "Run Enable Open / Interlock",
+      "likely_causes": [
+        "E-stop",
+        "Door switch",
+        "External permissive"
+      ],
+      "checks": [
+        "E-stop string",
+        "Door switches",
+        "Remote enable"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "interlock"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-motor-overload",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "Motor Overload",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Drive Motor Overload",
+      "description": "Drive Motor Overload",
+      "likely_causes": [
+        "OL relay",
+        "Load",
+        "Voltage"
+      ],
+      "checks": [
+        "OL setting",
+        "Phase currents"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "motor"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-fan-motor-overload",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "Fan Motor Overload",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Fan Motor Overload",
+      "description": "Fan Motor Overload",
+      "likely_causes": [
+        "Fan OL"
+      ],
+      "checks": [
+        "Fan motor",
+        "Cooler cleanliness"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "cooling"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-service-warning",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "Service Warning",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Service Warning",
+      "description": "Service Warning",
+      "likely_causes": [
+        "Maintenance due"
+      ],
+      "checks": [
+        "Service kit",
+        "Reset counters"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pm"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-sensor-failure",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "Sensor Failure",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Sensor Failure",
+      "description": "Sensor Failure",
+      "likely_causes": [
+        "Pressure/temp sensor invalid"
+      ],
+      "checks": [
+        "Identify sensor in event log",
+        "Wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "sensor"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "atlas-copco-elektronikon-phase",
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "code": "Phase",
+      "code_aliases": [],
+      "severity": "trip",
+      "title": "Under/Over Voltage / Phase Loss / Phase Reversal",
+      "description": "Under/Over Voltage / Phase Loss / Phase Reversal",
+      "likely_causes": [
+        "Supply problem"
+      ],
+      "checks": [
+        "Measure voltages",
+        "Phase rotation"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "electrical"
+      ],
+      "sources": [
+        "https://aircompressorservices.com/blogs/blog/atlas-copco-elektronikon-fault-codes",
+        "https://www.atlascopco.com/en-eg/compressors/air-compressor-blog/learn-more/compressor-screen-elektronikon-alarms-and-fault-codes"
+      ],
+      "confidence": "medium",
+      "notes": "Codes/text differ by Elektronikon generation and machine type. Match exact on-screen string.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0001",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0001",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Direction of rotation",
+      "description": "Direction of rotation",
+      "likely_causes": [
+        "Wrong motor rotation"
+      ],
+      "checks": [
+        "Swap two phases LOTO"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "electrical"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0002",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0002",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Motor T↑ (motor overtemp)",
+      "description": "Motor T↑ (motor overtemp)",
+      "likely_causes": [
+        "Motor overheated"
+      ],
+      "checks": [
+        "Cooling, load, OL, ambient"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "motor",
+        "temp"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0003",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0003",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "pRV ↑ (pressure related)",
+      "description": "pRV ↑ (pressure related)",
+      "likely_causes": [
+        "Overpressure/relief related conditions"
+      ],
+      "checks": [
+        "Setpoints",
+        "Inlet valve",
+        "Demand"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pressure"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0004",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0004",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "EMERGENCY STOP",
+      "description": "EMERGENCY STOP",
+      "likely_causes": [
+        "E-stop activated"
+      ],
+      "checks": [
+        "Reset E-stop",
+        "Check circuit"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "interlock"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0005",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0005",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Oil separator T↑",
+      "description": "Oil separator T↑",
+      "likely_causes": [
+        "High separator temp"
+      ],
+      "checks": [
+        "Oil level/cooler/separator"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "temp",
+        "oil"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0007",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0007",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Mains monitor",
+      "description": "Mains monitor",
+      "likely_causes": [
+        "Supply monitoring trip"
+      ],
+      "checks": [
+        "Voltage/phase quality"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "electrical"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0009",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0009",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Sigma Control T↑",
+      "description": "Sigma Control T↑",
+      "likely_causes": [
+        "Controller overtemp"
+      ],
+      "checks": [
+        "Cabinet cooling",
+        "Ambient"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "controller"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0010",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0010",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Blow-off protection",
+      "description": "Blow-off protection",
+      "likely_causes": [
+        "Blow-off protection active"
+      ],
+      "checks": [
+        "Blowdown path",
+        "Valves"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pressure"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0011",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0011",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Fan M4 I↑",
+      "description": "Fan M4 I↑",
+      "likely_causes": [
+        "Fan motor current high"
+      ],
+      "checks": [
+        "Fan free spin",
+        "Bearings"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "cooling"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0012",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0012",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Access doors",
+      "description": "Access doors",
+      "likely_causes": [
+        "Door switch open"
+      ],
+      "checks": [
+        "Close doors",
+        "Door switch"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "interlock"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0013",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0013",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Motor I↑",
+      "description": "Motor I↑",
+      "likely_causes": [
+        "Drive motor current high"
+      ],
+      "checks": [
+        "Mechanical bind",
+        "Voltage"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "motor"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-0014",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "0014",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Fan M5 I↑",
+      "description": "Fan M5 I↑",
+      "likely_causes": [
+        "Second fan current high"
+      ],
+      "checks": [
+        "Fan inspection"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "cooling"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-motor-fault",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "Motor fault",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Motor fault / overload",
+      "description": "Motor fault / overload",
+      "likely_causes": [
+        "Drive or fan motor protection"
+      ],
+      "checks": [
+        "Back pressure at standstill",
+        "Belts if equipped",
+        "Rotation"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "motor"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "kaeser-sigma-control-2-airend-discharge-temperature",
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "code": "Airend discharge temperature",
+      "code_aliases": [],
+      "severity": "alarm",
+      "title": "Max airend discharge temperature exceeded",
+      "description": "Max airend discharge temperature exceeded",
+      "likely_causes": [
+        "Cooler dirty",
+        "Low oil",
+        "High ambient"
+      ],
+      "checks": [
+        "Oil",
+        "Coolers",
+        "Fans",
+        "Thermal valve"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "temp"
+      ],
+      "sources": [
+        "Kaeser SIGMA CONTROL 2 technician materials"
+      ],
+      "confidence": "medium",
+      "notes": "Message IDs can vary by software — trust on-screen text.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-e-stop",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "E-Stop",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Emergency Stop",
+      "description": "Emergency Stop",
+      "likely_causes": [
+        "E-stop pressed or string open"
+      ],
+      "checks": [
+        "Reset E-stop",
+        "Check wiring to drive if VSD"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-e-stop-string",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "E-Stop String",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "E-Stop String fault",
+      "description": "E-Stop String fault",
+      "likely_causes": [
+        "Break in E-stop wiring"
+      ],
+      "checks": [
+        "Continuity on E-stop chain"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-air-filter-maint",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Air Filter Maint",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Air Filter Maintenance",
+      "description": "Air Filter Maintenance",
+      "likely_causes": [
+        "Inlet filter due"
+      ],
+      "checks": [
+        "Replace air filter",
+        "Reset maint timer"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-aux-motor-overload",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Aux Motor Overload",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Aux Motor Overload",
+      "description": "Aux Motor Overload",
+      "likely_causes": [
+        "Aux motor OL"
+      ],
+      "checks": [
+        "Identify aux motor (fan etc.)"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-low-water-pressure",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Low Water Pressure",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Low Water Pressure",
+      "description": "Low Water Pressure",
+      "likely_causes": [
+        "Water-cooled low water"
+      ],
+      "checks": [
+        "Cooling water supply"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-oil-change-due",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Oil Change Due",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Oil Change Due",
+      "description": "Oil Change Due",
+      "likely_causes": [
+        "PM due"
+      ],
+      "checks": [
+        "Change oil & filters per spec"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-oil-filter-change",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Oil Filter Change",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Oil Filter Change",
+      "description": "Oil Filter Change",
+      "likely_causes": [
+        "PM due"
+      ],
+      "checks": [
+        "Replace oil filter"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-separator-change-due",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Separator Change Due",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Separator Change Due",
+      "description": "Separator Change Due",
+      "likely_causes": [
+        "PM due"
+      ],
+      "checks": [
+        "Replace separator"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-t1-hi",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "T1 HI",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "High Discharge Temperature T1",
+      "description": "High Discharge Temperature T1",
+      "likely_causes": [
+        "High airend/discharge temp"
+      ],
+      "checks": [
+        "Oil level",
+        "Coolers",
+        "Thermal valve",
+        "Fans"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-p-1-high-fault",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "P_1 High Fault",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "High Pressure P1",
+      "description": "High Pressure P1",
+      "likely_causes": [
+        "High pressure trip"
+      ],
+      "checks": [
+        "Regulation",
+        "Inlet valve",
+        "Setpoints"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-p-1-low-fault",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "P_1 Low Fault",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Low Pressure P1",
+      "description": "Low Pressure P1",
+      "likely_causes": [
+        "Low pressure"
+      ],
+      "checks": [
+        "Demand",
+        "Inlet valve",
+        "Leaks"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-sensor-failure-fault",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "Sensor failure fault",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Sensor Failure",
+      "description": "Sensor Failure",
+      "likely_causes": [
+        "Analog sensor failed"
+      ],
+      "checks": [
+        "Identify channel in status menu"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "sullair-sullair-supervisor-vsd-code-51",
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "code": "VSD Code 51",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "VSD Emergency Stop",
+      "description": "VSD Emergency Stop",
+      "likely_causes": [
+        "E-stop to VSD"
+      ],
+      "checks": [
+        "Package E-stop",
+        "Wiring to drive"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "supervisor"
+      ],
+      "sources": [
+        "Sullair Supervisor Controller manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-a1",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "A1",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "Airend 1 major group",
+      "description": "Airend 1 major group",
+      "likely_causes": [
+        "Airend-related alarms"
+      ],
+      "checks": [
+        "Read full major.minor code",
+        "Oil/coolers for temp codes"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "airend"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-p-0",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "P.0",
+      "code_aliases": [],
+      "severity": "warning",
+      "title": "Power loss",
+      "description": "Power loss",
+      "likely_causes": [
+        "Power interruption; may escalate to fault"
+      ],
+      "checks": [
+        "Utility power quality",
+        "Auto-restart settings"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "electrical"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart--310",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "#310",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "HIGH INLET TEMP",
+      "description": "HIGH INLET TEMP",
+      "likely_causes": [
+        "Package inlet air high (~113°F/45°C class)"
+      ],
+      "checks": [
+        "Ventilation",
+        "Ducting",
+        "Room cooling"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "ambient"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-change-separator",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "CHANGE SEPARATOR",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Change Separator",
+      "description": "Change Separator",
+      "likely_causes": [
+        "Service due"
+      ],
+      "checks": [
+        "Replace separator"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pm"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-change-air-filter",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "CHANGE AIR FILTER",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Change Air Filter",
+      "description": "Change Air Filter",
+      "likely_causes": [
+        "Service due"
+      ],
+      "checks": [
+        "Replace inlet filter"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pm"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-change-oil-filter",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "CHANGE OIL FILTER",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Change Oil Filter",
+      "description": "Change Oil Filter",
+      "likely_causes": [
+        "Service due"
+      ],
+      "checks": [
+        "Replace oil filter"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pm"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-change-oil",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "CHANGE OIL",
+      "code_aliases": [],
+      "severity": "advisory",
+      "title": "Change Oil",
+      "description": "Change Oil",
+      "likely_causes": [
+        "Service due"
+      ],
+      "checks": [
+        "Oil change with correct fluid"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "pm"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-e01",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "E01",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Failure of Final Discharge Pressure Sensor (legacy)",
+      "description": "Failure of Final Discharge Pressure Sensor (legacy)",
+      "likely_causes": [
+        "Discharge pressure sensor failed"
+      ],
+      "checks": [
+        "Sensor/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "sensor"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-e02",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "E02",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Failure of Oil Sump Pressure Sensor (legacy)",
+      "description": "Failure of Oil Sump Pressure Sensor (legacy)",
+      "likely_causes": [
+        "Sump pressure sensor failed"
+      ],
+      "checks": [
+        "Sensor/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "sensor"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-e03",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "E03",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Failure of Both Pressure Sensors (legacy)",
+      "description": "Failure of Both Pressure Sensors (legacy)",
+      "likely_causes": [
+        "Both pressure sensors"
+      ],
+      "checks": [
+        "Sensor power",
+        "Controller"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "sensor"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "gardner-denver-airsmart-e04",
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "code": "E04",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "EMERGENCY STOP (legacy)",
+      "description": "EMERGENCY STOP (legacy)",
+      "likely_causes": [
+        "E-stop"
+      ],
+      "checks": [
+        "Reset E-stop circuit"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "interlock"
+      ],
+      "sources": [
+        "Gardner Denver AirSmart / Electra manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "quincy-quincy-qsi-temp-fault",
+      "brand_id": "quincy",
+      "controller_id": "quincy-qsi",
+      "code": "TEMP FAULT",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Temperature probe faulty",
+      "description": "Temperature probe faulty",
+      "likely_causes": [
+        "Open/short temp probe"
+      ],
+      "checks": [
+        "Probe resistance/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "qsi"
+      ],
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "quincy-quincy-qsi-pres-fault",
+      "brand_id": "quincy",
+      "controller_id": "quincy-qsi",
+      "code": "PRES FAULT",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Pressure transducer faulty",
+      "description": "Pressure transducer faulty",
+      "likely_causes": [
+        "Open/short pressure transducer"
+      ],
+      "checks": [
+        "Transducer supply/signal"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "qsi"
+      ],
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "quincy-quincy-qsi-high-temp",
+      "brand_id": "quincy",
+      "controller_id": "quincy-qsi",
+      "code": "HIGH Temp",
+      "code_aliases": [],
+      "severity": "shutdown",
+      "title": "High discharge temperature shutdown",
+      "description": "High discharge temperature shutdown",
+      "likely_causes": [
+        "Cooling/oil issues"
+      ],
+      "checks": [
+        "Oil, coolers, fans, thermal valve"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "qsi"
+      ],
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "quincy-quincy-qsi-h-a-p-shdn",
+      "brand_id": "quincy",
+      "controller_id": "quincy-qsi",
+      "code": "H.A.P. SHDN",
+      "code_aliases": [],
+      "severity": "shutdown",
+      "title": "High air pressure shutdown",
+      "description": "High air pressure shutdown",
+      "likely_causes": [
+        "Package overpressure"
+      ],
+      "checks": [
+        "Setpoints",
+        "Inlet valve",
+        "MPV"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "qsi"
+      ],
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "quincy-quincy-qsi-cont-fault",
+      "brand_id": "quincy",
+      "controller_id": "quincy-qsi",
+      "code": "CONT. FAULT",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Contactor state mismatch",
+      "description": "Contactor state mismatch",
+      "likely_causes": [
+        "Contactor did not match command"
+      ],
+      "checks": [
+        "Coil/aux contacts",
+        "Interlock"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "qsi"
+      ],
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "quincy-quincy-qsi-dryer-cont-",
+      "brand_id": "quincy",
+      "controller_id": "quincy-qsi",
+      "code": "DRYER CONT.",
+      "code_aliases": [],
+      "severity": "fault",
+      "title": "Dryer contactor fault",
+      "description": "Dryer contactor fault",
+      "likely_causes": [
+        "Integrated dryer contactor mismatch"
+      ],
+      "checks": [
+        "Dryer contactor/wiring"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "qsi"
+      ],
+      "sources": [
+        "Quincy QSI instruction manuals"
+      ],
+      "confidence": "medium",
+      "notes": "",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "generic-gen-symptom-no-start",
+      "brand_id": "generic",
+      "controller_id": null,
+      "code": "SYMPTOM-NO-START",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "Compressor will not start",
+      "description": "Compressor will not start",
+      "likely_causes": [
+        "No power",
+        "E-stop",
+        "Overload latched",
+        "Remote stop open",
+        "Interlock",
+        "Phase loss",
+        "Too cold"
+      ],
+      "checks": [
+        "3-phase at disconnect and control transformer",
+        "E-stop chain closed",
+        "Read active alarms before resetting",
+        "OL relays / motor protectors",
+        "Remote start/stop if used"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "symptom",
+        "start"
+      ],
+      "sources": [
+        "Field practice multi-OEM"
+      ],
+      "confidence": "high",
+      "notes": "Symptom playbook — pair with brand-specific code when available.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "generic-gen-symptom-no-pressure",
+      "brand_id": "generic",
+      "controller_id": null,
+      "code": "SYMPTOM-NO-PRESSURE",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "Runs but will not build pressure",
+      "description": "Runs but will not build pressure",
+      "likely_causes": [
+        "Inlet valve stuck closed",
+        "Blowdown stuck open",
+        "Huge leak",
+        "Wrong rotation",
+        "Unloader stuck"
+      ],
+      "checks": [
+        "Confirm rotation",
+        "Listen for continuous blowdown",
+        "Isolate package; watch package/sump pressure",
+        "Inlet valve actuator/solenoid",
+        "Belts/coupling if applicable"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "symptom",
+        "pressure"
+      ],
+      "sources": [
+        "Field practice multi-OEM"
+      ],
+      "confidence": "high",
+      "notes": "Symptom playbook — pair with brand-specific code when available.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "generic-gen-symptom-short-cycle",
+      "brand_id": "generic",
+      "controller_id": null,
+      "code": "SYMPTOM-SHORT-CYCLE",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "Short cycling load/unload or start/stop",
+      "description": "Short cycling load/unload or start/stop",
+      "likely_causes": [
+        "No storage",
+        "Leaks",
+        "Pressure band too tight",
+        "Check valve issues"
+      ],
+      "checks": [
+        "Measure pressure band",
+        "Receiver size/check valves",
+        "Leak survey",
+        "Auto start/stop timers"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "symptom",
+        "control"
+      ],
+      "sources": [
+        "Field practice multi-OEM"
+      ],
+      "confidence": "high",
+      "notes": "Symptom playbook — pair with brand-specific code when available.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "generic-gen-symptom-oil-carryover",
+      "brand_id": "generic",
+      "controller_id": null,
+      "code": "SYMPTOM-OIL-CARRYOVER",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "Oil in air lines / high carryover",
+      "description": "Oil in air lines / high carryover",
+      "likely_causes": [
+        "Failed separator",
+        "Overfilled oil",
+        "Scavenge plugged",
+        "Wrong temp band",
+        "Wrong oil"
+      ],
+      "checks": [
+        "Oil level procedure",
+        "Separator DP/hours",
+        "Scavenge orifice/line",
+        "Operating temperature"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "symptom",
+        "oil"
+      ],
+      "sources": [
+        "Field practice multi-OEM"
+      ],
+      "confidence": "high",
+      "notes": "Symptom playbook — pair with brand-specific code when available.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "generic-gen-symptom-high-temp",
+      "brand_id": "generic",
+      "controller_id": null,
+      "code": "SYMPTOM-HIGH-TEMP",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "High temperature warning/trip (any brand)",
+      "description": "High temperature warning/trip (any brand)",
+      "likely_causes": [
+        "Dirty oil cooler",
+        "Low oil",
+        "Failed thermal valve",
+        "Fan failure",
+        "High ambient",
+        "Wrong oil"
+      ],
+      "checks": [
+        "Record trip temp and ambient",
+        "Oil level after cool-down per OEM",
+        "Clean cooler cores",
+        "Verify fans and thermostatic valve",
+        "Do not keep resetting"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "High airend temp can destroy the airend. Find root cause before return to service.",
+      "tags": [
+        "symptom",
+        "temp"
+      ],
+      "sources": [
+        "Field practice multi-OEM"
+      ],
+      "confidence": "high",
+      "notes": "Symptom playbook — pair with brand-specific code when available.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    },
+    {
+      "id": "generic-gen-symptom-water-in-air",
+      "brand_id": "generic",
+      "controller_id": null,
+      "code": "SYMPTOM-WATER-IN-AIR",
+      "code_aliases": [],
+      "severity": "info",
+      "title": "Wet air / water in lines",
+      "description": "Wet air / water in lines",
+      "likely_causes": [
+        "Dryer fault",
+        "Drains failed",
+        "Aftercooler issue"
+      ],
+      "checks": [
+        "Dryer dewpoint/status",
+        "Test auto drains",
+        "Aftercooler approach temp",
+        "Wet receiver drains"
+      ],
+      "reset_notes": "Correct root cause, then reset per controller procedure. Do not repeatedly restart on high-temp trips.",
+      "safety": "Lockout/tagout before electrical/mechanical work. Depressurize system before opening oil/air circuits.",
+      "tags": [
+        "symptom",
+        "dryer"
+      ],
+      "sources": [
+        "Field practice multi-OEM"
+      ],
+      "confidence": "high",
+      "notes": "Symptom playbook — pair with brand-specific code when available.",
+      "added_by": "seed-web-research-2026-08",
+      "verified_with_oem_manual": false
+    }
+  ],
+  "symptoms": [
+    {
+      "id": "SYMPTOM-NO-START",
+      "title": "Compressor will not start",
+      "tags": [
+        "symptom",
+        "start"
+      ],
+      "related_code_ids": [
+        "generic-gen-symptom-no-pressure",
+        "generic-gen-symptom-short-cycle",
+        "generic-gen-symptom-oil-carryover",
+        "generic-gen-symptom-high-temp",
+        "generic-gen-symptom-water-in-air"
+      ]
+    },
+    {
+      "id": "SYMPTOM-NO-PRESSURE",
+      "title": "Runs but will not build pressure",
+      "tags": [
+        "symptom",
+        "pressure"
+      ],
+      "related_code_ids": [
+        "kaeser-sigma-control-2-0003",
+        "kaeser-sigma-control-2-0010",
+        "generic-gen-symptom-no-start",
+        "generic-gen-symptom-short-cycle",
+        "generic-gen-symptom-oil-carryover",
+        "generic-gen-symptom-high-temp",
+        "generic-gen-symptom-water-in-air"
+      ]
+    },
+    {
+      "id": "SYMPTOM-SHORT-CYCLE",
+      "title": "Short cycling load/unload or start/stop",
+      "tags": [
+        "symptom",
+        "control"
+      ],
+      "related_code_ids": [
+        "generic-gen-symptom-no-start",
+        "generic-gen-symptom-no-pressure",
+        "generic-gen-symptom-oil-carryover",
+        "generic-gen-symptom-high-temp",
+        "generic-gen-symptom-water-in-air"
+      ]
+    },
+    {
+      "id": "SYMPTOM-OIL-CARRYOVER",
+      "title": "Oil in air lines / high carryover",
+      "tags": [
+        "symptom",
+        "oil"
+      ],
+      "related_code_ids": [
+        "atlas-copco-elektronikon-101",
+        "atlas-copco-elektronikon-102",
+        "kaeser-sigma-control-2-0005",
+        "generic-gen-symptom-no-start",
+        "generic-gen-symptom-no-pressure",
+        "generic-gen-symptom-short-cycle",
+        "generic-gen-symptom-high-temp",
+        "generic-gen-symptom-water-in-air"
+      ]
+    },
+    {
+      "id": "SYMPTOM-HIGH-TEMP",
+      "title": "High temperature warning/trip (any brand)",
+      "tags": [
+        "symptom",
+        "temp"
+      ],
+      "related_code_ids": [
+        "atlas-copco-elektronikon-f011",
+        "atlas-copco-elektronikon-f006",
+        "atlas-copco-elektronikon-101",
+        "atlas-copco-elektronikon-102",
+        "kaeser-sigma-control-2-0002",
+        "kaeser-sigma-control-2-0005",
+        "kaeser-sigma-control-2-airend-discharge-temperature",
+        "generic-gen-symptom-no-start",
+        "generic-gen-symptom-no-pressure",
+        "generic-gen-symptom-short-cycle",
+        "generic-gen-symptom-oil-carryover",
+        "generic-gen-symptom-water-in-air"
+      ]
+    },
+    {
+      "id": "SYMPTOM-WATER-IN-AIR",
+      "title": "Wet air / water in lines",
+      "tags": [
+        "symptom",
+        "dryer"
+      ],
+      "related_code_ids": [
+        "generic-gen-symptom-no-start",
+        "generic-gen-symptom-no-pressure",
+        "generic-gen-symptom-short-cycle",
+        "generic-gen-symptom-oil-carryover",
+        "generic-gen-symptom-high-temp"
+      ]
+    }
+  ],
+  "access_tips": [
+    {
+      "brand_id": "atlas-copco",
+      "controller_id": "elektronikon",
+      "topic": "Service menu / parameters",
+      "summary": "Operator can view status and many readings. Parameter/service changes typically require service access for that Elektronikon generation.",
+      "tips": [
+        "Photograph nameplate + controller software version before changes",
+        "Use event history for first-out diagnosis",
+        "VSD packages: always check drive display, not only Elektronikon text"
+      ],
+      "caution": "Incorrect parameters can cause trips, overpressure, or damage."
+    },
+    {
+      "brand_id": "ingersoll-rand",
+      "controller_id": "xe-90-145",
+      "topic": "Service levels & logs",
+      "summary": "Xe controllers expose service levels 0–2. Event log and web pages (where equipped) help diagnosis.",
+      "tips": [
+        "Record Warning and Trip codes",
+        "For blower/VSD general alarms, read the drive LCP for the real code",
+        "After sensor replacement, verify calibration"
+      ],
+      "caution": "Only change setpoints with process knowledge."
+    },
+    {
+      "brand_id": "kaeser",
+      "controller_id": "sigma-control-2",
+      "topic": "Access levels",
+      "summary": "Higher access often requires RFID service card or authorized credentials. Document alarm history before reset.",
+      "tips": [
+        "Never clear high ADT trips without cooling investigation",
+        "Note message class Alarm vs Warning",
+        "Sigma Air Manager sites: check master controller too"
+      ],
+      "caution": "Service cards/passwords are controlled for safety and warranty reasons."
+    },
+    {
+      "brand_id": "sullair",
+      "controller_id": "sullair-supervisor",
+      "topic": "Menus & passwords",
+      "summary": "Supervisor has Status, Control Parameters, Maintenance, Fault Log, Calibration, Factory Setup. Service password methods vary by software — verify against your manual/serial.",
+      "tips": [
+        "Use ? key for probable cause when available",
+        "Fault log shows hours stamp — look for patterns",
+        "VSD packages: record Supervisor message AND VSD code"
+      ],
+      "caution": "Password methods vary by software revision."
+    },
+    {
+      "brand_id": "gardner-denver",
+      "controller_id": "airsmart",
+      "topic": "Alarm code format",
+      "summary": "AirSmart uses major.minor codes. Same code can be warning or fault depending on settings (example: power loss P.0).",
+      "tips": [
+        "Always capture full code + plain-language advisory",
+        "Shutdown LED vs Service LED tells severity class",
+        "Legacy Electra panels may use E0x sensor codes"
+      ],
+      "caution": "Cross-check software version; advisory numbers differ by revision."
+    },
+    {
+      "brand_id": "generic",
+      "controller_id": null,
+      "topic": "Field photo checklist for Grok diagnosis",
+      "summary": "When you ask Grok, attach photos and these details for best results.",
+      "tips": [
+        "Nameplate (brand, model, serial, pressure, HP/kW)",
+        "Controller screen showing active alarm",
+        "Event/fault history screen",
+        "Oil level sight glass",
+        "Cooler condition / room ambient",
+        "What happened just before the fault"
+      ],
+      "caution": "LOTO and depressurize before opening pressurized or electrical systems."
+    }
+  ]
+}

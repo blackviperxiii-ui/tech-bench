@@ -1,5 +1,5 @@
-// Offline checks for the parts of Tech Bench that can be verified without an adapter or the real KB:
-// J1939 decoding, BAM reassembly, and knowledge-base loading/search. Run with test.bat.
+// Offline checks for the parts of Tech Bench that can be verified without an adapter.
+// Includes the shipped field database under kb\. Run with test.bat.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -96,6 +96,10 @@ static class SelfTest
         Console.WriteLine();
         Console.WriteLine("== KB load resilience ==");
         KbTests();
+
+        Console.WriteLine();
+        Console.WriteLine("== shipped field database ==");
+        BundledKbTests();
 
         Console.WriteLine();
         Console.WriteLine("== INI parsing ==");
@@ -1189,6 +1193,52 @@ ProtocolDescription=ISO 15765
         Check("orphan TP.DT ignored", !bam5.Feed(Dt(0, 1, 1, 2, 3), out outF), "emitted something");
     }
 
+    static int CountKind(KbIndex kb, string kind)
+    {
+        int n = 0;
+        foreach (Hit h in kb.All)
+            if (h.Kind == kind) n++;
+        return n;
+    }
+
+    static void BundledKbTests()
+    {
+        string disk = Path.Combine(FindRepoRoot(), "kb");
+        Check("shipped kb.json is in the repo", File.Exists(Path.Combine(disk, "data", "kb.json")), disk);
+        var fromDisk = new KbIndex();
+        fromDisk.Load(disk);
+        Eq("shipped fault codes", CountKind(fromDisk, "CODE"), 155);
+        Eq("shipped service-access rows", CountKind(fromDisk, "PASSWORD"), 1424);
+        Eq("shipped manual index", CountKind(fromDisk, "MANUAL"), 2147);
+        Eq("shipped filter rows", CountKind(fromDisk, "FILTER"), 63);
+        Eq("shipped equipment rows", CountKind(fromDisk, "EQUIP"), 37);
+        Eq("shipped load had no file errors", fromDisk.Errors.Count, 0);
+        int total;
+        var hits = fromDisk.Search("1AVPT", "CODE", 5, out total);
+        Check("real IR sensor code is searchable",
+            total >= 1 && hits.Count > 0 && hits[0].Title.IndexOf("Sensor Failure", StringComparison.OrdinalIgnoreCase) >= 0,
+            hits.Count == 0 ? "no hit" : hits[0].Title);
+        hits = fromDisk.Search("F68", "FILTER", 5, out total);
+        Check("real filter chart F68 is searchable",
+            total >= 1 && hits.Count > 0 && hits[0].Title.IndexOf("F68", StringComparison.OrdinalIgnoreCase) >= 0,
+            hits.Count == 0 ? "no hit" : hits[0].Title);
+        hits = fromDisk.Search("XHP1170", "EQUIP", 5, out total);
+        Check("real equipment XHP1170 is searchable",
+            total >= 1 && hits.Count > 0 && hits[0].Title.IndexOf("XHP1170", StringComparison.OrdinalIgnoreCase) >= 0,
+            hits.Count == 0 ? "no hit" : hits[0].Title);
+
+        string dest = Path.Combine(Path.GetTempPath(), "tb-baked-" + Guid.NewGuid().ToString("N"));
+        Check("embedded resources materialize", KbIndex.TryMaterializeBaked(dest), dest);
+        var fromExe = new KbIndex();
+        fromExe.Load(dest);
+        Eq("embedded fault codes match the folder", CountKind(fromExe, "CODE"), 155);
+        Eq("embedded passwords match the folder", CountKind(fromExe, "PASSWORD"), 1424);
+        Eq("embedded manuals match the folder", CountKind(fromExe, "MANUAL"), 2147);
+        Eq("embedded filters match the folder", CountKind(fromExe, "FILTER"), 63);
+        Eq("embedded equipment matches the folder", CountKind(fromExe, "EQUIP"), 37);
+        try { Directory.Delete(dest, true); } catch { }
+    }
+
     static void KbTests()
     {
         string root = Path.Combine(Path.GetTempPath(), "kbtest_" + Guid.NewGuid().ToString("N"));
@@ -1294,7 +1344,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.3");
+        Eq("stamped version", AppVersion.Number, "1.2.4");
         Version parsed;
         Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
         Check("1.3.0 is newer", Updater.IsNewer("1.3.0", "1.2.0"), "1.3.0 vs 1.2.0");
@@ -1514,6 +1564,14 @@ ProtocolDescription=ISO 15765
             text.IndexOf("TechBench.exe", StringComparison.OrdinalIgnoreCase) >= 0, "missing exe");
         Check("installs assets folder",
             text.IndexOf("assets", StringComparison.OrdinalIgnoreCase) >= 0, "no assets");
+        Check("installs shipped knowledge base",
+            text.IndexOf(@"air-compressor-kb", StringComparison.OrdinalIgnoreCase) >= 0
+            && text.IndexOf(@"..\kb\*", StringComparison.OrdinalIgnoreCase) >= 0, "kb folder not in setup");
+        string buildBat = Path.Combine(root, "build.bat");
+        if (File.Exists(buildBat))
+            Check("exe embeds the field database",
+                File.ReadAllText(buildBat).IndexOf("TechBench.BundledKb.data.kb.json", StringComparison.Ordinal) >= 0,
+                "build.bat missing /resource");
         Check("Start Menu shortcut",
             text.IndexOf("{group}", StringComparison.OrdinalIgnoreCase) >= 0, "no group icon");
         Check("Desktop shortcut task",

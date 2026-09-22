@@ -1,0 +1,49 @@
+{
+  "how_this_works": {
+    "seed_fault_codes": "scripts/seed-codes.js + scripts/build-db.js \u2192 data/kb.json",
+    "ifix_passwords": "sources/ifix_extract/AccessLevels.db \u2192 scripts/import-ifix-passwords.js / build-app-data.js \u2192 data/passwords/",
+    "manuals_ifix": "sources/ifix_docs/*.pdf (extracted from iFix zip)",
+    "manuals_usb": "USB \u2192 sources/ir_parts_manuals + sources/doosan_portable \u2192 scripts/index-usb-manuals.js \u2192 data/usb-manuals.json",
+    "rental_filters_oil": "field photos \u2192 data/rental-portable-filters-oil.json (+ .csv)",
+    "rental_equipment": "field photos \u2192 data/rental-equipment-info.json (+ .csv)",
+    "offline_app": "app/index.html + app/data.js (open from Desktop shortcut)",
+    "query_cli": "node scripts/query.js  |  --password  |  --manual  |  --filters  |  --equipment  |  --parts  |  --accel",
+    "field_parts": "shop jobs \u2192 data/field-parts.json (+ .csv)",
+    "accel_field_tickets": "Work Stuffs OneDrive PDFs \u2192 data/accel-field-tickets.json + data/accel-parts.json"
+  },
+  "paths": {
+    "root": "C:\\Users\\jerem\\Documents\\air-compressor-kb",
+    "app": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\app\\index.html",
+    "passwords_csv": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\passwords\\ifix-passwords.csv",
+    "fault_codes_csv": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\codes.csv",
+    "manuals_ifix": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\ifix_docs",
+    "manuals_ir_parts": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\ir_parts_manuals",
+    "manuals_doosan": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\doosan_portable",
+    "usb_manuals_index": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\usb-manuals.json",
+    "rental_filters": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\rental-portable-filters-oil.json",
+    "rental_equipment": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\rental-equipment-info.json",
+    "field_photos": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\field_photos",
+    "field_parts": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\field-parts.json",
+    "accel_tickets": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\accel-field-tickets.json",
+    "accel_parts": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\data\\accel-parts.json"
+  },
+  "stats": {
+    "built_at": "2026-08-11T16:38:06.585Z",
+    "title": "Air Compressor Field Database",
+    "location": "C:\\Users\\jerem\\Documents\\air-compressor-kb",
+    "fault_codes": 155,
+    "passwords": 1424,
+    "manufacturers": 76,
+    "controllers": 287,
+    "documents": 2354,
+    "documents_on_disk": 2354,
+    "ifix_documents": 207,
+    "usb_manuals": 2147,
+    "rental_filters": 63,
+    "rental_equipment": 37,
+    "rental_lubricants": 3,
+    "disclaimer": "Service data for trained use. Verify against OEM manual and software revision. LOTO / depressurize before work. Filter/oil and fleet part numbers from field charts \u2014 verify before ordering.",
+    "accel_tickets": 241,
+    "accel_parts": 18
+  }
+}
