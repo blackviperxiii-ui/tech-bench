@@ -1344,7 +1344,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.3");
+        Eq("stamped version", AppVersion.Number, "1.2.4");
         Version parsed;
         Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
         Check("1.3.0 is newer", Updater.IsNewer("1.3.0", "1.2.0"), "1.3.0 vs 1.2.0");
