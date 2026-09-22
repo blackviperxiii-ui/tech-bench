@@ -56,6 +56,56 @@ namespace TechBench
             return new Size(w, h);
         }
 
+        /// <summary>
+        /// Shop-laptop short window. At or below this client height the shell
+        /// chrome (job strip, bottom sync line, nav switches) tightens so the
+        /// page host keeps room. 1366×768 stays on the roomy chrome.
+        /// </summary>
+        public const int ShortClientHeight = 600;
+
+        /// <summary>
+        /// Hard cap on menu + nav + job + actions (+ sync) when ShortClient.
+        /// LayoutAudit treats a taller chrome on 1024×600 / 960×540 as a clip.
+        /// </summary>
+        public const int ShortChromeMax = 168;
+
+        public static bool ShortClient(Form f)
+        {
+            return f != null && f.ClientSize.Height > 0 && f.ClientSize.Height <= ShortClientHeight;
+        }
+
+        public static Padding JobBarPad(bool compact)
+        {
+            return compact ? new Padding(8, 2, 8, 0) : new Padding(8, 4, 8, 2);
+        }
+
+        public static Padding ActionBarPad(bool compact)
+        {
+            return compact ? new Padding(8, 0, 8, 2) : new Padding(8, 0, 8, 4);
+        }
+
+        /// <summary>
+        /// Same SwitchBar look, smaller padding / min size so four nav buttons
+        /// stay one row and take less vertical budget on a short shop laptop.
+        /// </summary>
+        public static void SetSwitchChrome(FlowLayoutPanel bar, bool compact)
+        {
+            if (bar == null) return;
+            bar.Padding = compact ? new Padding(4, 2, 4, 2) : new Padding(8, 6, 8, 6);
+            Size min = compact ? new Size(100, 28) : new Size(148, 40);
+            Padding pad = compact ? new Padding(8, 2, 8, 2) : new Padding(10, 6, 10, 6);
+            Padding margin = compact ? new Padding(0, 0, 6, 2) : new Padding(0, 0, 8, 4);
+            foreach (Control ch in bar.Controls)
+            {
+                Button b = ch as Button;
+                if (b == null) continue;
+                b.Padding = pad;
+                b.Margin = margin;
+                b.MinimumSize = min;
+                SizeToCaption(b);
+            }
+        }
+
         public static FlowLayoutPanel WrapBar(Padding padding)
         {
             var flow = new FlowLayoutPanel

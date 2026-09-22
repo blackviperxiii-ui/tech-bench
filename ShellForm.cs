@@ -22,9 +22,16 @@ namespace TechBench
         readonly Control _pSearch;
         readonly Control _pOrders;
         readonly FlowLayoutPanel _nav;
+        readonly FlowLayoutPanel _job;
+        readonly FlowLayoutPanel _actions;
+        readonly List<Control> _jobExtras = new List<Control>();
         readonly Font _navNorm;
         readonly Font _navBold;
+        readonly Font _navNormShort;
+        readonly Font _navBoldShort;
         int _page;
+        bool _shortChrome;
+        bool _chromeBusy;
         readonly ToolStripMenuItem _installUpdate;
         readonly AppSettings _settings;
         readonly TextBox _syncStatus;
@@ -51,6 +58,8 @@ namespace TechBench
             Font = new Font("Segoe UI", 9.5f);
             _navNorm = new Font("Segoe UI", 12f, FontStyle.Regular);
             _navBold = new Font("Segoe UI", 12f, FontStyle.Bold);
+            _navNormShort = new Font("Segoe UI", 10f, FontStyle.Regular);
+            _navBoldShort = new Font("Segoe UI", 10f, FontStyle.Bold);
             string assets = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
             try
             {
@@ -105,9 +114,11 @@ namespace TechBench
 
             // Two wrapping rows: identity (WO/customer/model/serial) then actions.
             // One row left Serial / Settings / Search this job off the window after sync text grew.
-            var job = UiLayout.WrapBar(new Padding(8, 4, 8, 2));
-            job.BackColor = Color.FromArgb(22, 32, 48);
-            job.Controls.Add(JobLabel("WO"));
+            // Short client (≤600): hide customer/model/serial and the bottom sync line so
+            // Search / WO / INLINE 7 / Adapters keep the vertical budget.
+            _job = UiLayout.WrapBar(UiLayout.JobBarPad(false));
+            _job.BackColor = Color.FromArgb(22, 32, 48);
+            _job.Controls.Add(JobLabel("WO"));
             _woPick = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -116,20 +127,29 @@ namespace TechBench
                 Margin = new Padding(0, 2, 12, 0)
             };
             _woPick.SelectedIndexChanged += delegate { PickWoFromStrip(); };
-            job.Controls.Add(_woPick);
-            job.Controls.Add(JobLabel("Customer"));
+            _job.Controls.Add(_woPick);
+            Label labCustomer = JobLabel("Customer");
             _customer = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
             _customer.TextChanged += delegate { PushHeader(); };
-            job.Controls.Add(_customer);
-            job.Controls.Add(JobLabel("Model"));
+            _job.Controls.Add(labCustomer);
+            _job.Controls.Add(_customer);
+            Label labModel = JobLabel("Model");
             _model = new TextBox { Width = 130, Margin = new Padding(0, 2, 12, 0) };
-            job.Controls.Add(_model);
-            job.Controls.Add(JobLabel("Serial"));
+            _job.Controls.Add(labModel);
+            _job.Controls.Add(_model);
+            Label labSerial = JobLabel("Serial");
             _serial = new TextBox { Width = 140, Margin = new Padding(0, 2, 12, 0) };
-            job.Controls.Add(_serial);
+            _job.Controls.Add(labSerial);
+            _job.Controls.Add(_serial);
+            _jobExtras.Add(labCustomer);
+            _jobExtras.Add(_customer);
+            _jobExtras.Add(labModel);
+            _jobExtras.Add(_model);
+            _jobExtras.Add(labSerial);
+            _jobExtras.Add(_serial);
 
-            var actions = UiLayout.WrapBar(new Padding(8, 0, 8, 4));
-            actions.BackColor = Color.FromArgb(22, 32, 48);
+            _actions = UiLayout.WrapBar(UiLayout.ActionBarPad(false));
+            _actions.BackColor = Color.FromArgb(22, 32, 48);
             _jobSync = new Label
             {
                 Text = "Sync: …",
@@ -138,14 +158,14 @@ namespace TechBench
                 Cursor = Cursors.Hand,
                 Margin = new Padding(0, 8, 12, 0)
             };
-            actions.Controls.Add(_jobSync);
+            _actions.Controls.Add(_jobSync);
             _jobSync.Click += delegate { OpenSync(); };
             var useJob = new Button { Text = "Search this job", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 12, 0) };
-            actions.Controls.Add(useJob);
+            _actions.Controls.Add(useJob);
             var addCode = new Button { Text = "Add code to KB", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 8, 0) };
-            actions.Controls.Add(addCode);
+            _actions.Controls.Add(addCode);
             var addNoteBtn = new Button { Text = "Add note", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false, Margin = new Padding(0, 0, 8, 0) };
-            actions.Controls.Add(addNoteBtn);
+            _actions.Controls.Add(addNoteBtn);
             addNoteBtn.Click += delegate { AddNote(); };
 
             _search = new SearchControl(kb);
@@ -169,8 +189,8 @@ namespace TechBench
 
             // Last-added docks nearest the edge: menu, switches, identity, then actions.
             Controls.Add(_host);
-            Controls.Add(actions);
-            Controls.Add(job);
+            Controls.Add(_actions);
+            Controls.Add(_job);
             Controls.Add(_nav);
             Controls.Add(menu);
             Controls.Add(_syncStatus);
@@ -250,9 +270,11 @@ namespace TechBench
                 }
                 _watchers.Clear();
             };
+            SizeChanged += delegate { ApplyChromeBudget(); };
             Shown += delegate
             {
                 UiLayout.FitToWorkingArea(this);
+                ApplyChromeBudget();
                 ApplyWo(_orders.Current);
                 SyncJob();
                 RunSync(false);
@@ -282,7 +304,30 @@ namespace TechBench
 
         void PaintNav()
         {
-            UiLayout.MarkSwitch(_nav, _page, _navNorm, _navBold);
+            UiLayout.MarkSwitch(_nav, _page,
+                _shortChrome ? _navNormShort : _navNorm,
+                _shortChrome ? _navBoldShort : _navBold);
+        }
+
+        void ApplyChromeBudget()
+        {
+            if (_chromeBusy || _nav == null || _job == null || _actions == null) return;
+            bool compact = UiLayout.ShortClient(this);
+            if (compact == _shortChrome) return;
+            _chromeBusy = true;
+            try
+            {
+                _shortChrome = compact;
+                UiLayout.SetSwitchChrome(_nav, compact);
+                _job.Padding = UiLayout.JobBarPad(compact);
+                _actions.Padding = UiLayout.ActionBarPad(compact);
+                for (int i = 0; i < _jobExtras.Count; i++)
+                    _jobExtras[i].Visible = !compact;
+                _syncStatus.Visible = !compact;
+                PaintNav();
+                PerformLayout();
+            }
+            finally { _chromeBusy = false; }
         }
 
         void ShowPage(int i)
@@ -325,6 +370,7 @@ namespace TechBench
             }
             if (s.Maximized) WindowState = FormWindowState.Maximized;
             UiLayout.FitToWorkingArea(this);
+            ApplyChromeBudget();
         }
 
         static bool OnAnyScreen(Rectangle bounds)
