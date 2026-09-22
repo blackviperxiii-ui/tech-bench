@@ -1346,6 +1346,12 @@ ProtocolDescription=ISO 15765
             && script.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) < 0, "token");
         Check("default feed is public HTTPS",
             Updater.DefaultManifestUrl.StartsWith("https://"), Updater.DefaultManifestUrl);
+        Check("default feed is public dist latest.json",
+            Updater.DefaultManifestUrl == "https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json",
+            Updater.DefaultManifestUrl);
+        Check("default feed is not the private source repo",
+            Updater.DefaultManifestUrl.IndexOf("tech-bench/releases", StringComparison.OrdinalIgnoreCase) < 0,
+            Updater.DefaultManifestUrl);
 
         // Newer defaults to false. That used to be the "is current" branch.
         var unset = new UpdateCheck();
@@ -1525,7 +1531,55 @@ ProtocolDescription=ISO 15765
         if (File.Exists(fetch))
             Check("no GitHub PAT in fetch-iscc.ps1", !ContainsSecret(File.ReadAllText(fetch)), "secret");
         if (File.Exists(release))
-            Check("no GitHub PAT in release.bat", !ContainsSecret(File.ReadAllText(release)), "secret");
+        {
+            string rel = File.ReadAllText(release);
+            Check("no GitHub PAT in release.bat", !ContainsSecret(rel), "secret");
+            Check("release.bat points latest.json url at public dist",
+                rel.IndexOf("blackviperxiii-ui/tech-bench-dist/releases/download/v", StringComparison.OrdinalIgnoreCase) >= 0,
+                "still points at private tech-bench releases");
+            Check("release.bat does not use private-repo download URL",
+                rel.IndexOf("blackviperxiii-ui/tech-bench/releases/download", StringComparison.OrdinalIgnoreCase) < 0,
+                "private-repo download URL");
+            Check("release.bat asserts PE i386",
+                rel.IndexOf("assert-pe-i386.ps1", StringComparison.OrdinalIgnoreCase) >= 0, "no PE assert");
+        }
+
+        string peAssert = Path.Combine(root, "tools", "assert-pe-i386.ps1");
+        Check("PE i386 assert script present", File.Exists(peAssert), peAssert);
+        if (File.Exists(peAssert))
+        {
+            string pe = File.ReadAllText(peAssert);
+            Check("PE assert requires Machine 0x014C",
+                pe.IndexOf("0x014C", StringComparison.OrdinalIgnoreCase) >= 0, "no 0x014C");
+            Check("PE assert rejects AnyCPU",
+                pe.IndexOf("AnyCPU", StringComparison.OrdinalIgnoreCase) >= 0
+                && pe.IndexOf("ProcessorArchitecture", StringComparison.OrdinalIgnoreCase) >= 0, "no AnyCPU check");
+        }
+
+        string publish = Path.Combine(root, "tools", "publish-dist.ps1");
+        Check("dist publish script present", File.Exists(publish), publish);
+        if (File.Exists(publish))
+        {
+            string pub = File.ReadAllText(publish);
+            Check("dist publish targets tech-bench-dist",
+                pub.IndexOf("blackviperxiii-ui/tech-bench-dist", StringComparison.OrdinalIgnoreCase) >= 0, "wrong repo");
+            Check("dist publish documents DIST_REPO_TOKEN",
+                pub.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) >= 0, "no secret name");
+            Check("no GitHub PAT in publish-dist.ps1", !ContainsSecret(pub), "secret");
+        }
+
+        string workflow = Path.Combine(root, ".github", "workflows", "windows-installer.yml");
+        Check("windows installer workflow present", File.Exists(workflow), workflow);
+        if (File.Exists(workflow))
+        {
+            string yml = File.ReadAllText(workflow);
+            Check("CI asserts PE i386",
+                yml.IndexOf("assert-pe-i386.ps1", StringComparison.OrdinalIgnoreCase) >= 0, "no PE assert step");
+            Check("CI documents DIST_REPO_TOKEN",
+                yml.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) >= 0, "no secret name");
+            Check("CI does not invent a new installer workflow path",
+                yml.IndexOf("runs-on: windows-latest", StringComparison.OrdinalIgnoreCase) >= 0, yml);
+        }
     }
 
     static string FindRepoRoot()

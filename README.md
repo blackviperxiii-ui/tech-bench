@@ -23,7 +23,7 @@ A missing knowledge base does not block launch — the search status line says t
 
 ## Install (shop PC)
 
-Run `TechBench-Setup-<version>.exe` (from a release). It does **not** need administrator.
+Run `TechBench-Setup-<version>.exe` (Windows installer CI artifact). It does **not** need administrator.
 
 - Puts `TechBench.exe` and tab icons in `%LocalAppData%\Programs\TechBench`
 - Start Menu shortcut (Uninstall is there too)
@@ -59,9 +59,14 @@ Writes:
 
 Building the Setup exe needs the Inno Setup compiler (`ISCC.exe`). `installer\build.bat` looks in the usual install paths, then downloads a local copy into `tools\innosetup` (gitignored) if needed. Shop PCs never run that step — they only run the finished Setup exe.
 
-Upload **TechBench.exe** and **latest.json** to a **public** HTTPS location. Shop PCs download them anonymously. Hand techs the Setup exe for first install (and for machines that never had a copy).
+Upload **TechBench.exe** and **latest.json** to the public dist repo [blackviperxiii-ui/tech-bench-dist](https://github.com/blackviperxiii-ui/tech-bench-dist). Shop PCs download them anonymously. Hand techs the Setup exe for first install (and for machines that never had a copy).
 
-This GitHub repo is private, so `github.com/.../releases/...` URLs will 404 without a login. Host the two updater files somewhere GET works without auth (public dist repo, object storage, etc.). On a shop PC you can override the feed with `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed).
+Built-in updater URLs (this private source repo is not the feed):
+
+- `latest.json`: `https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`
+- `TechBench.exe`: `https://github.com/blackviperxiii-ui/tech-bench-dist/releases/download/v{VERSION}/TechBench.exe`
+
+CI publishes those two files after `release.bat` when repository secret `DIST_REPO_TOKEN` is set (a PAT with `contents:write` on `tech-bench-dist`). `GITHUB_TOKEN` cannot create releases on another repo; without `DIST_REPO_TOKEN` the job still builds and asserts PE i386, and you upload the two files onto the `v{VERSION}` dist release by hand. On a shop PC you can override the feed with `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed).
 
 The updater never sends credentials and the installer does not contain a GitHub token. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start, in the same folder the Setup exe used.
 

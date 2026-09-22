@@ -1,5 +1,10 @@
 # ISCC is Windows-only. This job compiles Tech Bench, builds the Inno setup,
 # and uploads TechBench-Setup-<version>.exe, TechBench.exe, and latest.json.
+# After the exe exists it fail-closes unless PE Machine is 0x014C (i386 / /platform:x86).
+# Best-effort publish of TechBench.exe + latest.json to blackviperxiii-ui/tech-bench-dist
+# needs repository secret DIST_REPO_TOKEN (PAT, contents:write on that public repo).
+# GITHUB_TOKEN cannot create releases on another repository; without
+# DIST_REPO_TOKEN the upload is skipped and the job still succeeds.
 name: Windows installer
 
 on:
@@ -21,6 +26,10 @@ jobs:
         shell: cmd
         run: release.bat
 
+      - name: Assert TechBench.exe is PE i386
+        shell: pwsh
+        run: .\tools\assert-pe-i386.ps1 .\TechBench.exe
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
@@ -30,3 +39,10 @@ jobs:
             dist/TechBench-Setup-*.exe
             TechBench.exe
             latest.json
+
+      - name: Publish updater files to public dist repo
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          DIST_REPO_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
+        run: .\tools\publish-dist.ps1
