@@ -57,6 +57,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion
+; Field database (fault codes, service access, manual index, filters, equipment).
+; Same JSON is embedded in TechBench.exe. This folder is what a normal install searches.
+Source: "..\kb\*"; DestDir: "{app}\air-compressor-kb"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
 Type: files; Name: "{app}\TechBench.exe.new"

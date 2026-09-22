@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.3** (Help → About). Does **not** ship manuals, filter charts, or service passwords. Those stay in your local `air-compressor-kb` folder.
+Current stamp: **1.2.4** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
 
 ## What it does
 
@@ -25,7 +25,7 @@ A missing knowledge base does not block launch — the search status line says t
 
 Run `TechBench-Setup-<version>.exe` (from a release). It does **not** need administrator.
 
-- Puts `TechBench.exe` and tab icons in `%LocalAppData%\Programs\TechBench`
+- Puts `TechBench.exe`, tab icons, and `air-compressor-kb` (the field database) in `%LocalAppData%\Programs\TechBench`
 - Start Menu shortcut (Uninstall is there too)
 - Desktop shortcut unless you untick it
 
@@ -71,19 +71,24 @@ The updater never sends credentials and the installer does not contain a GitHub 
 test.bat
 ```
 
-Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter and no knowledge base needed — it builds its own sample data in `%TEMP%`.
+Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder.
 
 ## Knowledge base
 
-Expected at `Documents\air-compressor-kb` (OneDrive Documents also works).
-The app looks for `data\kb.json` and the rest of that tree. It never copies the KB into this repo.
+A normal install already has the database. The Setup exe copies `air-compressor-kb` next to `TechBench.exe`, and the same JSON is embedded in the exe. Search reads that copy. No Google Drive or OneDrive folder is required.
 
-If it lives somewhere else, point at it either way:
+Record counts from the 2026-08-11 field database (`kb\data\INDEX.json`): 155 fault codes, 1,424 service-access rows, 2,147 USB manual index entries, 63 filter/oil rows, 37 equipment rows.
 
-- `kb-path.txt` next to `TechBench.exe`, one path per line (`#` comments allowed)
-- a `TECHBENCH_KB` environment variable
+The app looks for `data\kb.json` in this order:
+
+1. `TECHBENCH_KB`, or `kb-path.txt` next to `TechBench.exe` (one path per line, `#` comments allowed)
+2. `air-compressor-kb` next to the exe (what the installer writes)
+3. The old `Documents\air-compressor-kb` / OneDrive Documents location, if that folder is still there and the install copy is missing
+4. The copy embedded in the exe, written to `%LocalAppData%\TechBench\air-compressor-kb`
 
 A malformed file in `data\` only costs that section — the status line under the search box names the file that failed. Launch is not blocked if the folder is missing.
+
+Manual hits point at the original PDF paths from the shop PC that built the index. Those PDFs are not inside the installer.
 
 ### Work orders (Mobile Tech in-app)
 
