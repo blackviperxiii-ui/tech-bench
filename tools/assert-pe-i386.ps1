@@ -7,7 +7,11 @@
 # PowerShell 5.1 reports X86. CorFlags is the same on both.
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [string]$Path
+    [string]$Path,
+    # Inno Setup's stub is a native i386 PE, not a CLR image. -Native still
+    # fail-closes unless Machine is 0x014C and the optional header is PE32.
+    # Do not pass -Native for TechBench.exe — that build must also have CLR 32BITREQUIRED.
+    [switch]$Native
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,6 +72,11 @@ if ($magic -eq 0x20B) {
 }
 if ($magic -ne 0x10B) {
     Fail ("Unknown optional header magic 0x{0:X4}" -f $magic)
+}
+
+if ($Native) {
+    Write-Host ("OK native PE Machine=0x014C (i386): {0}" -f $full)
+    exit 0
 }
 
 # PE32: data directories begin at optional header + 96.
