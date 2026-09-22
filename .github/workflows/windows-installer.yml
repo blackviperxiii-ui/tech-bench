@@ -1,0 +1,32 @@
+# ISCC is Windows-only. This job compiles Tech Bench, builds the Inno setup,
+# and uploads TechBench-Setup-<version>.exe, TechBench.exe, and latest.json.
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Self-test
+        shell: cmd
+        run: test.bat
+
+      - name: Build setup exe and latest.json
+        shell: cmd
+        run: release.bat
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: TechBench-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            dist/TechBench-Setup-*.exe
+            TechBench.exe
+            latest.json
