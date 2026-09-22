@@ -2,7 +2,7 @@
 # CLR 32BITREQUIRED. RP1210 adapter drivers will not load into x64 or AnyCPU.
 # Keep /platform:x86 in build.bat / test.bat.
 #
-# Do not use [Reflection.AssemblyName]::GetAssemblyName — pwsh 7 reports
+# Do not use [Reflection.AssemblyName]::GetAssemblyName - pwsh 7 reports
 # ProcessorArchitecture=None for this Framework 4 winexe, while Windows
 # PowerShell 5.1 reports X86. CorFlags is the same on both.
 param(
@@ -52,7 +52,7 @@ if ($sig -ne "PE`0`0") {
 $machine = Read-U16 $bytes ($pe + 4)
 $hex = '0x{0:X4}' -f $machine
 if ($machine -ne 0x014C) {
-    Fail "PE Machine=$hex — expected 0x014C (i386). x64/AnyCPU cannot load RP1210. Rebuild with /platform:x86."
+    Fail "PE Machine=$hex - expected 0x014C (i386). x64/AnyCPU cannot load RP1210. Rebuild with /platform:x86."
 }
 
 $numberOfSections = Read-U16 $bytes ($pe + 6)
@@ -78,7 +78,7 @@ if (($dataDirs + 15 * 8) -gt $bytes.Length) {
 
 $numRva = Read-U32 $bytes ($dataDirs - 4)
 if ($numRva -lt 15) {
-    Fail "No COM descriptor directory — not a managed x86 build?"
+    Fail "No COM descriptor directory - not a managed x86 build?"
 }
 
 $comRva = Read-U32 $bytes ($dataDirs + 14 * 8)
@@ -110,7 +110,7 @@ if ($fileOffset -lt 0 -or ($fileOffset + 20) -gt $bytes.Length) {
 $flags = Read-U32 $bytes ($fileOffset + 16)
 $flag32Required = 0x2
 if (($flags -band $flag32Required) -eq 0) {
-    Fail ("CLR Flags=0x{0:X} missing 32BITREQUIRED — AnyCPU cannot load RP1210. Rebuild with /platform:x86." -f $flags)
+    Fail ("CLR Flags=0x{0:X} missing 32BITREQUIRED - AnyCPU cannot load RP1210. Rebuild with /platform:x86." -f $flags)
 }
 
 Write-Host ("OK PE Machine=0x014C (i386), CLR 32BITREQUIRED, Flags=0x{0:X}: {1}" -f $flags, $full)
