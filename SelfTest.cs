@@ -1553,7 +1553,7 @@ ProtocolDescription=ISO 15765
                 pe.IndexOf("0x014C", StringComparison.OrdinalIgnoreCase) >= 0, "no 0x014C");
             Check("PE assert rejects AnyCPU",
                 pe.IndexOf("AnyCPU", StringComparison.OrdinalIgnoreCase) >= 0
-                && pe.IndexOf("ProcessorArchitecture", StringComparison.OrdinalIgnoreCase) >= 0, "no AnyCPU check");
+                && pe.IndexOf("32BITREQUIRED", StringComparison.OrdinalIgnoreCase) >= 0, "no AnyCPU / 32BITREQUIRED check");
         }
 
         string publish = Path.Combine(root, "tools", "publish-dist.ps1");
