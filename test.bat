@@ -4,7 +4,7 @@ rem unit history, KB load/search, user-code round-trip, snapshot diff, report te
 rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way shop sync,
 rem work-order packets / IntelliDealer gateway (no live DMS),
 rem and shop-laptop WinForms layout (primary buttons stay on screen).
-rem Needs no adapter and no knowledge base — it builds its own sample data in %TEMP%.
+rem Needs no adapter. Sample KB data is built in %TEMP%. The shipped field database under kb\ is loaded as-is.
 set CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe
 if not exist "%CSC%" (
   echo Missing .NET 4 csc at %CSC%
@@ -12,6 +12,11 @@ if not exist "%CSC%" (
 )
 "%CSC%" /nologo /platform:x86 /target:exe ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
+  /resource:kb\data\kb.json,TechBench.BundledKb.data.kb.json ^
+  /resource:kb\data\passwords\ifix-passwords.json,TechBench.BundledKb.data.passwords.ifix-passwords.json ^
+  /resource:kb\data\usb-manuals.json,TechBench.BundledKb.data.usb-manuals.json ^
+  /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
+  /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
   /out:SelfTest.exe ^
   SelfTest.cs J1939Decode.cs Names.cs Bam.cs Rp1210.cs Rp1210Api.cs Ini.cs J1939Clear.cs ^
   BusMonitor.cs BusWorker.cs Trend.cs Timeline.cs History.cs JobReport.cs SessionData.cs ^

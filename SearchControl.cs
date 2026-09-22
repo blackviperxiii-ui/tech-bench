@@ -141,7 +141,8 @@ namespace TechBench
                 _open.Enabled = false;
                 _detail.Text = _kb.All.Count == 0
                     ? "The knowledge base is empty.\r\n\r\nExpected data\\kb.json under:\r\n" + _kb.Root +
-                      "\r\n\r\nPoint at it with a kb-path.txt next to TechBench.exe or the TECHBENCH_KB environment variable."
+                      "\r\n\r\nA normal install ships that folder next to TechBench.exe. " +
+                      "kb-path.txt or TECHBENCH_KB still overrides it."
                     : "No hits.";
             }
         }
