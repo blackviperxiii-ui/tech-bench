@@ -34,6 +34,8 @@ namespace TechBench
         {
             if (Kind == "code")
                 return "CODE  " + Key + "  —  " + LocalSummary + "  vs  " + RemoteSummary;
+            if (Kind == "work-order")
+                return "WO  " + Key + "  —  " + LocalSummary + "  vs  " + RemoteSummary;
             return Kind.ToUpperInvariant() + "  " + RelativePath;
         }
     }
@@ -525,6 +527,11 @@ namespace TechBench
             if (c.Kind == "code")
             {
                 ResolveCode(kbRoot, c, choice);
+                return;
+            }
+            if (c.Kind == "work-order")
+            {
+                WorkOrderStore.Resolve(c, choice, kbRoot);
                 return;
             }
             if (choice == "local")

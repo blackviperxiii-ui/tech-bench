@@ -8,6 +8,7 @@ rem /platform:x86 is required: RP1210 adapter drivers are 32-bit only.
 "%CSC%" /nologo /platform:x86 /target:winexe /optimize ^
   /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
+  /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Security.dll" ^
   /win32icon:assets\app.ico ^
   /win32manifest:app.manifest ^
   /resource:kb\data\kb.json,TechBench.BundledKb.data.kb.json ^

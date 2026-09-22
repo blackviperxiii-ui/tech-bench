@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
@@ -18,6 +19,7 @@ namespace TechBench
 
         public static string FolderOverride;
         public static string ExeDirOverride;
+        public static readonly List<ShopConflict> Conflicts = new List<ShopConflict>();
 
         public static string LocalRoot()
         {
@@ -108,20 +110,21 @@ namespace TechBench
 
         public static List<WorkOrder> ListAll(IdSettings settings, string kbRoot)
         {
+            Conflicts.Clear();
             var byKey = new Dictionary<string, WorkOrder>(StringComparer.OrdinalIgnoreCase);
             if (settings == null) settings = new IdSettings();
             string tech = IdSettings.Sanitize(settings.TechId);
 
-            Absorb(byKey, LocalRoot(), "file");
+            Absorb(byKey, LocalRoot(), "file", kbRoot);
             if (!string.IsNullOrEmpty(kbRoot) && Directory.Exists(kbRoot))
             {
-                Absorb(byKey, ShopTechDir(kbRoot, tech), "file");
-                AbsorbShared(byKey, ShopSharedDir(kbRoot));
+                Absorb(byKey, ShopTechDir(kbRoot, tech), "file", kbRoot);
+                AbsorbShared(byKey, ShopSharedDir(kbRoot), kbRoot);
             }
             if (!string.IsNullOrWhiteSpace(settings.ShareFolder) && Directory.Exists(settings.ShareFolder))
             {
-                AbsorbShared(byKey, Path.Combine(settings.ShareFolder, WoRel));
-                AbsorbShared(byKey, Path.Combine(settings.ShareFolder, ShopRel, SharedTech, WoRel));
+                AbsorbShared(byKey, Path.Combine(settings.ShareFolder, WoRel), kbRoot);
+                AbsorbShared(byKey, Path.Combine(settings.ShareFolder, ShopRel, SharedTech, WoRel), kbRoot);
             }
             ImportAssignedFile(byKey, settings.AssignedFile);
             AbsorbAssignedSidecar(byKey, kbRoot);
@@ -130,6 +133,25 @@ namespace TechBench
             foreach (WorkOrder wo in byKey.Values) list.Add(wo);
             list.Sort(CompareWo);
             return list;
+        }
+
+        public static void CollectConflicts(IdSettings settings, string kbRoot, ShopSyncResult result)
+        {
+            ListAll(settings, kbRoot);
+            if (result == null) return;
+            foreach (ShopConflict c in Conflicts) result.AddConflict(c);
+        }
+
+        public static void Resolve(ShopConflict c, string choice, string kbRoot)
+        {
+            if (c == null) return;
+            choice = (choice ?? "").Trim().ToLowerInvariant();
+            if (choice == "local")
+                CopyPacket(c.LocalPath, c.RemotePath);
+            else if (choice == "remote")
+                CopyPacket(c.RemotePath, c.LocalPath);
+            else if (choice == "both")
+                MarkKeepBoth(kbRoot, c.Key);
         }
 
         public static string AttachFile(WorkOrder wo, string sourcePath, IdSettings settings, string kbRoot)
@@ -297,7 +319,7 @@ namespace TechBench
             }
         }
 
-        static void Absorb(Dictionary<string, WorkOrder> byKey, string root, string source)
+        static void Absorb(Dictionary<string, WorkOrder> byKey, string root, string source, string kbRoot)
         {
             if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return;
             string[] dirs;
@@ -308,12 +330,11 @@ namespace TechBench
                 WorkOrder wo = Load(d);
                 if (wo == null || string.IsNullOrWhiteSpace(wo.Key())) continue;
                 if (string.IsNullOrWhiteSpace(wo.Source)) wo.Source = source;
-                string k = wo.Key();
-                if (!byKey.ContainsKey(k)) byKey[k] = wo;
+                Merge(byKey, wo, kbRoot);
             }
         }
 
-        static void AbsorbShared(Dictionary<string, WorkOrder> byKey, string root)
+        static void AbsorbShared(Dictionary<string, WorkOrder> byKey, string root, string kbRoot)
         {
             if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return;
             string[] dirs;
@@ -324,9 +345,137 @@ namespace TechBench
                 WorkOrder wo = Load(d);
                 if (wo == null || string.IsNullOrWhiteSpace(wo.Key())) continue;
                 wo.Source = "shared";
-                string k = wo.Key();
-                if (!byKey.ContainsKey(k)) byKey[k] = wo;
+                Merge(byKey, wo, kbRoot);
             }
+        }
+
+        static void Merge(Dictionary<string, WorkOrder> byKey, WorkOrder incoming, string kbRoot)
+        {
+            if (incoming == null) return;
+            string k = incoming.Key();
+            if (string.IsNullOrWhiteSpace(k)) return;
+            if (!byKey.ContainsKey(k))
+            {
+                byKey[k] = incoming;
+                return;
+            }
+            WorkOrder have = byKey[k];
+            if (PacketHash(have) == PacketHash(incoming))
+            {
+                if (CompareUtc(incoming, have) > 0) byKey[k] = incoming;
+                return;
+            }
+            WorkOrder winner = CompareUtc(incoming, have) > 0 ? incoming : have;
+            byKey[k] = winner;
+            if (KeepBoth(kbRoot, k) || AlreadyConflict(k)) return;
+            Conflicts.Add(new ShopConflict
+            {
+                Kind = "work-order",
+                Key = k,
+                RelativePath = Path.Combine(WoRel, SafeKey(k)),
+                LocalPath = have.Folder,
+                RemotePath = incoming.Folder,
+                LocalSummary = NotePreview(have),
+                RemoteSummary = NotePreview(incoming),
+                Prefix = "wo"
+            });
+        }
+
+        static bool AlreadyConflict(string key)
+        {
+            foreach (ShopConflict c in Conflicts)
+            {
+                if (c.Kind == "work-order"
+                    && string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        static string PacketHash(WorkOrder wo)
+        {
+            if (wo == null) return "";
+            var sb = new StringBuilder();
+            sb.Append(wo.Number ?? "").Append('\n');
+            sb.Append(wo.Segment ?? "").Append('\n');
+            sb.Append(wo.Customer ?? "").Append('\n');
+            sb.Append(wo.CustomerNo ?? "").Append('\n');
+            sb.Append(wo.Model ?? "").Append('\n');
+            sb.Append(wo.Serial ?? "").Append('\n');
+            sb.Append(wo.Stock ?? "").Append('\n');
+            sb.Append(wo.Description ?? "").Append('\n');
+            sb.Append(wo.AssignedTech ?? "").Append('\n');
+            sb.Append(wo.Notes ?? "").Append('\n');
+            sb.Append(wo.ReportText ?? "").Append('\n');
+            sb.Append(wo.ClockState ?? "").Append('\n');
+            if (wo.Media != null)
+            {
+                var names = new List<string>(wo.Media);
+                names.Sort(StringComparer.OrdinalIgnoreCase);
+                foreach (string n in names) sb.Append(n).Append('\n');
+            }
+            return ShopSync.HashText(sb.ToString());
+        }
+
+        static int CompareUtc(WorkOrder a, WorkOrder b)
+        {
+            return ParseUtc(a == null ? "" : a.UpdatedUtc).CompareTo(ParseUtc(b == null ? "" : b.UpdatedUtc));
+        }
+
+        static DateTime ParseUtc(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return DateTime.MinValue;
+            DateTime dt;
+            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out dt))
+                return dt;
+            return DateTime.MinValue;
+        }
+
+        static string NotePreview(WorkOrder wo)
+        {
+            string n = wo == null ? "" : (wo.Notes ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (n.Length == 0) n = "(no notes)";
+            if (n.Length > 60) n = n.Substring(0, 60);
+            return n;
+        }
+
+        static string KeepBothPath(string kbRoot)
+        {
+            if (!string.IsNullOrEmpty(kbRoot))
+                return Path.Combine(kbRoot, ShopRel, "_resolved", "keep-both-wo.txt");
+            return Path.Combine(IdSettings.Folder(), "keep-both-wo.txt");
+        }
+
+        static bool KeepBoth(string kbRoot, string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            try
+            {
+                string path = KeepBothPath(kbRoot);
+                if (!File.Exists(path)) return false;
+                foreach (string line in File.ReadAllLines(path))
+                {
+                    if (string.Equals(line.Trim(), key, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        static void MarkKeepBoth(string kbRoot, string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return;
+            string path = KeepBothPath(kbRoot);
+            string dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            var lines = new List<string>();
+            if (File.Exists(path)) lines.AddRange(File.ReadAllLines(path));
+            foreach (string line in lines)
+                if (string.Equals(line.Trim(), key, StringComparison.OrdinalIgnoreCase)) return;
+            lines.Add(key);
+            File.WriteAllLines(path, lines.ToArray());
         }
 
         static void AbsorbAssignedSidecar(Dictionary<string, WorkOrder> byKey, string kbRoot)
