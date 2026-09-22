@@ -12,11 +12,16 @@ namespace TechBench
     internal sealed class WorkOrderControl : UserControl
     {
         readonly ListBox _list;
+        readonly TableLayoutPanel _form;
         readonly TextBox _number, _segment, _customer, _customerNo;
         readonly TextBox _model, _serial, _stock, _desc, _notes, _report, _clock;
+        readonly Label _labNumber, _labSegment, _labCustomer, _labCustomerNo;
+        readonly Label _labModel, _labSerial, _labStock, _labDesc;
+        readonly Label _labNotes, _labReport, _labMedia, _labClock;
         readonly ListBox _media;
         readonly TextBox _status;
         readonly Button _logOn, _logOff, _signOff;
+        int _formCols;
         string _kbRoot;
         IdSettings _settings;
         WorkOrder _current;
@@ -46,41 +51,33 @@ namespace TechBench
             left.Controls.Add(_list);
             left.Controls.Add(leftBar);
 
-            var right = new TableLayoutPanel
+            _form = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 9,
                 Padding = new Padding(8),
                 AutoScroll = true
             };
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            for (int i = 0; i < 4; i++)
-                right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
-            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-            _number = Field(right, 0, 0, "WO number");
-            _segment = Field(right, 0, 2, "Segment");
-            _customer = Field(right, 1, 0, "Customer");
-            _customerNo = Field(right, 1, 2, "Customer #");
-            _model = Field(right, 2, 0, "Model");
-            _serial = Field(right, 2, 2, "Serial");
-            _stock = Field(right, 3, 0, "Stock");
-            _desc = Field(right, 3, 2, "Complaint");
-
-            right.Controls.Add(new Label { Text = "Notes", AutoSize = true, Margin = new Padding(0, 8, 8, 0) }, 0, 4);
+            _labNumber = FormLabel("WO number");
+            _labSegment = FormLabel("Segment");
+            _labCustomer = FormLabel("Customer");
+            _labCustomerNo = FormLabel("Customer #");
+            _labModel = FormLabel("Model");
+            _labSerial = FormLabel("Serial");
+            _labStock = FormLabel("Stock");
+            _labDesc = FormLabel("Complaint");
+            _labNotes = FormLabel("Notes");
+            _labReport = FormLabel("Report");
+            _labMedia = FormLabel("Pictures");
+            _labClock = FormLabel("Clock");
+            _number = FormBox();
+            _segment = FormBox();
+            _customer = FormBox();
+            _customerNo = FormBox();
+            _model = FormBox();
+            _serial = FormBox();
+            _stock = FormBox();
+            _desc = FormBox();
             _notes = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 90, AcceptsReturn = true };
-            right.SetColumnSpan(_notes, 3);
-            right.Controls.Add(_notes, 1, 4);
-
-            right.Controls.Add(new Label { Text = "Report", AutoSize = true, Margin = new Padding(0, 8, 8, 0) }, 0, 5);
             _report = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -91,16 +88,8 @@ namespace TechBench
                 Font = new Font("Consolas", 9f),
                 Height = 110
             };
-            right.SetColumnSpan(_report, 3);
-            right.Controls.Add(_report, 1, 5);
-
-            right.Controls.Add(new Label { Text = "Pictures", AutoSize = true, Margin = new Padding(0, 8, 8, 0) }, 0, 6);
             _media = new ListBox { Dock = DockStyle.Fill, Height = 70, IntegralHeight = false };
-            right.SetColumnSpan(_media, 3);
-            right.Controls.Add(_media, 1, 6);
             _media.DoubleClick += delegate { OpenMedia(); };
-
-            right.Controls.Add(new Label { Text = "Clock", AutoSize = true, Margin = new Padding(0, 8, 8, 0) }, 0, 7);
             _clock = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -110,15 +99,10 @@ namespace TechBench
                 Height = 70,
                 Font = new Font("Consolas", 9f)
             };
-            right.SetColumnSpan(_clock, 3);
-            right.Controls.Add(_clock, 1, 7);
-
             _status = UiLayout.WrapText("");
             _status.Dock = DockStyle.Fill;
             _status.ForeColor = Color.DimGray;
             _status.Margin = new Padding(0, 8, 0, 0);
-            right.SetColumnSpan(_status, 4);
-            right.Controls.Add(_status, 0, 8);
 
             var bar = UiLayout.WrapBar(new Padding(8, 6, 8, 4));
             bar.Controls.Add(Btn("Save", delegate { SaveCurrent(); }));
@@ -134,11 +118,13 @@ namespace TechBench
             bar.Controls.Add(Btn("Settings", delegate { OpenSettings(); }));
 
             var rightHost = new Panel { Dock = DockStyle.Fill };
-            rightHost.Controls.Add(right);
+            rightHost.Controls.Add(_form);
             rightHost.Controls.Add(bar);
+            rightHost.SizeChanged += delegate { PlaceForm(); };
 
             var split = UiLayout.Split(Orientation.Vertical, 280, 180, 280, left, rightHost);
             Controls.Add(split);
+            PlaceForm();
             Reload(false);
         }
 
@@ -243,17 +229,179 @@ namespace TechBench
 
         Button Btn(string text, EventHandler click)
         {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(0, 0, 8, 4) };
+            var b = new Button
+            {
+                Text = text,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                AutoEllipsis = false,
+                Margin = new Padding(0, 0, 8, 4)
+            };
+            UiLayout.SizeToCaption(b);
             b.Click += click;
             return b;
         }
 
-        TextBox Field(TableLayoutPanel t, int row, int col, string label)
+        static Label FormLabel(string text)
         {
-            t.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 8, 0) }, col, row);
-            var box = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 4, 8, 0) };
-            t.Controls.Add(box, col + 1, row);
-            return box;
+            return new Label { Text = text, AutoSize = true, Margin = new Padding(0, 8, 8, 0) };
+        }
+
+        static TextBox FormBox()
+        {
+            return new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 4, 8, 0) };
+        }
+
+        static int FormColumnCount(int width)
+        {
+            if (width < 520) return 1;
+            if (width < 900) return 2;
+            return 4;
+        }
+
+        void PlaceForm()
+        {
+            if (_form == null) return;
+            int width = _form.Parent != null ? _form.Parent.ClientSize.Width : ClientSize.Width;
+            int cols = FormColumnCount(width);
+            if (cols == _formCols && _form.ColumnCount == cols) return;
+            _formCols = cols;
+            _form.SuspendLayout();
+            _form.Controls.Clear();
+            _form.ColumnStyles.Clear();
+            _form.RowStyles.Clear();
+            if (cols == 4) PlaceFormWide();
+            else if (cols == 2) PlaceFormPair();
+            else PlaceFormStack();
+            _form.ResumeLayout(true);
+        }
+
+        void PlaceFormWide()
+        {
+            _form.ColumnCount = 4;
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            AddPair(0, _labNumber, _number, _labSegment, _segment);
+            AddPair(1, _labCustomer, _customer, _labCustomerNo, _customerNo);
+            AddPair(2, _labModel, _model, _labSerial, _serial);
+            AddPair(3, _labStock, _stock, _labDesc, _desc);
+            AddWideBlock(4, _labNotes, _notes, 3);
+            AddWideBlock(5, _labReport, _report, 3);
+            AddWideBlock(6, _labMedia, _media, 3);
+            AddWideBlock(7, _labClock, _clock, 3);
+            AddStatus(8, 4);
+            StyleFormRows(4);
+        }
+
+        void PlaceFormPair()
+        {
+            _form.ColumnCount = 2;
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            AddField(0, _labNumber, _number);
+            AddField(1, _labSegment, _segment);
+            AddField(2, _labCustomer, _customer);
+            AddField(3, _labCustomerNo, _customerNo);
+            AddField(4, _labModel, _model);
+            AddField(5, _labSerial, _serial);
+            AddField(6, _labStock, _stock);
+            AddField(7, _labDesc, _desc);
+            AddWideBlock(8, _labNotes, _notes, 1);
+            AddWideBlock(9, _labReport, _report, 1);
+            AddWideBlock(10, _labMedia, _media, 1);
+            AddWideBlock(11, _labClock, _clock, 1);
+            AddStatus(12, 2);
+            StyleFormRows(8);
+        }
+
+        void PlaceFormStack()
+        {
+            _form.ColumnCount = 1;
+            _form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            int row = 0;
+            row = AddStack(row, _labNumber, _number);
+            row = AddStack(row, _labSegment, _segment);
+            row = AddStack(row, _labCustomer, _customer);
+            row = AddStack(row, _labCustomerNo, _customerNo);
+            row = AddStack(row, _labModel, _model);
+            row = AddStack(row, _labSerial, _serial);
+            row = AddStack(row, _labStock, _stock);
+            row = AddStack(row, _labDesc, _desc);
+            row = AddStack(row, _labNotes, _notes);
+            row = AddStack(row, _labReport, _report);
+            row = AddStack(row, _labMedia, _media);
+            row = AddStack(row, _labClock, _clock);
+            _form.SetColumnSpan(_status, 1);
+            _form.Controls.Add(_status, 0, row);
+            _form.RowCount = row + 1;
+            for (int i = 0; i < 16; i++)
+                _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+            _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
+            _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        }
+
+        void StyleFormRows(int autoBefore)
+        {
+            _form.RowCount = autoBefore + 5;
+            for (int i = 0; i < autoBefore; i++)
+                _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            _form.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            _form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        }
+
+        void AddPair(int row, Label aLab, TextBox aBox, Label bLab, TextBox bBox)
+        {
+            _form.SetColumnSpan(aLab, 1);
+            _form.SetColumnSpan(aBox, 1);
+            _form.SetColumnSpan(bLab, 1);
+            _form.SetColumnSpan(bBox, 1);
+            _form.Controls.Add(aLab, 0, row);
+            _form.Controls.Add(aBox, 1, row);
+            _form.Controls.Add(bLab, 2, row);
+            _form.Controls.Add(bBox, 3, row);
+        }
+
+        void AddField(int row, Label lab, TextBox box)
+        {
+            _form.SetColumnSpan(lab, 1);
+            _form.SetColumnSpan(box, 1);
+            _form.Controls.Add(lab, 0, row);
+            _form.Controls.Add(box, 1, row);
+        }
+
+        int AddStack(int row, Label lab, Control body)
+        {
+            _form.SetColumnSpan(lab, 1);
+            _form.SetColumnSpan(body, 1);
+            _form.Controls.Add(lab, 0, row);
+            _form.Controls.Add(body, 0, row + 1);
+            return row + 2;
+        }
+
+        void AddWideBlock(int row, Label lab, Control body, int span)
+        {
+            _form.SetColumnSpan(lab, 1);
+            _form.SetColumnSpan(body, span);
+            _form.Controls.Add(lab, 0, row);
+            _form.Controls.Add(body, 1, row);
+        }
+
+        void AddStatus(int row, int span)
+        {
+            _form.SetColumnSpan(_status, span);
+            _form.Controls.Add(_status, 0, row);
         }
 
         void PickFromList()

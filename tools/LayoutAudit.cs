@@ -47,6 +47,7 @@ static class LayoutAudit
                 Console.WriteLine();
                 Console.WriteLine("== " + f.Width + "x" + f.Height + " client " + f.ClientSize.Width + "x" + f.ClientSize.Height + " ==");
 
+                    clipped += ChromeReport(f);
                     clipped += SwitchReport(f);
                     if (FindTab(f) != null)
                     {
@@ -152,7 +153,7 @@ static class LayoutAudit
                 Console.WriteLine("  CLIP  shell  switch \"" + need[i] + "\"  " + why);
                 hits++;
             }
-            else if (b.Height < 40 || b.Width < 80)
+            else if (b.Height < SwitchMinHeight(f) || b.Width < 80)
             {
                 Console.WriteLine("  CLIP  shell  switch \"" + need[i] + "\"  tiny " + b.Size);
                 hits++;
@@ -161,6 +162,47 @@ static class LayoutAudit
                 Console.WriteLine("  OK    shell  switch \"" + need[i] + "\"  " + b.Width + "x" + b.Height + " @ " + b.Left + "," + b.Top);
         }
         return hits;
+    }
+
+    static int SwitchMinHeight(Form f)
+    {
+        return UiLayout.ShortClient(f) ? 26 : 40;
+    }
+
+    static bool HardGate(Form f)
+    {
+        if (f == null) return false;
+        if (UiLayout.ShortClient(f)) return true;
+        return (f.Width == 1024 && f.Height == 600) || (f.Width == 960 && f.Height == 540);
+    }
+
+    // Job strip + bottom sync + roomy nav used to eat the page host on 1024×600
+    // and 960×540. Fail those sizes (and any ShortClient) when chrome is too tall.
+    static int ChromeReport(Form f)
+    {
+        Control host = FindNamed(f, "shellHost");
+        if (host == null)
+        {
+            Console.WriteLine("  CLIP  shell  missing shellHost");
+            return 1;
+        }
+        int chrome = f.ClientSize.Height - host.Height;
+        if (host.Height < 8)
+        {
+            Console.WriteLine("  CLIP  shell  chrome budget host h=" + host.Height
+                + " chrome=" + chrome + " client=" + f.ClientSize);
+            return 1;
+        }
+        if (HardGate(f) && (host.Height < 180 || chrome > UiLayout.ShortChromeMax))
+        {
+            Console.WriteLine("  CLIP  shell  chrome budget host h=" + host.Height
+                + " chrome=" + chrome + " client=" + f.ClientSize
+                + " (1024x600 / 960x540 need host>=180 and chrome<=" + UiLayout.ShortChromeMax + ")");
+            return 1;
+        }
+        Console.WriteLine("  OK    shell  host " + host.Width + "x" + host.Height
+            + "  chrome " + chrome + (HardGate(f) ? "  (short budget)" : ""));
+        return 0;
     }
 
     static Control FindNamed(Control c, string name)
