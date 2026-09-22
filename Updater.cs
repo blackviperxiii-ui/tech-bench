@@ -37,7 +37,7 @@ namespace TechBench
     internal static class Updater
     {
         public const string DefaultManifestUrl =
-            "https://github.com/blackviperxiii-ui/tech-bench/releases/latest/download/latest.json";
+            "https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json";
 
         public const string StagedName = "TechBench.exe.new";
         public const string HashSidecar = "TechBench.exe.new.sha256";
