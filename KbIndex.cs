@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Web.Script.Serialization;
 
@@ -30,6 +31,20 @@ namespace TechBench
     {
         public const int MaxResults = 300;
 
+        /// <summary>
+        /// JSON shipped inside TechBench.exe and copied beside the exe by the installer.
+        /// Paths are relative to the knowledge-base root. Resource names are
+        /// TechBench.BundledKb. plus these paths with slashes turned into dots.
+        /// </summary>
+        public static readonly string[] BakedRelPaths = new string[]
+        {
+            "data/kb.json",
+            "data/passwords/ifix-passwords.json",
+            "data/usb-manuals.json",
+            "data/rental-portable-filters-oil.json",
+            "data/rental-equipment-info.json"
+        };
+
         public readonly List<Hit> All = new List<Hit>();
         public readonly List<string> Errors = new List<string>();
         public string Root;
@@ -42,8 +57,9 @@ namespace TechBench
         }
 
         /// <summary>
-        /// Looks in the usual places, but an install on someone else's bench PC can point at the KB with
-        /// a TECHBENCH_KB environment variable or a kb-path.txt next to the exe.
+        /// Shipped database next to the exe, then a TECHBENCH_KB variable or kb-path.txt, then the old
+        /// Documents/OneDrive folder. If none of those have data\kb.json, the copy embedded in the exe
+        /// is written under %LocalAppData%\TechBench\air-compressor-kb.
         /// </summary>
         /// <param name="found">false when no candidate actually has data\kb.json.</param>
         public static string FindRoot(out bool found)
@@ -67,12 +83,8 @@ namespace TechBench
             }
             catch { }
 
-            AddSpecial(candidates, Environment.SpecialFolder.MyDocuments, "air-compressor-kb");
-            AddSpecial(candidates, Environment.SpecialFolder.UserProfile, "Documents", "air-compressor-kb");
-            // README says the KB may live under OneDrive Documents, which MyDocuments only returns when
-            // Known Folder Move is on.
-            AddSpecial(candidates, Environment.SpecialFolder.UserProfile, "OneDrive", "Documents", "air-compressor-kb");
-            AddSpecial(candidates, Environment.SpecialFolder.UserProfile, "air-compressor-kb");
+            // The installer drops air-compressor-kb next to TechBench.exe. Prefer that over a
+            // leftover Documents/OneDrive folder so a normal install does not need Drive.
             try
             {
                 string exeDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -82,15 +94,69 @@ namespace TechBench
             }
             catch { }
 
+            AddSpecial(candidates, Environment.SpecialFolder.MyDocuments, "air-compressor-kb");
+            AddSpecial(candidates, Environment.SpecialFolder.UserProfile, "Documents", "air-compressor-kb");
+            // README says the KB may live under OneDrive Documents, which MyDocuments only returns when
+            // Known Folder Move is on.
+            AddSpecial(candidates, Environment.SpecialFolder.UserProfile, "OneDrive", "Documents", "air-compressor-kb");
+            AddSpecial(candidates, Environment.SpecialFolder.UserProfile, "air-compressor-kb");
+
             foreach (string c in candidates)
             {
                 try { if (File.Exists(Path.Combine(c, "data", "kb.json"))) { found = true; return c; } }
                 catch { }
             }
+
+            // Standalone exe (updater swap, or a copy with no folder beside it): write the
+            // embedded JSON under LocalAppData. Shop notes and user-codes in that folder are
+            // left alone; only the shipped files are rewritten.
+            try
+            {
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (!string.IsNullOrEmpty(local))
+                {
+                    string dest = Path.Combine(local, "TechBench", "air-compressor-kb");
+                    if (TryMaterializeBaked(dest)) { found = true; return dest; }
+                }
+            }
+            catch { }
+
             found = false;
             // Nothing found: hand back the most likely location so the error message names a path on
             // this machine rather than whoever's PC the default was written on.
             return candidates.Count > 0 ? candidates[0] : "air-compressor-kb";
+        }
+
+        public static string BakedResourceName(string rel)
+        {
+            return "TechBench.BundledKb." + (rel ?? "").Replace('\\', '.').Replace('/', '.');
+        }
+
+        /// <summary>
+        /// Writes the embedded field database into destRoot. Returns false when this assembly
+        /// was built without those resources (the offline self-test exe, unless it embeds them).
+        /// </summary>
+        public static bool TryMaterializeBaked(string destRoot)
+        {
+            if (string.IsNullOrWhiteSpace(destRoot)) return false;
+            Assembly asm = Assembly.GetExecutingAssembly();
+            int wrote = 0;
+            foreach (string rel in BakedRelPaths)
+            {
+                Stream src = asm.GetManifestResourceStream(BakedResourceName(rel));
+                if (src == null) return false;
+                using (src)
+                {
+                    string outPath = Path.Combine(destRoot, rel.Replace('/', Path.DirectorySeparatorChar));
+                    string dir = Path.GetDirectoryName(outPath);
+                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                    using (FileStream fs = File.Create(outPath))
+                        src.CopyTo(fs);
+                }
+                wrote++;
+            }
+            return wrote == BakedRelPaths.Length
+                && File.Exists(Path.Combine(destRoot, "data", "kb.json"));
         }
 
         static void AddSpecial(List<string> into, Environment.SpecialFolder folder, params string[] parts)

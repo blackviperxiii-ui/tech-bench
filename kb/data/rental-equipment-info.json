@@ -1,0 +1,434 @@
+{
+  "meta": {
+    "title": "Rental Equipment Information",
+    "page": "1-2 of 2",
+    "source": "field photo 2026-08-11",
+    "photo": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\field_photos\\20260811_rental-equipment-info-p1.jpg",
+    "original": "C:\\Users\\jerem\\OneDrive\\Pictures\\Camera Roll\\WIN_20260811_11_06_30_Pro.jpg",
+    "imported_at": "2026-08-11T16:08:31.794Z",
+    "units_note": "Width/length/height appear to be inches unless marked with feet ('). Weight in lbs.",
+    "disclaimer": "Verify against unit serial and current fleet sheet before quoting transport or ordering tires/parts.",
+    "photos": [
+      {
+        "page": "1 of 2",
+        "path": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\field_photos\\20260811_rental-equipment-info-p1.jpg",
+        "original": "C:\\Users\\jerem\\OneDrive\\Pictures\\Camera Roll\\WIN_20260811_11_06_30_Pro.jpg"
+      },
+      {
+        "page": "2 of 2",
+        "path": "C:\\Users\\jerem\\Documents\\air-compressor-kb\\sources\\field_photos\\20260811_rental-equipment-info-p2.jpg",
+        "original": "C:\\Users\\jerem\\OneDrive\\Pictures\\Camera Roll\\WIN_20260811_11_09_30_Pro.jpg"
+      }
+    ],
+    "updated_at": "2026-08-11T16:10:24.953Z"
+  },
+  "rows": [
+    {
+      "equipment": "C185",
+      "width": "62",
+      "length": "134",
+      "height": "63",
+      "weight": "2215 lbs.",
+      "rim_size": "13\"",
+      "tire_size": "ST175/80D13",
+      "acs_part_no": "D46664305 (NONSTK)",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "P185",
+      "width": "69",
+      "length": "138",
+      "height": "66",
+      "weight": "2473 lbs.",
+      "rim_size": "15\" X 5-1/2\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35277706T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XP185",
+      "width": "69",
+      "length": "138",
+      "height": "63",
+      "weight": "2325 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D35277706T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XP200",
+      "width": "69",
+      "length": "138",
+      "height": "66",
+      "weight": "3027 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "P250",
+      "width": "69",
+      "length": "138",
+      "height": "66",
+      "weight": "3027 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "P250/HP185",
+      "width": "5.7'",
+      "length": "11.8'",
+      "height": "5.6'",
+      "weight": "2813 LBS",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75R15D",
+      "acs_part_no": "D46691596T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "VHP300",
+      "width": "79",
+      "length": "159",
+      "height": "66",
+      "weight": "4593 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XP375",
+      "width": "79",
+      "length": "159",
+      "height": "68",
+      "weight": "4593 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "HP375/P425",
+      "width": "79",
+      "length": "153",
+      "height": "68",
+      "weight": "4535 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "VHP400",
+      "width": "79",
+      "length": "170",
+      "height": "76",
+      "weight": "5644 lbs.",
+      "rim_size": "16\" X 6\"",
+      "tire_size": "ST235/80R16",
+      "acs_part_no": "D22969414T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "VHP400/HP450",
+      "width": "79",
+      "length": "170",
+      "height": "76",
+      "weight": "5670 lbs.",
+      "rim_size": "16\" X 6\"",
+      "tire_size": "ST235/80R16",
+      "acs_part_no": "D22969414T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "HP450",
+      "width": "79",
+      "length": "170",
+      "height": "76",
+      "weight": "5644 lbs.",
+      "rim_size": "16\" X 6\"",
+      "tire_size": "ST235/80R16",
+      "acs_part_no": "D22969414T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XP750",
+      "width": "87",
+      "length": "196",
+      "height": "86",
+      "weight": "8500 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XP825",
+      "width": "87",
+      "length": "196",
+      "height": "86",
+      "weight": "8500 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "HP915",
+      "width": "",
+      "length": "",
+      "height": "",
+      "weight": "",
+      "rim_size": "16\" X 6\"",
+      "tire_size": "",
+      "acs_part_no": "D36882785T (8 LUG)",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "VP900E",
+      "width": "87",
+      "length": "194",
+      "height": "85",
+      "weight": "9530 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST225/75R15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XP1000",
+      "width": "79",
+      "length": "215",
+      "height": "69",
+      "weight": "10350 lbs.",
+      "rim_size": "",
+      "tire_size": "ST205/85D-14.5",
+      "acs_part_no": "D22912567T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XHP750 (E14)",
+      "width": "79",
+      "length": "208",
+      "height": "88",
+      "weight": "10900 lbs.",
+      "rim_size": "",
+      "tire_size": "",
+      "acs_part_no": "D22962567T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XHP1000",
+      "width": "7'",
+      "length": "17'",
+      "height": "8.5'",
+      "weight": "17021 lbs.",
+      "rim_size": "",
+      "tire_size": "215/75R-17.5",
+      "acs_part_no": "",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XHP1070",
+      "width": "90",
+      "length": "291",
+      "height": "100",
+      "weight": "17040 lbs.",
+      "rim_size": "17.5\" X 6.75HC",
+      "tire_size": "215/75R17.5H",
+      "acs_part_no": "D22077515T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "XHP1170",
+      "width": "90",
+      "length": "291",
+      "height": "100",
+      "weight": "17040 lbs.",
+      "rim_size": "17.5\" X 6.75HC",
+      "tire_size": "215/75R17.5H",
+      "acs_part_no": "D22077515T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "HP1600",
+      "width": "90",
+      "length": "290",
+      "height": "100",
+      "weight": "18490 lbs.",
+      "rim_size": "17.5\" X 6.75HC",
+      "tire_size": "215/75R17.5H",
+      "acs_part_no": "D22077515T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G25 (B54)",
+      "width": "60",
+      "length": "131",
+      "height": "67",
+      "weight": "2588 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D35318757T (6LUG)",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G25",
+      "width": "",
+      "length": "",
+      "height": "",
+      "weight": "",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D46688182T (5 LUG)",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G40",
+      "width": "67",
+      "length": "145",
+      "height": "68",
+      "weight": "3508 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G50",
+      "width": "73",
+      "length": "131",
+      "height": "79",
+      "weight": "3870 lbs.",
+      "rim_size": "",
+      "tire_size": "ST225/75R15",
+      "acs_part_no": "D36026268T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G70",
+      "width": "72.5",
+      "length": "171",
+      "height": "91",
+      "weight": "6725 LBS",
+      "rim_size": "15\" X 5-1/2\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D35277706T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G80",
+      "width": "69",
+      "length": "156",
+      "height": "68",
+      "weight": "4458 lbs.",
+      "rim_size": "15\" X 5-1/2\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D35277706T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G145",
+      "width": "72",
+      "length": "167",
+      "height": "84",
+      "weight": "7220 lbs.",
+      "rim_size": "15\" X 6\"",
+      "tire_size": "ST205/75D15",
+      "acs_part_no": "D35318757T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G190",
+      "width": "",
+      "length": "",
+      "height": "",
+      "weight": "",
+      "rim_size": "16\" RIM",
+      "tire_size": "ST235/80R16, 8 LUG",
+      "acs_part_no": "D22969414T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G290",
+      "width": "78",
+      "length": "221",
+      "height": "111",
+      "weight": "11957 lbs.",
+      "rim_size": "16.5\" X 6.75",
+      "tire_size": "16.5LT",
+      "acs_part_no": "D36870541T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G325",
+      "width": "83",
+      "length": "245",
+      "height": "113",
+      "weight": "14032 lbs.",
+      "rim_size": "16\" X 6\"",
+      "tire_size": "ST235/80R16/E",
+      "acs_part_no": "D22969414T",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "G570",
+      "width": "86",
+      "length": "261",
+      "height": "120",
+      "weight": "18574 lbs.",
+      "rim_size": "16\" X 6\"",
+      "tire_size": "ST235/80R16/E",
+      "acs_part_no": "D46688184T (NONSTK)",
+      "page": "1 of 2"
+    },
+    {
+      "equipment": "NG160",
+      "width": "88",
+      "length": "215",
+      "height": "110",
+      "weight": "10900 lbs.",
+      "rim_size": "16.5\" X 6.75",
+      "tire_size": "LT215/85R16/E",
+      "acs_part_no": "D36870541T",
+      "page": "2 of 2"
+    },
+    {
+      "equipment": "NG225",
+      "width": "86",
+      "length": "261",
+      "height": "120",
+      "weight": "12500 lbs.",
+      "rim_size": "16.5\" X 6.75",
+      "tire_size": "LT215/85R16/E",
+      "acs_part_no": "D36870541T",
+      "page": "2 of 2"
+    },
+    {
+      "equipment": "NG295",
+      "width": "90",
+      "length": "261",
+      "height": "120",
+      "weight": "13595 lbs.",
+      "rim_size": "16.5\" X 6.75",
+      "tire_size": "LT215/85R16/E",
+      "acs_part_no": "D36870541T",
+      "page": "2 of 2"
+    },
+    {
+      "equipment": "LSC LIGHTTOWER",
+      "width": "49",
+      "length": "168",
+      "height": "70",
+      "weight": "1569 lbs.",
+      "rim_size": "13\" X 4-1/2\"",
+      "tire_size": "ST175/80D13",
+      "acs_part_no": "D46541587 (NONSTK)",
+      "page": "2 of 2"
+    }
+  ]
+}
