@@ -43,6 +43,17 @@ namespace TechBench
         /// <summary>Tests replace the real HTTP stack. Production leaves this null.</summary>
         public static Func<IdHttpRequest, IdHttpResponse> HttpOverride;
 
+        static string _token;
+        static DateTime _tokenExpiryUtc;
+        static string _tokenStamp;
+
+        public static void ClearTokenCache()
+        {
+            _token = null;
+            _tokenExpiryUtc = DateTime.MinValue;
+            _tokenStamp = null;
+        }
+
         public static string Expand(string template, IdSettings s, WorkOrder wo)
         {
             string path = template ?? "";
@@ -222,12 +233,19 @@ namespace TechBench
             return RealSend(req);
         }
 
-        static string Token(IdSettings settings)
+        public static string Token(IdSettings settings)
         {
-            if (string.IsNullOrWhiteSpace(settings.TokenUrl)
+            if (settings == null
+                || string.IsNullOrWhiteSpace(settings.TokenUrl)
                 || string.IsNullOrWhiteSpace(settings.ClientId)
                 || string.IsNullOrWhiteSpace(settings.ClientSecret))
                 return "";
+            string stamp = settings.TokenUrl + "\n" + settings.ClientId + "\n" + settings.ClientSecret;
+            if (!string.IsNullOrEmpty(_token)
+                && stamp == _tokenStamp
+                && DateTime.UtcNow.AddSeconds(60) < _tokenExpiryUtc)
+                return _token;
+
             var req = new IdHttpRequest
             {
                 Method = "POST",
@@ -242,8 +260,21 @@ namespace TechBench
             {
                 var ser = new JavaScriptSerializer();
                 var map = ser.Deserialize<Dictionary<string, object>>(resp.Body);
-                if (map != null && map.ContainsKey("access_token") && map["access_token"] != null)
-                    return map["access_token"].ToString();
+                if (map == null || !map.ContainsKey("access_token") || map["access_token"] == null)
+                    return "";
+                string access = map["access_token"].ToString();
+                if (string.IsNullOrEmpty(access)) return "";
+                int seconds = 3600;
+                if (map.ContainsKey("expires_in") && map["expires_in"] != null)
+                {
+                    try { seconds = Convert.ToInt32(map["expires_in"]); }
+                    catch { seconds = 3600; }
+                }
+                if (seconds < 1) seconds = 1;
+                _token = access;
+                _tokenStamp = stamp;
+                _tokenExpiryUtc = DateTime.UtcNow.AddSeconds(seconds);
+                return _token;
             }
             catch { }
             return "";

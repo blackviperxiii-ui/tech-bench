@@ -34,6 +34,8 @@ namespace TechBench
         {
             if (Kind == "code")
                 return "CODE  " + Key + "  —  " + LocalSummary + "  vs  " + RemoteSummary;
+            if (Kind == "work-order")
+                return "WO  " + Key + "  —  " + LocalSummary + "  vs  " + RemoteSummary;
             return Kind.ToUpperInvariant() + "  " + RelativePath;
         }
     }
@@ -244,6 +246,7 @@ namespace TechBench
             }
 
             CollectCodeConflicts(kbRoot, result);
+            WorkOrderStore.CollectConflicts(IdSettings.Load(), kbRoot, result);
             result.Techs = CountTechs(kbRoot);
             result.Status = Describe(kbRoot, settings, result);
             return result;
@@ -525,6 +528,11 @@ namespace TechBench
             if (c.Kind == "code")
             {
                 ResolveCode(kbRoot, c, choice);
+                return;
+            }
+            if (c.Kind == "work-order")
+            {
+                WorkOrderStore.Resolve(c, choice, kbRoot);
                 return;
             }
             if (choice == "local")

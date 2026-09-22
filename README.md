@@ -105,7 +105,7 @@ Stay in Tech Bench instead of ID Mobile Access:
 - **Log on / log off** write a shop timestamp on the packet. They post to IntelliDealer only when Azure API Gateway credentials are saved.
 - **Sign off** is refused until the gateway returns success. Tech Bench will not fake payroll.
 
-Drop `id-work-orders.json` (or `.csv`) next to `TechBench.exe` or in the KB `data` folder for a file-backed assigned list. Settings and optional `id-api.json` next to the exe hold the Gateway URL, subscription key, and operation paths.
+Drop `id-work-orders.json` (or `.csv`) next to `TechBench.exe` or in the KB `data` folder for a file-backed assigned list. Credentials live in `%LocalAppData%\TechBench\id-settings.json` (subscription key and OAuth secret are DPAPI-protected). Optional `id-api.json` next to the exe may overlay operation paths — not secrets.
 
 ### Adding what you learn
 
