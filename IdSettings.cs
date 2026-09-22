@@ -105,8 +105,29 @@ namespace TechBench
             {
                 ClientSecret = "";
                 SubscriptionKey = "";
-                ClientSecretProtected = secrets ? ProtectSecret(secret) : "";
-                SubscriptionKeyProtected = secrets ? ProtectSecret(key) : "";
+                if (secrets)
+                {
+                    string nextSecret = ProtectSecret(secret);
+                    string nextKey = ProtectSecret(key);
+                    bool secretFailed = string.IsNullOrEmpty(nextSecret) && !string.IsNullOrEmpty(secret);
+                    bool keyFailed = string.IsNullOrEmpty(nextKey) && !string.IsNullOrEmpty(key);
+                    if (secretFailed || keyFailed)
+                    {
+                        string keepSecret = pSecret;
+                        string keepKey = pKey;
+                        if (string.IsNullOrEmpty(keepSecret) || string.IsNullOrEmpty(keepKey))
+                            ReadExistingProtected(path, ref keepSecret, ref keepKey);
+                        if (secretFailed) nextSecret = keepSecret;
+                        if (keyFailed) nextKey = keepKey;
+                    }
+                    ClientSecretProtected = nextSecret;
+                    SubscriptionKeyProtected = nextKey;
+                }
+                else
+                {
+                    ClientSecretProtected = "";
+                    SubscriptionKeyProtected = "";
+                }
                 string dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 var ser = new JavaScriptSerializer();
@@ -188,6 +209,20 @@ namespace TechBench
             byte[] data = Convert.FromBase64String(cipher.Substring(PortablePrefix.Length));
             for (int i = 0; i < data.Length; i++) data[i] ^= Entropy[i % Entropy.Length];
             return Encoding.UTF8.GetString(data);
+        }
+
+        static void ReadExistingProtected(string path, ref string secretProt, ref string keyProt)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+                var ser = new JavaScriptSerializer();
+                var prev = ser.Deserialize<IdSettings>(File.ReadAllText(path));
+                if (prev == null) return;
+                if (string.IsNullOrEmpty(secretProt)) secretProt = prev.ClientSecretProtected ?? "";
+                if (string.IsNullOrEmpty(keyProt)) keyProt = prev.SubscriptionKeyProtected ?? "";
+            }
+            catch { }
         }
 
         static bool StoresSecrets(string path)

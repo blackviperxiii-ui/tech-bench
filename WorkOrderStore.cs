@@ -366,8 +366,9 @@ namespace TechBench
                 return;
             }
             WorkOrder winner = CompareUtc(incoming, have) > 0 ? incoming : have;
+            if (AlreadyConflict(k)) return;
             byKey[k] = winner;
-            if (KeepBoth(kbRoot, k) || AlreadyConflict(k)) return;
+            if (KeepBoth(kbRoot, k)) return;
             Conflicts.Add(new ShopConflict
             {
                 Kind = "work-order",
