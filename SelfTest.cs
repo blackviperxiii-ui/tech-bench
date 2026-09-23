@@ -1552,7 +1552,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.5");
+        Eq("stamped version", AppVersion.Number, "1.2.6");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;
@@ -1664,9 +1664,51 @@ ProtocolDescription=ISO 15765
         Check("newer file feed is available", Updater.IsAvailable(newer) && !Updater.IsCurrent(newer), Updater.StatusText(newer));
         Check("newer file feed is not worded as current",
             Updater.StatusText(newer).IndexOf("is current", StringComparison.Ordinal) < 0, Updater.StatusText(newer));
+        Check("same-version success path still says current",
+            Updater.IsCurrent(same) && Updater.StatusText(same).IndexOf("is current", StringComparison.Ordinal) >= 0,
+            Updater.StatusText(same));
+        Check("newer success path still says available",
+            Updater.IsAvailable(newer)
+            && Updater.StatusText(newer).IndexOf("is available", StringComparison.Ordinal) >= 0,
+            Updater.StatusText(newer));
+
+        string shellPath = Path.Combine(FindRepoRoot(), "ShellForm.cs");
+        string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
+        Check("about does not claim a public latest.json",
+            shell.IndexOf("public latest.json", StringComparison.OrdinalIgnoreCase) < 0, "public latest.json");
+        Check("about names an anonymous manifest url",
+            shell.IndexOf("anonymous manifest URL", StringComparison.Ordinal) >= 0, "about");
+        Check("about still says no token and apply after quit",
+            shell.IndexOf("never stores a GitHub token", StringComparison.Ordinal) >= 0
+            && shell.IndexOf("apply after you quit", StringComparison.Ordinal) >= 0
+            && shell.IndexOf("never mid-session", StringComparison.Ordinal) >= 0, "about");
+        string updaterSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "Updater.cs"));
+        Check("updater does not tell the tech to host a public feed",
+            updaterSrc.IndexOf("Host latest.json on a public HTTPS URL", StringComparison.Ordinal) < 0
+            && updaterSrc.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0, "old copy");
 
         HttpFeedTests();
         try { Directory.Delete(dir, true); } catch { }
+    }
+
+    static void CheckPrivateFeedFailure(string label, UpdateCheck result)
+    {
+        string text = Updater.StatusText(result);
+        Check(label + " is not a success", !Updater.IsCurrent(result) && !Updater.IsAvailable(result), text);
+        Check(label + " does not say up to date",
+            text.IndexOf("up to date", StringComparison.OrdinalIgnoreCase) < 0
+            && text.IndexOf("is current", StringComparison.OrdinalIgnoreCase) < 0,
+            text);
+        Check(label + " does not ask for a public feed",
+            text.IndexOf("public HTTPS", StringComparison.OrdinalIgnoreCase) < 0
+            && text.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0
+            && text.IndexOf("Host latest.json", StringComparison.OrdinalIgnoreCase) < 0,
+            text);
+        Check(label + " names a private shop setup",
+            text.IndexOf("Update feed unavailable", StringComparison.Ordinal) >= 0
+            && text.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0
+            && text.IndexOf("shop Setup", StringComparison.Ordinal) >= 0,
+            text);
     }
 
     static string ManifestJson(string version, string url)
@@ -1708,6 +1750,12 @@ ProtocolDescription=ISO 15765
                 && Updater.StatusText(denied).IndexOf("404", StringComparison.Ordinal) >= 0
                 && Updater.StatusText(denied).IndexOf("is current", StringComparison.Ordinal) < 0,
                 Updater.StatusText(denied));
+            CheckPrivateFeedFailure("http 404", denied);
+
+            UpdateCheck unauthorized = CheckHttp(listener, 401, "no", root + "unauth.json");
+            CheckPrivateFeedFailure("http 401", unauthorized);
+            UpdateCheck forbidden = CheckHttp(listener, 403, "no", root + "forbid.json");
+            CheckPrivateFeedFailure("http 403", forbidden);
 
             UpdateCheck broken = CheckHttp(listener, 200, "{ not json", root + "bad.json");
             Check("http 200 unreadable json is not current", !Updater.IsCurrent(broken), Updater.StatusText(broken));
