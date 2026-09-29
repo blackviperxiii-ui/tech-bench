@@ -972,11 +972,14 @@ namespace J1939Reader
             {
                 _shownResetReport = s.LastResetReport;
                 _holdResetReport = true;
-                _idBox.Text = s.LastResetReport + "\r\n\r\n"
-                    + "Red Stop: " + (s.Red ? "STILL ON" : "off") + "     Amber: " + (s.Amber ? "STILL ON" : "off") + "\r\n"
-                    + "Lamps are not cleared separately. They track the active DTCs below.\r\n\r\n"
-                    + LampHolders(s)
-                    + "\r\nIf Red Stop stays on, SPN 5246 / 1569 are still latched or the tank header is still FMI 9. Fix that, reset again. Guidanz aftertreatment reset may still be required for 5246.";
+                if (s.LastResetReport.IndexOf("FAILED", StringComparison.Ordinal) >= 0)
+                    _idBox.Text = s.LastResetReport;
+                else
+                    _idBox.Text = s.LastResetReport + "\r\n\r\n"
+                        + "Red Stop: " + (s.Red ? "STILL ON" : "off") + "     Amber: " + (s.Amber ? "STILL ON" : "off") + "\r\n"
+                        + "Lamps are not cleared separately. They track the active DTCs below.\r\n\r\n"
+                        + LampHolders(s)
+                        + "\r\nIf Red Stop stays on, SPN 5246 / 1569 are still latched or the tank header is still FMI 9. Fix that, reset again. Guidanz aftertreatment reset may still be required for 5246.";
             }
         }
 

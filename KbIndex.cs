@@ -698,4 +698,88 @@ namespace TechBench
             return sb.ToString();
         }
     }
+
+    /// <summary>
+    /// Shell-open guard for knowledge-base files and work-order attachments.
+    /// The final extension decides, after Windows strips trailing dots and spaces,
+    /// and an NTFS alternate-data-stream suffix (name:stream) is blocked when either
+    /// side is a program or script.
+    /// </summary>
+    public static class LaunchPolicy
+    {
+        static readonly string[] BlockedExtensions = new string[]
+        {
+            ".exe", ".com", ".bat", ".cmd", ".scr", ".pif", ".msi", ".msp",
+            ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+            ".hta", ".cpl", ".reg", ".lnk", ".jar",
+            ".appref-ms", ".application", ".gadget", ".msc", ".psc1", ".scf",
+            ".url", ".vb", ".ws", ".inf", ".dll", ".sys"
+        };
+
+        /// <summary>True when this path must not be passed to Process.Start. Null and empty are not launched.</summary>
+        public static bool IsBlockedLaunchPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return true;
+            string trimmed = path.TrimEnd(' ', '.');
+            if (trimmed.Length == 0) return true;
+            string file;
+            string stream;
+            SplitStream(trimmed, out file, out stream);
+            if (IsBlockedExtension(ExtensionOf(file))) return true;
+            if (stream.Length > 0 && IsBlockedExtension(ExtensionOf(stream))) return true;
+            return false;
+        }
+
+        public static string BlockedLaunchMessage(string path)
+        {
+            string shown = "(no file)";
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                string trimmed = path.Trim().TrimEnd(' ', '.');
+                string name = Path.GetFileName(trimmed);
+                if (string.IsNullOrEmpty(name)) name = path.Trim();
+                if (!string.IsNullOrEmpty(name)) shown = name;
+            }
+            return "Tech Bench won't open program or script files from the knowledge base: "
+                + shown + ". Open it from Explorer if you trust it.";
+        }
+
+        static void SplitStream(string path, out string file, out string stream)
+        {
+            file = path;
+            stream = "";
+            int start = 0;
+            if (path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':') start = 2;
+            int colon = path.IndexOf(':', start);
+            if (colon < 0) return;
+            file = path.Substring(0, colon);
+            stream = path.Substring(colon + 1);
+        }
+
+        static string ExtensionOf(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            int slash = path.LastIndexOfAny(new char[] { '\\', '/' });
+            int colon = path.LastIndexOf(':');
+            int start = slash + 1;
+            int end = path.Length;
+            if (colon > slash) end = colon;
+            if (end < start) return "";
+            string name = path.Substring(start, end - start).TrimEnd(' ', '.');
+            int dot = name.LastIndexOf('.');
+            if (dot < 0 || dot >= name.Length - 1) return "";
+            return name.Substring(dot);
+        }
+
+        static bool IsBlockedExtension(string ext)
+        {
+            if (string.IsNullOrEmpty(ext)) return false;
+            for (int i = 0; i < BlockedExtensions.Length; i++)
+            {
+                if (string.Equals(ext, BlockedExtensions[i], StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+    }
 }

@@ -21,6 +21,9 @@ namespace TechBench
         public static string ExeDirOverride;
         public static readonly List<ShopConflict> Conflicts = new List<ShopConflict>();
 
+        /// <summary>SelfTest: skip File.Replace and use the copy/delete/move fallback.</summary>
+        internal static bool ForceCopyFallbackForTest;
+
         public static string LocalRoot()
         {
             if (!string.IsNullOrEmpty(FolderOverride))
@@ -96,6 +99,7 @@ namespace TechBench
                 {
                     foreach (string f in Directory.GetFiles(media))
                     {
+                        if (IsIgnoredPacketFile(f)) continue;
                         string name = Path.GetFileName(f);
                         if (!ContainsName(wo.Media, name)) wo.Media.Add(name);
                     }
@@ -177,7 +181,7 @@ namespace TechBench
             Directory.CreateDirectory(destDir);
             string name = UniqueName(destDir, fileName);
             string dest = Path.Combine(destDir, name);
-            File.WriteAllText(dest, text ?? "", Encoding.UTF8);
+            AtomicWriteText(dest, text ?? "", Encoding.UTF8);
             if (wo.Media == null) wo.Media = new List<string>();
             if (!ContainsName(wo.Media, name)) wo.Media.Add(name);
             Save(wo, settings, kbRoot);
@@ -269,12 +273,96 @@ namespace TechBench
             Directory.CreateDirectory(dir);
             Directory.CreateDirectory(Path.Combine(dir, "media"));
             string notes = wo.Notes ?? "";
-            File.WriteAllText(Path.Combine(dir, "notes.txt"), notes, Encoding.UTF8);
+            AtomicWriteText(Path.Combine(dir, "notes.txt"), notes, Encoding.UTF8);
             if (!string.IsNullOrEmpty(wo.ReportText))
-                File.WriteAllText(Path.Combine(dir, "report.txt"), wo.ReportText, Encoding.UTF8);
+                AtomicWriteText(Path.Combine(dir, "report.txt"), wo.ReportText, Encoding.UTF8);
             var snap = Shallow(wo);
             var ser = new JavaScriptSerializer();
-            File.WriteAllText(Path.Combine(dir, "wo.json"), ser.Serialize(snap));
+            // File.WriteAllText(path, text) is UTF-8 without a BOM. Encoding.UTF8 would add one.
+            AtomicWriteText(Path.Combine(dir, "wo.json"), ser.Serialize(snap), new UTF8Encoding(false));
+        }
+
+        /// <summary>
+        /// Write text by flushing a temp file in the same directory, then replacing the target.
+        /// File.Replace keeps path.bak. Some network shares and OneDrive placeholders throw on
+        /// Replace; those fall back to copying the target over path.bak, deleting the target,
+        /// and moving the temp into place. On failure the temp is deleted and the exception
+        /// is rethrown. If that fallback already deleted the target and the move then fails,
+        /// the original file is gone.
+        /// </summary>
+        internal static void AtomicWriteText(string path, string text, Encoding enc)
+        {
+            if (string.IsNullOrEmpty(path)) throw new ArgumentException("path is required.", "path");
+            if (enc == null) enc = new UTF8Encoding(false);
+            string folder = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+            string temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                WriteAtomicBytes(temp, text ?? "", enc);
+                if (File.Exists(path))
+                    CommitReplacing(temp, path);
+                else
+                    File.Move(temp, path);
+            }
+            catch
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); }
+                catch { }
+                throw;
+            }
+        }
+
+        /// <summary>Flush a sibling temp file and return its path without replacing the target. SelfTest crash seam.</summary>
+        internal static string WriteAtomicTemp(string path, string text, Encoding enc)
+        {
+            if (enc == null) enc = new UTF8Encoding(false);
+            string temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            WriteAtomicBytes(temp, text ?? "", enc);
+            return temp;
+        }
+
+        static void WriteAtomicBytes(string temp, string text, Encoding enc)
+        {
+            using (var fs = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                byte[] preamble = enc.GetPreamble();
+                if (preamble != null && preamble.Length > 0)
+                    fs.Write(preamble, 0, preamble.Length);
+                byte[] bytes = enc.GetBytes(text ?? "");
+                if (bytes.Length > 0)
+                    fs.Write(bytes, 0, bytes.Length);
+                fs.Flush(true);
+            }
+        }
+
+        static void CommitReplacing(string temp, string path)
+        {
+            string bak = path + ".bak";
+            if (!ForceCopyFallbackForTest)
+            {
+                try
+                {
+                    File.Replace(temp, path, bak, true);
+                    return;
+                }
+                catch (Exception)
+                {
+                    // Network shares and OneDrive placeholders can reject File.Replace.
+                }
+            }
+            File.Copy(path, bak, true);
+            File.Delete(path);
+            File.Move(temp, path);
+        }
+
+        internal static bool IsIgnoredPacketFile(string path)
+        {
+            string name = Path.GetFileName(path ?? "");
+            if (name.Length == 0) return false;
+            if (name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) return true;
+            if (name.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
         }
 
         static WorkOrder Shallow(WorkOrder wo)
@@ -308,14 +396,20 @@ namespace TechBench
             Directory.CreateDirectory(dest);
             Directory.CreateDirectory(Path.Combine(dest, "media"));
             foreach (string f in Directory.GetFiles(src))
+            {
+                if (IsIgnoredPacketFile(f)) continue;
                 File.Copy(f, Path.Combine(dest, Path.GetFileName(f)), true);
+            }
             string media = Path.Combine(src, "media");
             if (Directory.Exists(media))
             {
                 string dm = Path.Combine(dest, "media");
                 Directory.CreateDirectory(dm);
                 foreach (string f in Directory.GetFiles(media))
+                {
+                    if (IsIgnoredPacketFile(f)) continue;
                     File.Copy(f, Path.Combine(dm, Path.GetFileName(f)), true);
+                }
             }
         }
 

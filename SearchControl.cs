@@ -175,6 +175,12 @@ namespace TechBench
         void OpenSel()
         {
             if (_sel == null || string.IsNullOrEmpty(_sel.Path)) return;
+            if (LaunchPolicy.IsBlockedLaunchPath(_sel.Path))
+            {
+                MessageBox.Show(this, LaunchPolicy.BlockedLaunchMessage(_sel.Path),
+                    "Open file", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             if (!Exists(_sel.Path))
             {
                 MessageBox.Show(this, "Cannot reach:\n" + _sel.Path + "\n\nCheck that the USB drive or network share is connected.",
