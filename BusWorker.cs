@@ -367,7 +367,12 @@ namespace J1939Reader
                     break;
                 case BusCmdKind.ClearPrevious:
                 {
-                    Log(_rp.ClearPreviousFaults(EngineSaLocked()));
+                    string report = _rp.ClearPreviousFaults(EngineSaLocked());
+                    Log(report);
+                    if (report != null && report.IndexOf("FAILED", StringComparison.Ordinal) >= 0)
+                    {
+                        lock (_gate) _lastResetReport = report;
+                    }
                     RequestCodes(true);
                     break;
                 }

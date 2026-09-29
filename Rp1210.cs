@@ -43,6 +43,12 @@ namespace J1939Reader
         /// </summary>
         public List<J1939Tx> Capture;
 
+        /// <summary>
+        /// SelfTest seam. While Capture is set and the adapter is not connected, the next
+        /// FailSendsForTest SendJ1939 calls return false. They are still recorded.
+        /// </summary>
+        internal int FailSendsForTest;
+
         IntPtr _module = IntPtr.Zero;
         DClientConnect _connect;
         DClientDisconnect _disconnect;
@@ -240,7 +246,14 @@ namespace J1939Reader
             if (Capture != null)
                 Capture.Add(J1939Clear.Tx(pgn, dest, data, priority));
             if (!IsConnected || _send == null)
+            {
+                if (Capture != null && FailSendsForTest > 0)
+                {
+                    FailSendsForTest--;
+                    return false;
+                }
                 return Capture != null;
+            }
             short rc;
             try { rc = _send(_client, m, (short)m.Length, 0, 1); }
             catch (Exception ex) { LastError = "send failed: " + ex.Message; return false; }
@@ -353,26 +366,39 @@ namespace J1939Reader
         {
             if (!IsConnected && Capture == null) return "not connected";
             ClaimToolAddress();
+            int sent = 0;
+            int failed = 0;
             List<J1939Tx> frames = J1939Clear.ClearPreviousFrames(engineSa);
             for (int i = 0; i < frames.Count; i++)
             {
                 J1939Tx tx = frames[i];
-                SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority);
+                if (SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority)) sent++;
+                else failed++;
             }
-            RequestDmAfterClear(engineSa);
+            int refreshFailed = RequestDmAfterClear(engineSa);
+            int refreshCount = J1939Clear.RefreshDmFrames(engineSa).Count;
+            sent += refreshCount - refreshFailed;
+            failed += refreshFailed;
+            if (failed > 0)
+            {
+                return "Clear previous FAILED: adapter rejected " + failed + " of " + (sent + failed)
+                    + " J1939 frames.";
+            }
             return "Sent DM3 (clear previously active) to engine, compressor controller (SA " +
                 J1939Clear.CompressorSa + "), and broadcast.";
         }
 
-        /// <summary>Request DM1 and DM2 from engine, compressor controller, and broadcast.</summary>
-        public void RequestDmAfterClear(int engineSa)
+        /// <summary>Request DM1 and DM2 from engine, compressor controller, and broadcast. Returns how many sends failed.</summary>
+        public int RequestDmAfterClear(int engineSa)
         {
+            int failed = 0;
             List<J1939Tx> frames = J1939Clear.RefreshDmFrames(engineSa);
             for (int i = 0; i < frames.Count; i++)
             {
                 J1939Tx tx = frames[i];
-                SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority);
+                if (!SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority)) failed++;
             }
+            return failed;
         }
 
         string TryUdsClear()

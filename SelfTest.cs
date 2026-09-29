@@ -175,6 +175,10 @@ static class SelfTest
         WorkOrderTests();
 
         Console.WriteLine();
+        Console.WriteLine("== data safety ==");
+        DataSafetyTests();
+
+        Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
         return _fail == 0 ? 0 : 1;
     }
@@ -719,6 +723,26 @@ ProtocolDescription=ISO 15765
             J1939Clear.CountRequest(prevRp.Capture, J1939Clear.Dm1, J1939Clear.CompressorSa), 1);
         Eq("clear-previous still refreshes DM2 from SA 48",
             J1939Clear.CountRequest(prevRp.Capture, J1939Clear.Dm2, J1939Clear.CompressorSa), 1);
+        Check("clear-previous success keeps the sent sentence",
+            prevReport.IndexOf("Sent DM3 (clear previously active)", StringComparison.Ordinal) >= 0, prevReport);
+        Check("clear-previous success does not say FAILED",
+            prevReport.IndexOf("FAILED", StringComparison.Ordinal) < 0, prevReport);
+
+        Eq("clear-previous without adapter or capture is not connected",
+            new Rp1210().ClearPreviousFaults(0), "not connected");
+
+        var failRp = new Rp1210();
+        failRp.Capture = new List<J1939Tx>();
+        failRp.FailSendsForTest = 2;
+        string failReport = failRp.ClearPreviousFaults(0);
+        int failTotal = J1939Clear.ClearPreviousFrames(0).Count + J1939Clear.RefreshDmFrames(0).Count;
+        Check("clear-previous partial failure says FAILED",
+            failReport.IndexOf("FAILED", StringComparison.Ordinal) >= 0, failReport);
+        Check("clear-previous partial failure counts rejects",
+            failReport.IndexOf("adapter rejected 2 of " + failTotal, StringComparison.Ordinal) >= 0, failReport);
+        Check("clear-previous partial failure omits the success sentence",
+            failReport.IndexOf("Sent DM3 (clear previously active)", StringComparison.Ordinal) < 0, failReport);
+        Eq("clear-previous failures are still captured", failRp.Capture.Count, failTotal);
     }
 
     // ---------------- history ----------------
@@ -1003,10 +1027,111 @@ ProtocolDescription=ISO 15765
                 Check("reload notes", loaded.Notes.Contains("4-pin"), loaded.Notes);
             }
 
+            string jsonPath = Path.Combine(packet, "wo.json");
+            string notesPath = Path.Combine(packet, "notes.txt");
+            byte[] noteBytes = File.ReadAllBytes(notesPath);
+            Check("notes.txt is UTF-8 with BOM",
+                noteBytes.Length >= 3 && noteBytes[0] == 0xEF && noteBytes[1] == 0xBB && noteBytes[2] == 0xBF,
+                "bom");
+            byte[] jsonBytes = File.ReadAllBytes(jsonPath);
+            Check("wo.json is UTF-8 without BOM",
+                jsonBytes.Length > 0 && !(jsonBytes.Length >= 3 && jsonBytes[0] == 0xEF && jsonBytes[1] == 0xBB && jsonBytes[2] == 0xBF)
+                && jsonBytes[0] == (byte)'{',
+                "bom");
+            string firstJson = File.ReadAllText(jsonPath);
+            wo.Notes = "Second visit notes.";
+            WorkOrderStore.Save(wo, s, kb);
+            string secondJson = File.ReadAllText(jsonPath);
+            string bakJson = File.ReadAllText(jsonPath + ".bak");
+            Eq("wo.json.bak is previous content", bakJson, firstJson);
+            Check("wo.json is new content",
+                secondJson.IndexOf("Second visit notes.", StringComparison.Ordinal) >= 0 && secondJson != firstJson,
+                secondJson);
+            Check("notes.txt.bak is previous notes",
+                File.ReadAllText(notesPath + ".bak").IndexOf("4-pin", StringComparison.Ordinal) >= 0, "notes bak");
+            Check("notes.txt is new notes",
+                File.ReadAllText(notesPath).IndexOf("Second visit notes.", StringComparison.Ordinal) >= 0, "notes");
+            Check("no leftover tmp after second save", !HasPacketTemp(packet), packet);
+            WorkOrder bakWo = new JavaScriptSerializer().Deserialize<WorkOrder>(bakJson);
+            Check("bak still parses",
+                bakWo != null && bakWo.Number == "44551" && (bakWo.Notes ?? "").IndexOf("4-pin", StringComparison.Ordinal) >= 0,
+                bakWo == null ? "null" : (bakWo.Notes ?? ""));
+            string shopPacket = Path.Combine(WorkOrderStore.ShopTechDir(kb, "jeremy"), "44551-01");
+            Check("shop copy ignores wo.json.bak", !File.Exists(Path.Combine(shopPacket, "wo.json.bak")), "json bak copied");
+            Check("shop copy ignores notes.txt.bak", !File.Exists(Path.Combine(shopPacket, "notes.txt.bak")), "notes bak copied");
+            Check("shop copy has no tmp sidecar", !HasPacketTemp(shopPacket), shopPacket);
+
+            string stray = WorkOrderStore.WriteAtomicTemp(jsonPath, "{ truncated", new UTF8Encoding(false));
+            Check("crash temp sits beside wo.json",
+                stray.IndexOf(jsonPath + ".tmp-", StringComparison.Ordinal) == 0, stray);
+            Eq("crash leaves wo.json intact", File.ReadAllText(jsonPath), secondJson);
+            WorkOrder afterCrash = WorkOrderStore.Load(packet);
+            Check("crash leaves wo.json parseable",
+                afterCrash != null && afterCrash.Number == "44551"
+                && afterCrash.Notes.IndexOf("Second visit notes.", StringComparison.Ordinal) >= 0,
+                afterCrash == null ? "null" : afterCrash.Notes);
+            File.Delete(stray);
+            Check("stray temp removed", !HasPacketTemp(packet), stray);
+
+            wo.ReportText = "report v1";
+            WorkOrderStore.Save(wo, s, kb);
+            wo.ReportText = "report v2";
+            WorkOrderStore.Save(wo, s, kb);
+            Eq("report.txt is new report", File.ReadAllText(Path.Combine(packet, "report.txt")), "report v2");
+            Eq("report.txt.bak is previous report", File.ReadAllText(Path.Combine(packet, "report.txt.bak")), "report v1");
+            Check("no leftover tmp after report saves", !HasPacketTemp(packet), packet);
+
+            string beforeFallback = File.ReadAllText(jsonPath);
+            WorkOrderStore.ForceCopyFallbackForTest = true;
+            try
+            {
+                wo.Notes = "fallback notes";
+                WorkOrderStore.Save(wo, s, kb);
+                Check("fallback wo.json is new content",
+                    File.ReadAllText(jsonPath).IndexOf("fallback notes", StringComparison.Ordinal) >= 0, "new");
+                Eq("fallback wo.json.bak is previous content", File.ReadAllText(jsonPath + ".bak"), beforeFallback);
+                Check("fallback leaves no tmp", !HasPacketTemp(packet), packet);
+            }
+            finally
+            {
+                WorkOrderStore.ForceCopyFallbackForTest = false;
+            }
+
             string pic = Path.Combine(root, "shot.png");
             File.WriteAllText(pic, "png-bytes");
             WorkOrderStore.AttachFile(wo, pic, s, kb);
             Check("media listed", wo.Media.Count >= 1, "count=" + wo.Media.Count);
+
+            string mediaDir = Path.Combine(packet, "media");
+            File.WriteAllText(Path.Combine(mediaDir, "shot.png.bak"), "old-png");
+            File.WriteAllText(Path.Combine(mediaDir, "shot.png.tmp-dead"), "partial-png");
+            WorkOrder mediaLoaded = WorkOrderStore.Load(packet);
+            bool sawPng = false, sawMediaBak = false, sawMediaTmp = false;
+            if (mediaLoaded != null && mediaLoaded.Media != null)
+            {
+                foreach (string mediaName in mediaLoaded.Media)
+                {
+                    if (string.Equals(mediaName, "shot.png", StringComparison.OrdinalIgnoreCase)) sawPng = true;
+                    if (string.Equals(mediaName, "shot.png.bak", StringComparison.OrdinalIgnoreCase)) sawMediaBak = true;
+                    if (mediaName.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0) sawMediaTmp = true;
+                }
+            }
+            Check("media photo still listed", sawPng, "missing png");
+            Check("media ignores bak", !sawMediaBak, "bak listed");
+            Check("media ignores tmp", !sawMediaTmp, "tmp listed");
+            WorkOrderStore.Save(wo, s, kb);
+            Check("copied packet ignores media bak",
+                !File.Exists(Path.Combine(shopPacket, "media", "shot.png.bak")), "bak copied");
+            Check("copied packet ignores media tmp",
+                !File.Exists(Path.Combine(shopPacket, "media", "shot.png.tmp-dead")), "tmp copied");
+            List<WorkOrder> listed = WorkOrderStore.ListAll(s, kb);
+            int n44551 = 0;
+            foreach (WorkOrder listedWo in listed)
+                if (listedWo.Number == "44551") n44551++;
+            Eq("bak sidecar is not a second work order", n44551, 1);
+            string conflictDetail = "";
+            if (WorkOrderStore.Conflicts.Count > 0) conflictDetail = WorkOrderStore.Conflicts[0].ToString();
+            Check("sidecar files are not a work-order conflict", WorkOrderStore.Conflicts.Count == 0, conflictDetail);
 
             wo.ReportText = "TECH BENCH — DIAGNOSTIC REPORT";
             string dest = WorkOrderStore.Share(wo, s, kb);
@@ -1115,6 +1240,7 @@ ProtocolDescription=ISO 15765
         }
         finally
         {
+            WorkOrderStore.ForceCopyFallbackForTest = false;
             IdSettings.FolderOverride = prevFolder;
             IdSettings.ExeDirOverride = prevExeDir;
             WorkOrderStore.FolderOverride = prevWo;
@@ -1552,7 +1678,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.6");
+        Eq("stamped version", AppVersion.Number, "1.2.7");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;
@@ -2073,7 +2199,8 @@ ProtocolDescription=ISO 15765
             kbLegIdx.Load(kbLeg);
             Eq("legacy code not duplicated in search", kbLegIdx.Search("LEG", "CODE", 10, out total).Count, 1);
 
-            // History publish / import: new csv copies, same name different bytes is left alone.
+            // History publish / import: new csv copies; same bytes are skipped; a same name
+            // with different bytes stays local and is imported under a collision name.
             string histSrc = Path.Combine(kbA, "job_dtcs.csv");
             File.WriteAllText(histSrc, "time,job,state,spn,fmi,occurrences,name,fmi_text\n2026,HP,active,1,0,1,x,x\n");
             ShopSync.PublishHistory(kbA, "alice", histSrc);
@@ -2081,9 +2208,49 @@ ProtocolDescription=ISO 15765
             Eq("import copies missing history", ShopSync.ImportHistory(kbA, sessions), 1);
             Eq("import is idempotent", ShopSync.ImportHistory(kbA, sessions), 0);
             File.WriteAllText(Path.Combine(sessions, "job_dtcs.csv"), "local-only");
-            File.WriteAllText(Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "job_dtcs.csv"), "shop-other");
-            Eq("import does not last-write-wins session csv", ShopSync.ImportHistory(kbA, sessions), 0);
+            string shopHist = Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "job_dtcs.csv");
+            File.WriteAllText(shopHist, "shop-other");
+            Eq("import brings in same-name different-content history under a collision name",
+                ShopSync.ImportHistory(kbA, sessions), 1);
             Eq("local session csv kept", File.ReadAllText(Path.Combine(sessions, "job_dtcs.csv")), "local-only");
+            string shopHash = ShopSync.HashFile(shopHist);
+            string collisionName = "job.alice-" + shopHash.Substring(0, 8) + "_dtcs.csv";
+            string collision = Path.Combine(sessions, collisionName);
+            Eq("collision file exists with content shop-other",
+                File.Exists(collision) ? File.ReadAllText(collision) : "(missing " + collisionName + ")",
+                "shop-other");
+            string[] sessionCsvs = Directory.GetFiles(sessions, "*_dtcs.csv");
+            Eq("session has local plus collision", sessionCsvs.Length, 2);
+            History importedHist = History.Load(sessions);
+            Eq("history loading sees the collision file", importedHist.FilesRead, sessionCsvs.Length);
+            Eq("second import returns 0", ShopSync.ImportHistory(kbA, sessions), 0);
+            File.WriteAllText(Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "dup_dtcs.csv"), "shop-other");
+            Eq("same hash under another name returns 0", ShopSync.ImportHistory(kbA, sessions), 0);
+            File.WriteAllText(Path.Combine(sessions, "same_dtcs.csv"), "identical-bytes");
+            File.WriteAllText(Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "same_dtcs.csv"), "identical-bytes");
+            Eq("identical-content same-name file still returns 0", ShopSync.ImportHistory(kbA, sessions), 0);
+
+            string localUnit = "time,job,state,spn,fmi,occurrences,name,fmi_text\n"
+                + "2026-01-01T00:00:00,\"HP450 555\",active,100,1,1,\"Oil pressure\",\"x\"\n";
+            string shopUnit = "time,job,state,spn,fmi,occurrences,name,fmi_text\n"
+                + "2026-05-01T00:00:00,\"HP450 555\",active,1761,9,2,\"DEF tank level\",\"x\"\n";
+            File.WriteAllText(Path.Combine(sessions, "HP450_555_session_dtcs.csv"), localUnit);
+            string shopUnitPath = Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "HP450_555_session_dtcs.csv");
+            File.WriteAllText(shopUnitPath, shopUnit);
+            Eq("unit history with a new body imports beside the local file", ShopSync.ImportHistory(kbA, sessions), 1);
+            string unitHash = ShopSync.HashFile(shopUnitPath);
+            string unitCollision = Path.Combine(sessions, "HP450_555_session.alice-" + unitHash.Substring(0, 8) + "_dtcs.csv");
+            Check("collision keeps the job prefix", File.Exists(unitCollision), unitCollision);
+            History unitHist = History.Load(sessions);
+            bool sawShopFault = false;
+            bool sawLocalFault = false;
+            foreach (HistoryFault fault in unitHist.ForJob("HP450 555"))
+            {
+                if (fault.Spn == 1761) sawShopFault = true;
+                if (fault.Spn == 100) sawLocalFault = true;
+            }
+            Check("history attributes the collision file to the unit", sawShopFault, "missing SPN 1761");
+            Check("local unit history was kept", sawLocalFault, "missing SPN 100");
 
             try { Directory.Delete(kbA, true); } catch { }
             try { Directory.Delete(kbB, true); } catch { }
@@ -2097,6 +2264,210 @@ ProtocolDescription=ISO 15765
         {
             ShopSync.SettingsFolderOverride = prev;
             try { Directory.Delete(settings, true); } catch { }
+        }
+    }
+
+    static bool HasPacketTemp(string dir)
+    {
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return false;
+        string[] files;
+        try { files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories); }
+        catch { return false; }
+        for (int i = 0; i < files.Length; i++)
+        {
+            string name = Path.GetFileName(files[i]);
+            if (name.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+        return false;
+    }
+
+    static void DataSafetyTests()
+    {
+        SubscriptionKeyMaskTests();
+        LaunchBlockTests();
+        ManifestVersionTests();
+        PacketSidecarSyncTests();
+    }
+
+    static void SubscriptionKeyMaskTests()
+    {
+        string path = Path.Combine(FindRepoRoot(), "IdSettingsForm.cs");
+        string src = File.Exists(path) ? File.ReadAllText(path) : "";
+        Check("IdSettingsForm.cs is readable", src.Length > 0, path);
+        Check("subscription key field is masked", SourceAssignsPasswordChar(src, "_key"), "_key");
+        Check("oauth secret field stays masked", SourceAssignsPasswordChar(src, "_secret"), "_secret");
+    }
+
+    static bool SourceAssignsPasswordChar(string src, string field)
+    {
+        if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(field)) return false;
+        string needle = field + ".UseSystemPasswordChar";
+        int from = 0;
+        while (from < src.Length)
+        {
+            int i = src.IndexOf(needle, from, StringComparison.Ordinal);
+            if (i < 0) return false;
+            int lineStart = src.LastIndexOf('\n', i);
+            if (lineStart < 0) lineStart = 0;
+            else lineStart = lineStart + 1;
+            int lineEnd = src.IndexOf('\n', i);
+            if (lineEnd < 0) lineEnd = src.Length;
+            string line = src.Substring(lineStart, lineEnd - lineStart);
+            string trim = line.Trim();
+            if (trim.StartsWith("//") || trim.StartsWith("*") || trim.StartsWith("/*"))
+            {
+                from = i + needle.Length;
+                continue;
+            }
+            int semi = line.IndexOf(';');
+            string stmt = semi >= 0 ? line.Substring(0, semi) : line;
+            if (stmt.IndexOf(needle, StringComparison.Ordinal) >= 0
+                && (stmt.IndexOf("= true", StringComparison.Ordinal) >= 0
+                    || stmt.IndexOf("=true", StringComparison.Ordinal) >= 0))
+                return true;
+            from = i + needle.Length;
+        }
+        return false;
+    }
+
+    static void LaunchBlockTests()
+    {
+        string[] blocked = new string[]
+        {
+            ".exe", ".com", ".bat", ".cmd", ".scr", ".pif", ".msi", ".msp",
+            ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+            ".hta", ".cpl", ".reg", ".lnk", ".jar",
+            ".appref-ms", ".application", ".gadget", ".msc", ".psc1", ".scf",
+            ".url", ".vb", ".ws", ".inf", ".dll", ".sys"
+        };
+        for (int i = 0; i < blocked.Length; i++)
+        {
+            string ext = blocked[i];
+            Check("blocked " + ext, LaunchPolicy.IsBlockedLaunchPath("manual" + ext), ext);
+            Check("blocked upper " + ext, LaunchPolicy.IsBlockedLaunchPath("MANUAL" + ext.ToUpperInvariant()), ext);
+        }
+        Check("double extension is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf.exe"), "pdf.exe");
+        Check("double extension upper is blocked", LaunchPolicy.IsBlockedLaunchPath("X.PDF.EXE"), "PDF.EXE");
+        Check("document that mentions exe is allowed", !LaunchPolicy.IsBlockedLaunchPath("x.exe.pdf"), "exe.pdf");
+        Check("trailing dot exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe."), "dot");
+        Check("trailing space exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe "), "space");
+        Check("trailing dot and space exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe. "), "dot space");
+        Check("alternate stream exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf:evil.exe"), "ads");
+        Check("alternate stream upper is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf:evil.EXE"), "ads upper");
+        Check("drive path alternate stream is blocked", LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\x.pdf:evil.exe"), "drive ads");
+        Check("exe with zone stream is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe:Zone.Identifier"), "zone");
+        Check("full path exe is blocked", LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\files\setup.EXE"), "full");
+        Check("null path is not launched", LaunchPolicy.IsBlockedLaunchPath(null), "null");
+        Check("empty path is not launched", LaunchPolicy.IsBlockedLaunchPath(""), "empty");
+        Check("json is not a script", !LaunchPolicy.IsBlockedLaunchPath("kb.json"), "json");
+        Check("ps1xml is not ps1", !LaunchPolicy.IsBlockedLaunchPath("x.ps1xml"), "ps1xml");
+        string[] allowed = new string[] { "x.pdf", "x.jpg", "x.png", "x.txt", "x.docx", "x.xlsx", "x.exe.pdf" };
+        for (int i = 0; i < allowed.Length; i++)
+            Check("allowed " + allowed[i], !LaunchPolicy.IsBlockedLaunchPath(allowed[i]), allowed[i]);
+        Check("document with trailing dot is allowed", !LaunchPolicy.IsBlockedLaunchPath("photo.jpg."), "jpg.");
+        Check("document with trailing space is allowed", !LaunchPolicy.IsBlockedLaunchPath("photo.jpg "), "jpg space");
+        string msg = LaunchPolicy.BlockedLaunchMessage(@"C:\kb\files\setup.exe");
+        Check("block message names the file", msg.IndexOf("setup.exe", StringComparison.Ordinal) >= 0, msg);
+        Check("block message explains the refusal",
+            msg.IndexOf("won't open program or script files", StringComparison.Ordinal) >= 0
+            && msg.IndexOf("Explorer", StringComparison.Ordinal) >= 0, msg);
+        Check("block message survives a null path",
+            LaunchPolicy.BlockedLaunchMessage(null).IndexOf("won't open", StringComparison.Ordinal) >= 0, "null msg");
+
+        string root = FindRepoRoot();
+        string search = File.Exists(Path.Combine(root, "SearchControl.cs"))
+            ? File.ReadAllText(Path.Combine(root, "SearchControl.cs")) : "";
+        Check("OpenSel refuses a blocked launch",
+            search.IndexOf("IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "SearchControl");
+        string woSrc = File.Exists(Path.Combine(root, "WorkOrderControl.cs"))
+            ? File.ReadAllText(Path.Combine(root, "WorkOrderControl.cs")) : "";
+        Check("OpenMedia refuses a blocked launch",
+            woSrc.IndexOf("IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+    }
+
+    static void ManifestVersionTests()
+    {
+        string path = Path.Combine(FindRepoRoot(), "app.manifest");
+        string xml = File.Exists(path) ? File.ReadAllText(path) : "";
+        Check("app.manifest is readable", xml.Length > 0, path);
+        Eq("manifest assemblyIdentity version", ManifestIdentityVersion(xml), AppVersion.Number + ".0");
+    }
+
+    static string ManifestIdentityVersion(string xml)
+    {
+        if (string.IsNullOrEmpty(xml)) return "";
+        int i = xml.IndexOf("<assemblyIdentity", StringComparison.Ordinal);
+        if (i < 0) return "";
+        int end = xml.IndexOf('>', i);
+        if (end < 0) return "";
+        string tag = xml.Substring(i, end - i);
+        const string key = "version=\"";
+        int v = tag.IndexOf(key, StringComparison.Ordinal);
+        if (v < 0) return "";
+        v += key.Length;
+        int q = tag.IndexOf('"', v);
+        if (q < 0) return "";
+        return tag.Substring(v, q - v);
+    }
+
+    static void PacketSidecarSyncTests()
+    {
+        string prevFolder = IdSettings.FolderOverride;
+        string prevExe = IdSettings.ExeDirOverride;
+        string prevWo = WorkOrderStore.FolderOverride;
+        string prevWoExe = WorkOrderStore.ExeDirOverride;
+        string prevSync = ShopSync.SettingsFolderOverride;
+        string kb = MkRoot();
+        string usb = Path.Combine(Path.GetTempPath(), "tb-side-" + Guid.NewGuid().ToString("N"));
+        string cfg = Path.Combine(Path.GetTempPath(), "tb-side-cfg-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(usb);
+        string exe = Path.Combine(cfg, "exe");
+        Directory.CreateDirectory(exe);
+        IdSettings.FolderOverride = cfg;
+        IdSettings.ExeDirOverride = exe;
+        WorkOrderStore.FolderOverride = Path.Combine(cfg, "wo");
+        WorkOrderStore.ExeDirOverride = exe;
+        ShopSync.SettingsFolderOverride = cfg;
+        try
+        {
+            string dir = Path.Combine(kb, "data", "shop", "alice", "work-orders", "9");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "wo.json"), "{\"Number\":\"9\"}");
+            File.WriteAllText(Path.Combine(dir, "wo.json.bak"), "{\"Number\":\"old\"}");
+            File.WriteAllText(Path.Combine(dir, "wo.json.tmp-abc"), "{ partial");
+            File.WriteAllText(Path.Combine(dir, "notes.txt.tmp-zzz"), "partial notes");
+            ShopSyncResult synced = ShopSync.Run(kb, new ShopSyncSettings { TechId = "alice", SyncFolder = usb });
+            string remote = Path.Combine(usb, "data", "shop", "alice", "work-orders", "9");
+            Check("sync copies wo.json", File.Exists(Path.Combine(remote, "wo.json")), "missing");
+            Check("sync ignores wo.json.bak", !File.Exists(Path.Combine(remote, "wo.json.bak")), "bak copied");
+            Check("sync ignores wo.json.tmp", !File.Exists(Path.Combine(remote, "wo.json.tmp-abc")), "tmp copied");
+            Check("sync ignores notes tmp", !File.Exists(Path.Combine(remote, "notes.txt.tmp-zzz")), "notes tmp copied");
+            bool sidecarConflict = false;
+            foreach (ShopConflict c in synced.ConflictList)
+            {
+                string rel = c.RelativePath ?? "";
+                if (rel.IndexOf(".bak", StringComparison.OrdinalIgnoreCase) >= 0
+                    || rel.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0)
+                    sidecarConflict = true;
+            }
+            Check("sync does not conflict on bak or tmp", !sidecarConflict, "conflict");
+
+            File.WriteAllText(Path.Combine(remote, "report.txt.bak"), "old report");
+            File.WriteAllText(Path.Combine(remote, "report.txt.tmp-qq"), "partial report");
+            ShopSync.Run(kb, new ShopSyncSettings { TechId = "alice", SyncFolder = usb });
+            Check("sync does not pull bak", !File.Exists(Path.Combine(dir, "report.txt.bak")), "bak pulled");
+            Check("sync does not pull tmp", !File.Exists(Path.Combine(dir, "report.txt.tmp-qq")), "tmp pulled");
+        }
+        finally
+        {
+            IdSettings.FolderOverride = prevFolder;
+            IdSettings.ExeDirOverride = prevExe;
+            WorkOrderStore.FolderOverride = prevWo;
+            WorkOrderStore.ExeDirOverride = prevWoExe;
+            ShopSync.SettingsFolderOverride = prevSync;
+            try { Directory.Delete(kb, true); } catch { }
+            try { Directory.Delete(usb, true); } catch { }
+            try { Directory.Delete(cfg, true); } catch { }
         }
     }
 }
