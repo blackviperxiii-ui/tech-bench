@@ -451,7 +451,9 @@ namespace TechBench
         /// Copy one shop history CSV into the session folder. Identical bytes are skipped
         /// wherever they already sit. A same name with different bytes is never overwritten;
         /// it is copied beside the local file as base.techId-hash8_dtcs.csv so History still
-        /// reads it and the job stays in the CSV body.
+        /// reads it and the job stays in the CSV body. If that 8-hex name is already taken
+        /// by a different full hash, the copy uses base.techId-fullhash_dtcs.csv instead.
+        /// If that name also exists, the file is skipped.
         /// </summary>
         static bool ImportOneHistory(string sessionFolder, string tech, string src)
         {
@@ -466,22 +468,30 @@ namespace TechBench
                 return true;
             }
 
-            string collision = CollisionHistoryPath(sessionFolder, tech, fileName, hash);
-            if (File.Exists(collision)) return false;
+            string collision = CollisionHistoryPath(sessionFolder, tech, fileName, hash, true);
+            if (File.Exists(collision))
+            {
+                string have = "";
+                try { have = HashFile(collision); }
+                catch { }
+                if (have == hash) return false;
+                collision = CollisionHistoryPath(sessionFolder, tech, fileName, hash, false);
+                if (File.Exists(collision)) return false;
+            }
             File.Copy(src, collision, false);
             return true;
         }
 
-        static string CollisionHistoryPath(string sessionFolder, string tech, string fileName, string hash)
+        static string CollisionHistoryPath(string sessionFolder, string tech, string fileName, string hash, bool shortHash)
         {
             const string suffix = "_dtcs.csv";
             string baseName = fileName ?? "";
             if (baseName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                 baseName = baseName.Substring(0, baseName.Length - suffix.Length);
-            string shortHash = hash ?? "";
-            if (shortHash.Length > 8) shortHash = shortHash.Substring(0, 8);
+            string tag = hash ?? "";
+            if (shortHash && tag.Length > 8) tag = tag.Substring(0, 8);
             string safeTech = SanitizeTechId(tech);
-            return Path.Combine(sessionFolder, baseName + "." + safeTech + "-" + shortHash + suffix);
+            return Path.Combine(sessionFolder, baseName + "." + safeTech + "-" + tag + suffix);
         }
 
         static bool SessionCsvHasHash(string sessionFolder, string hash)

@@ -1060,6 +1060,10 @@ ProtocolDescription=ISO 15765
             Check("shop copy ignores wo.json.bak", !File.Exists(Path.Combine(shopPacket, "wo.json.bak")), "json bak copied");
             Check("shop copy ignores notes.txt.bak", !File.Exists(Path.Combine(shopPacket, "notes.txt.bak")), "notes bak copied");
             Check("shop copy has no tmp sidecar", !HasPacketTemp(shopPacket), shopPacket);
+            Check("shop shard wo.json matches local with no tmp",
+                File.ReadAllText(Path.Combine(shopPacket, "wo.json")) == File.ReadAllText(jsonPath)
+                    && !HasPacketTemp(shopPacket),
+                HasPacketTemp(shopPacket) ? "tmp left" : "json differs");
 
             string stray = WorkOrderStore.WriteAtomicTemp(jsonPath, "{ truncated", new UTF8Encoding(false));
             Check("crash temp sits beside wo.json",
@@ -1237,6 +1241,7 @@ ProtocolDescription=ISO 15765
             CredProtectTests();
             TokenCacheTests(live, wo);
             WorkOrderMergeTests(s, kb);
+            WorkOrderBakRecoveryTests(s, kb);
         }
         finally
         {
@@ -1448,6 +1453,64 @@ ProtocolDescription=ISO 15765
         foreach (WorkOrder x in list)
             if (x != null && x.Number == number) return x;
         return null;
+    }
+
+    static void WorkOrderBakRecoveryTests(IdSettings s, string kb)
+    {
+        var wo = new WorkOrder
+        {
+            Number = "77701",
+            Segment = "01",
+            Customer = "Prev Co",
+            Notes = "prev note"
+        };
+        WorkOrderStore.Save(wo, s, kb);
+        wo.Customer = "Curr Co";
+        wo.Notes = "curr note";
+        WorkOrderStore.Save(wo, s, kb);
+        string packet = WorkOrderStore.PacketDir(WorkOrderStore.LocalRoot(), wo.Key());
+        string jsonPath = Path.Combine(packet, "wo.json");
+
+        WorkOrder preferred = WorkOrderStore.Load(packet);
+        Check("valid wo.json is preferred over bak",
+            preferred != null && preferred.Customer == "Curr Co",
+            preferred == null ? "null" : preferred.Customer);
+
+        File.WriteAllText(jsonPath, "");
+        WorkOrder emptyWo = WorkOrderStore.Load(packet);
+        Check("empty wo.json loads bak",
+            emptyWo != null && emptyWo.Customer == "Prev Co",
+            emptyWo == null ? "null" : emptyWo.Customer);
+
+        File.WriteAllText(jsonPath, "{ trunc");
+        WorkOrder truncated = WorkOrderStore.Load(packet);
+        Check("truncated wo.json loads bak",
+            truncated != null && truncated.Customer == "Prev Co",
+            truncated == null ? "null" : truncated.Customer);
+
+        File.Delete(jsonPath);
+        WorkOrder missing = WorkOrderStore.Load(packet);
+        Check("missing wo.json loads previous bak",
+            missing != null && missing.Customer == "Prev Co" && missing.Number == "77701",
+            missing == null ? "null" : (missing.Number + "/" + missing.Customer));
+
+        File.WriteAllText(Path.Combine(packet, "notes.txt.bak"), "bak file note");
+        File.Delete(Path.Combine(packet, "notes.txt"));
+        WorkOrder notesWo = WorkOrderStore.Load(packet);
+        Check("missing notes.txt loads notes.txt.bak",
+            notesWo != null && notesWo.Notes != null
+                && notesWo.Notes.IndexOf("bak file note", StringComparison.Ordinal) >= 0
+                && notesWo.Notes.IndexOf("prev note", StringComparison.Ordinal) < 0,
+            notesWo == null ? "null" : (notesWo.Notes ?? ""));
+
+        string onlyBak = Path.Combine(WorkOrderStore.LocalRoot(), "77702");
+        Directory.CreateDirectory(onlyBak);
+        File.WriteAllText(Path.Combine(onlyBak, "wo.json.bak"),
+            "{\"Number\":\"77702\",\"Customer\":\"Bak Only\"}");
+        WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "77702");
+        Check("bak-only packet folder is listed",
+            listed != null && listed.Customer == "Bak Only",
+            listed == null ? "missing" : listed.Customer);
     }
 
     static void LampCase(string what, byte b0, bool red, bool amber, bool protect, bool mil)
@@ -2117,6 +2180,12 @@ ProtocolDescription=ISO 15765
                 kb.Search("Tank-header", "NOTE", 10, out total).Count >= 1, "total=" + total);
             Check("file is searchable",
                 kb.Search("alice.png", "FILE", 10, out total).Count >= 1, kb.Status);
+            string fileDir = Path.Combine(ShopSync.ShardDir(kbA, "alice"), "files");
+            string tempName = "partial.png.tmp-" + Guid.NewGuid().ToString("N");
+            File.WriteAllText(Path.Combine(fileDir, tempName), "partial");
+            kb.Load(kbA);
+            Check("file dir skips atomic temp names",
+                kb.Search(tempName, "FILE", 10, out total).Count == 0, "total=" + total);
 
             // Same file, both sides edited after a clean sync → conflict, not last-write-wins.
             string noteA = Path.Combine(ShopSync.ShardDir(kbA, "alice"), "notes");
@@ -2229,6 +2298,23 @@ ProtocolDescription=ISO 15765
             File.WriteAllText(Path.Combine(sessions, "same_dtcs.csv"), "identical-bytes");
             File.WriteAllText(Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "same_dtcs.csv"), "identical-bytes");
             Eq("identical-content same-name file still returns 0", ShopSync.ImportHistory(kbA, sessions), 0);
+
+            string clashShop = Path.Combine(ShopSync.ShardDir(kbA, "alice"), "history", "clash_dtcs.csv");
+            File.WriteAllText(clashShop, "shop-body-v2");
+            string clashHash = ShopSync.HashFile(clashShop);
+            File.WriteAllText(Path.Combine(sessions, "clash_dtcs.csv"), "local-body");
+            string clashShort = Path.Combine(sessions, "clash.alice-" + clashHash.Substring(0, 8) + "_dtcs.csv");
+            File.WriteAllText(clashShort, "other-bytes");
+            string clashFull = Path.Combine(sessions, "clash.alice-" + clashHash + "_dtcs.csv");
+            int clashImported = ShopSync.ImportHistory(kbA, sessions);
+            string clashLanded = File.Exists(clashFull) ? File.ReadAllText(clashFull) : "(missing)";
+            Check("8-hex collision with a different hash still imports",
+                clashImported >= 1 && clashLanded == "shop-body-v2",
+                "n=" + clashImported + " body=" + clashLanded);
+            Eq("import lands under the full-hash name", clashLanded, "shop-body-v2");
+            Eq("8-hex collision file was not overwritten",
+                File.Exists(clashShort) ? File.ReadAllText(clashShort) : "(missing)",
+                "other-bytes");
 
             string localUnit = "time,job,state,spn,fmi,occurrences,name,fmi_text\n"
                 + "2026-01-01T00:00:00,\"HP450 555\",active,100,1,1,\"Oil pressure\",\"x\"\n";
@@ -2355,6 +2441,9 @@ ProtocolDescription=ISO 15765
         Check("alternate stream exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf:evil.exe"), "ads");
         Check("alternate stream upper is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf:evil.EXE"), "ads upper");
         Check("drive path alternate stream is blocked", LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\x.pdf:evil.exe"), "drive ads");
+        Check("drive-relative exe is blocked", LaunchPolicy.IsBlockedLaunchPath("C:setup.exe"), "C:setup.exe");
+        Check("drive-relative pdf is allowed", !LaunchPolicy.IsBlockedLaunchPath("C:manual.pdf"), "C:manual.pdf");
+        Check("drive pdf path is allowed", !LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\x.pdf"), @"C:\kb\x.pdf");
         Check("exe with zone stream is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe:Zone.Identifier"), "zone");
         Check("full path exe is blocked", LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\files\setup.EXE"), "full");
         Check("null path is not launched", LaunchPolicy.IsBlockedLaunchPath(null), "null");

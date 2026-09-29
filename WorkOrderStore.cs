@@ -81,17 +81,27 @@ namespace TechBench
 
         public static WorkOrder Load(string folder)
         {
-            if (string.IsNullOrEmpty(folder) || !File.Exists(Path.Combine(folder, "wo.json"))) return null;
+            if (string.IsNullOrEmpty(folder)) return null;
+            string jsonPath = Path.Combine(folder, "wo.json");
+            string bakPath = jsonPath + ".bak";
+            // Absorb/ListAll call Load on every folder, so a wo.json.bak-only packet still counts.
+            if (!File.Exists(jsonPath) && !File.Exists(bakPath)) return null;
             try
             {
                 var ser = new JavaScriptSerializer();
-                var wo = ser.Deserialize<WorkOrder>(File.ReadAllText(Path.Combine(folder, "wo.json")));
+                WorkOrder wo = TryReadWorkOrder(ser, jsonPath);
+                if (wo == null) wo = TryReadWorkOrder(ser, bakPath);
                 if (wo == null) return null;
                 wo.Folder = folder;
                 if (wo.Media == null) wo.Media = new List<string>();
                 if (wo.Clock == null) wo.Clock = new List<WorkOrderClock>();
                 string notes = Path.Combine(folder, "notes.txt");
                 if (File.Exists(notes)) wo.Notes = File.ReadAllText(notes);
+                else
+                {
+                    string notesBak = notes + ".bak";
+                    if (File.Exists(notesBak)) wo.Notes = File.ReadAllText(notesBak);
+                }
                 string report = Path.Combine(folder, "report.txt");
                 if (File.Exists(report)) wo.ReportText = File.ReadAllText(report);
                 string media = Path.Combine(folder, "media");
@@ -105,6 +115,21 @@ namespace TechBench
                     }
                 }
                 return wo;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        static WorkOrder TryReadWorkOrder(JavaScriptSerializer ser, string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            try
+            {
+                string text = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(text)) return null;
+                return ser.Deserialize<WorkOrder>(text);
             }
             catch
             {
@@ -288,7 +313,7 @@ namespace TechBench
         /// Replace; those fall back to copying the target over path.bak, deleting the target,
         /// and moving the temp into place. On failure the temp is deleted and the exception
         /// is rethrown. If that fallback already deleted the target and the move then fails,
-        /// the original file is gone.
+        /// the previous version is copied back from path.bak when the live file is missing.
         /// </summary>
         internal static void AtomicWriteText(string path, string text, Encoding enc)
         {
@@ -353,7 +378,20 @@ namespace TechBench
             }
             File.Copy(path, bak, true);
             File.Delete(path);
-            File.Move(temp, path);
+            try
+            {
+                File.Move(temp, path);
+            }
+            catch
+            {
+                try
+                {
+                    if (!File.Exists(path) && File.Exists(bak))
+                        File.Copy(bak, path, false);
+                }
+                catch { }
+                throw;
+            }
         }
 
         internal static bool IsIgnoredPacketFile(string path)
@@ -398,7 +436,7 @@ namespace TechBench
             foreach (string f in Directory.GetFiles(src))
             {
                 if (IsIgnoredPacketFile(f)) continue;
-                File.Copy(f, Path.Combine(dest, Path.GetFileName(f)), true);
+                AtomicCopyFile(f, Path.Combine(dest, Path.GetFileName(f)));
             }
             string media = Path.Combine(src, "media");
             if (Directory.Exists(media))
@@ -408,8 +446,44 @@ namespace TechBench
                 foreach (string f in Directory.GetFiles(media))
                 {
                     if (IsIgnoredPacketFile(f)) continue;
-                    File.Copy(f, Path.Combine(dm, Path.GetFileName(f)), true);
+                    AtomicCopyFile(f, Path.Combine(dm, Path.GetFileName(f)));
                 }
+            }
+        }
+
+        /// <summary>
+        /// Copy one file onto dest with no .bak. Bytes land in a sibling dest.tmp-guid first,
+        /// then replace (or move) into place. The temp is removed if the copy fails.
+        /// </summary>
+        static void AtomicCopyFile(string src, string dest)
+        {
+            string folder = Path.GetDirectoryName(dest);
+            if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+            string temp = dest + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.Copy(src, temp, false);
+                if (File.Exists(dest))
+                {
+                    try
+                    {
+                        File.Replace(temp, dest, null, true);
+                    }
+                    catch (Exception)
+                    {
+                        File.Copy(temp, dest, true);
+                        try { if (File.Exists(temp)) File.Delete(temp); }
+                        catch { }
+                    }
+                }
+                else
+                    File.Move(temp, dest);
+            }
+            catch
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); }
+                catch { }
+                throw;
             }
         }
 
