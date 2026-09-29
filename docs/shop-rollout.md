@@ -16,20 +16,20 @@ Double-click the Setup exe. It does not ask for an administrator account. It is 
 
 - Default folder: `%LOCALAPPDATA%\Programs\TechBench`
 - Start Menu group **Tech Bench**, including **Uninstall Tech Bench**
-- Optional Desktop shortcut. That task starts unticked; tick it only if you want the icon
+- Desktop shortcut unless you untick it. An upgrade keeps the earlier choice
 - Needs the .NET Framework 4 runtime. Setup looks for the v4 Full `Release` registry value (present on 4.5 and later) and stops with a message if it is missing. That message asks for the 32-bit .NET Framework 4.x runtime. Install that, then run Setup again.
 - Windows 7 SP1 or later
 - RP1210 adapter drivers are not in this Setup. Install those from the adapter vendor (Cummins, Noregon, and so on). Those packages are separate and often need an administrator.
 
 At the end of the wizard you can launch Tech Bench. A silent install does not launch it.
 
-Use the Start Menu shortcut, or the Desktop shortcut if you ticked that task. Do not copy `TechBench.exe` onto the Desktop. A copied exe is a second program: the next Setup will not replace it, and it will not see the knowledge base that was installed next to the real exe. Help → About shows the path of the copy you actually opened (`This copy:`). It should sit under the install folder, not on the Desktop.
+Use the Start Menu shortcut, or the Desktop shortcut unless you unticked that task. Do not copy `TechBench.exe` onto the Desktop. A copied exe is a second program: the next Setup will not replace it, and it will not see the knowledge base that was installed next to the real exe. Help → About shows the path of the copy you actually opened (`This copy:`). It should sit under the install folder, not on the Desktop.
 
 ## Upgrade
 
 Close Tech Bench and disconnect INLINE 7. Then run the newer Setup exe.
 
-Setup reuses the folder chosen last time. It replaces `TechBench.exe`, the icon files, and the shipped knowledge-base files with the copies inside that Setup, even when the file dates look older. Before it copies, it deletes leftover updater files in that folder if they are present: `TechBench.exe.new`, `TechBench.exe.new.sha256`, `apply-update.cmd`, and `TechBench.exe.bak`.
+Setup reuses the folder chosen last time and keeps the earlier Desktop shortcut choice. It replaces `TechBench.exe`, the icon files, and the shipped knowledge-base files with the copies inside that Setup, even when the file dates look older. Before it copies, it deletes leftover updater files in that folder if they are present: `TechBench.exe.new`, `TechBench.exe.new.sha256`, `apply-update.cmd`, and `TechBench.exe.bak`.
 
 Files the app added later are not in that copy, so they stay. See "Where your data lives" below.
 
@@ -65,7 +65,7 @@ In that folder:
 - Added files: `data\shop\<tech>\files\`
 - Shared work-order copies: `data\shop\<tech>\work-orders\` and `data\shop\_shared\work-orders\`
 
-Next to the installed exe, if you created them, these are not part of Setup's file list and are not deleted by an upgrade: `update-url.txt`, `kb-path.txt`, `sync-path.txt`, `id-api.json`, `id-work-orders.json`.
+Next to the installed exe, if you created them, these are not part of Setup's file list and are not deleted by an upgrade: `update-url.txt`, `kb-path.txt`, `sync-path.txt`, `id-api.json`, `id-settings.json`, `id-work-orders.json`, `id-work-orders.csv`.
 
 Uninstall (Start Menu → Uninstall Tech Bench, or `unins000.exe` in the install folder) removes the files Setup copied: the exe, icons, shipped knowledge-base files, and the shortcuts. It does not remove `%LOCALAPPDATA%\TechBench` or the session folder. It has no extra uninstall-delete list, so files you added under the knowledge base after install are left behind.
 

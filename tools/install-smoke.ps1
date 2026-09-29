@@ -62,7 +62,14 @@ function Remove-SmokeInstall {
     if (-not (Test-Path -LiteralPath $unins)) { Fail "unins000.exe is missing: $unins" }
     $unArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
     # One argument string so Start-Process does not re-quote the switches.
-    $unProc = Start-Process -FilePath $unins -ArgumentList $unArgs -Wait -PassThru
+    $unProc = Start-Process -FilePath $unins -ArgumentList $unArgs -PassThru
+    if (-not $unProc.WaitForExit(120000)) {
+        Write-Host "Uninstaller timed out after 120s. Killing pid $($unProc.Id)"
+        try { $unProc.Kill() } catch { Write-Host "Kill failed: $($_.Exception.Message)" }
+        try { if (-not $unProc.HasExited) { $unProc.WaitForExit(5000) | Out-Null } } catch {}
+        Fail "Uninstaller did not exit within 120s"
+    }
+    try { $unProc.WaitForExit() | Out-Null } catch {}
     try { $unProc.Refresh() } catch {}
     Write-Host "Uninstaller process exit: $($unProc.ExitCode)"
     $deadline = (Get-Date).AddSeconds(90)
@@ -103,9 +110,23 @@ try {
 
     # One argument string. pwsh Start-Process copies ArgumentList onto the raw command line
     # (it does not quote a single string again). /VERYSILENT plus skipifsilent keeps the UI closed.
-    $setupArgs = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /MERGETASKS="!desktopicon" /DIR="' + $script:InstallDir + '" /LOG="' + $log + '"'
+    $setupArgs = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /MERGETASKS="!desktopicon" /DIR="' + $script:InstallDir + '" /LOG="' + $log + '"'
     Write-Host "Step: silent install"
-    $setupProc = Start-Process -FilePath $Setup -ArgumentList $setupArgs -Wait -PassThru
+    $setupProc = Start-Process -FilePath $Setup -ArgumentList $setupArgs -PassThru
+    if (-not $setupProc.WaitForExit(300000)) {
+        Write-Host "Setup timed out after 300s. Killing pid $($setupProc.Id)"
+        try { $setupProc.Kill() } catch { Write-Host "Kill failed: $($_.Exception.Message)" }
+        try { if (-not $setupProc.HasExited) { $setupProc.WaitForExit(5000) | Out-Null } } catch {}
+        Write-Host "---- setup log ----"
+        if (Test-Path -LiteralPath $log) {
+            Get-Content -LiteralPath $log | ForEach-Object { Write-Host $_ }
+        } else {
+            Write-Host "(no log file)"
+        }
+        Write-Host "---- end setup log ----"
+        Fail "Silent install did not exit within 300s"
+    }
+    try { $setupProc.WaitForExit() | Out-Null } catch {}
     try { $setupProc.Refresh() } catch {}
     Write-Host "Setup exit code: $($setupProc.ExitCode)"
     if ($null -eq $setupProc.ExitCode -or $setupProc.ExitCode -ne 0) {
@@ -142,6 +163,9 @@ try {
     }
 
     # Same single-string command line so --smoke and --smoke-out stay separate arguments.
+    # A shop TECHBENCH_KB would outrank the installed copy. Drop it for this process
+    # so the child cannot inherit a higher-priority knowledge base.
+    Remove-Item Env:TECHBENCH_KB -ErrorAction SilentlyContinue
     $smokeArgs = '--smoke --smoke-out "' + $outFile + '"'
     Write-Host "Step: run --smoke"
     $smokeProc = Start-Process -FilePath $script:InstallExe -WorkingDirectory $script:InstallDir -ArgumentList $smokeArgs -PassThru
@@ -167,6 +191,11 @@ try {
     if ($report -notlike "*smoke OK*") { Fail "Smoke report does not contain 'smoke OK'" }
     if ($report.IndexOf($Expected, [System.StringComparison]::Ordinal) -lt 0) {
         Fail "Smoke report does not contain version $Expected"
+    }
+    $installedKb = Join-Path $script:InstallDir 'air-compressor-kb'
+    $kbMarker = 'kb=' + $installedKb
+    if ($report.IndexOf($kbMarker, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        Fail "Smoke report kb= path is not the installed knowledge base: $installedKb"
     }
 
     $script:ReadyToUninstall = $false
