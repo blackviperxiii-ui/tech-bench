@@ -27,7 +27,7 @@ Run `TechBench-Setup-<version>.exe` from the private GitHub release, or from the
 
 - Puts `TechBench.exe`, tab icons, and `air-compressor-kb` (the field database) in `%LocalAppData%\Programs\TechBench`
 - Start Menu shortcut (Uninstall is there too)
-- Optional Desktop shortcut. The wizard leaves that task unticked unless you select it
+- Desktop shortcut unless you untick it. An upgrade keeps the earlier choice
 
 That folder is user-writable, so **Help → Check for updates** replaces the installed exe in place. Do not copy `TechBench.exe` onto the Desktop after that — you would update the wrong file.
 

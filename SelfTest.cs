@@ -2152,6 +2152,13 @@ ProtocolDescription=ISO 15765
                 smokeSrc.IndexOf("--smoke", StringComparison.Ordinal) >= 0, "smoke");
             Check("install-smoke.ps1 uninstalls with unins000.exe",
                 smokeSrc.IndexOf("unins000.exe", StringComparison.Ordinal) >= 0, "unins");
+            Check("install-smoke.ps1 checks the report kb= path",
+                smokeSrc.IndexOf("kb=", StringComparison.Ordinal) >= 0
+                && smokeSrc.IndexOf("air-compressor-kb", StringComparison.OrdinalIgnoreCase) >= 0,
+                "kb=");
+            Check("install-smoke.ps1 does not use /CURRENTUSER",
+                smokeSrc.IndexOf("/CURRENTUSER", StringComparison.OrdinalIgnoreCase) < 0,
+                "/CURRENTUSER");
         }
 
         int runAt = text.IndexOf("[Run]", StringComparison.OrdinalIgnoreCase);
@@ -2736,6 +2743,15 @@ ProtocolDescription=ISO 15765
         }
         if (stray == 0)
             Check("test.bat lists no root .cs inline except SelfTest.cs and tools\\LayoutAudit.cs", true, "");
+
+        Check("build.bat has no *.cs wildcard",
+            build.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
+        Check("build.bat has no /recurse: wildcard",
+            build.IndexOf("/recurse:", StringComparison.OrdinalIgnoreCase) < 0, "/recurse:");
+        Check("test.bat has no *.cs wildcard",
+            test.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
+        Check("test.bat has no /recurse: wildcard",
+            test.IndexOf("/recurse:", StringComparison.OrdinalIgnoreCase) < 0, "/recurse:");
     }
 
     static int BadRspEntry(string root, string name)
