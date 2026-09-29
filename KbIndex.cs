@@ -465,7 +465,9 @@ namespace TechBench
             {
                 string name = Path.GetFileName(f);
                 string ext = Path.GetExtension(f).ToLowerInvariant();
-                if (ext == ".tmp" || ext == ".bak" || name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
+                if (ext == ".tmp" || ext == ".bak"
+                    || name.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
                     continue;
                 string sub = "Shop file";
                 if (!string.IsNullOrEmpty(author)) sub += "  ·  " + author;
@@ -763,12 +765,18 @@ namespace TechBench
             int colon = path.LastIndexOf(':');
             int start = slash + 1;
             int end = path.Length;
-            if (colon > slash) end = colon;
+            // "C:setup.exe" is drive-relative. A colon at index 1 after a letter is the drive, not an ADS.
+            if (colon > slash && !IsDriveColon(path, colon)) end = colon;
             if (end < start) return "";
             string name = path.Substring(start, end - start).TrimEnd(' ', '.');
             int dot = name.LastIndexOf('.');
             if (dot < 0 || dot >= name.Length - 1) return "";
             return name.Substring(dot);
+        }
+
+        static bool IsDriveColon(string path, int colon)
+        {
+            return colon == 1 && path.Length > 1 && char.IsLetter(path[0]);
         }
 
         static bool IsBlockedExtension(string ext)
