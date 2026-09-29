@@ -7,11 +7,14 @@ namespace TechBench
     static class Program
     {
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
+            if (WantsSmoke(args))
+                return RunSmoke(args);
+
             string exeDir = AppDomain.CurrentDomain.BaseDirectory;
             if (Updater.TryBeginPendingSwap(exeDir))
-                return;
+                return 0;
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -31,6 +34,56 @@ namespace TechBench
             }
 
             Application.Run(new ShellForm(kb));
+            return 0;
+        }
+
+        static bool WantsSmoke(string[] args)
+        {
+            if (args == null) return false;
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--smoke", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        static int RunSmoke(string[] args)
+        {
+            string outPath = null;
+            bool wantOut = false;
+            try
+            {
+                if (args != null)
+                {
+                    for (int i = 0; i < args.Length; i++)
+                    {
+                        if (!string.Equals(args[i], "--smoke-out", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        wantOut = true;
+                        if (i + 1 < args.Length) outPath = args[i + 1];
+                    }
+                }
+                if (wantOut && string.IsNullOrEmpty(outPath))
+                {
+                    InstallSmoke.EmitLine("smoke FAIL: --smoke-out needs a path");
+                    return 1;
+                }
+
+                SmokeResult result = InstallSmoke.Run();
+                InstallSmoke.Emit(result);
+                if (wantOut && !InstallSmoke.TryWriteReport(outPath, result.Line))
+                    return 1;
+                return result.ExitCode;
+            }
+            catch (Exception ex)
+            {
+                string line = "smoke FAIL: " + (ex == null || ex.Message == null ? "smoke failed" : ex.Message);
+                InstallSmoke.EmitLine(line);
+                if (wantOut && !string.IsNullOrEmpty(outPath))
+                    InstallSmoke.TryWriteReport(outPath, line);
+                return 1;
+            }
         }
 
         static void Crash(string where, Exception ex)
