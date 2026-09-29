@@ -81,27 +81,17 @@ namespace TechBench
 
         public static WorkOrder Load(string folder)
         {
-            if (string.IsNullOrEmpty(folder)) return null;
-            string jsonPath = Path.Combine(folder, "wo.json");
-            string bakPath = jsonPath + ".bak";
-            // Absorb/ListAll call Load on every folder, so a wo.json.bak-only packet still counts.
-            if (!File.Exists(jsonPath) && !File.Exists(bakPath)) return null;
+            if (string.IsNullOrEmpty(folder) || !File.Exists(Path.Combine(folder, "wo.json"))) return null;
             try
             {
                 var ser = new JavaScriptSerializer();
-                WorkOrder wo = TryReadWorkOrder(ser, jsonPath);
-                if (wo == null) wo = TryReadWorkOrder(ser, bakPath);
+                var wo = ser.Deserialize<WorkOrder>(File.ReadAllText(Path.Combine(folder, "wo.json")));
                 if (wo == null) return null;
                 wo.Folder = folder;
                 if (wo.Media == null) wo.Media = new List<string>();
                 if (wo.Clock == null) wo.Clock = new List<WorkOrderClock>();
                 string notes = Path.Combine(folder, "notes.txt");
                 if (File.Exists(notes)) wo.Notes = File.ReadAllText(notes);
-                else
-                {
-                    string notesBak = notes + ".bak";
-                    if (File.Exists(notesBak)) wo.Notes = File.ReadAllText(notesBak);
-                }
                 string report = Path.Combine(folder, "report.txt");
                 if (File.Exists(report)) wo.ReportText = File.ReadAllText(report);
                 string media = Path.Combine(folder, "media");
@@ -115,21 +105,6 @@ namespace TechBench
                     }
                 }
                 return wo;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        static WorkOrder TryReadWorkOrder(JavaScriptSerializer ser, string path)
-        {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-            try
-            {
-                string text = File.ReadAllText(path);
-                if (string.IsNullOrWhiteSpace(text)) return null;
-                return ser.Deserialize<WorkOrder>(text);
             }
             catch
             {
