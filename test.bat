@@ -5,6 +5,14 @@ rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way s
 rem work-order packets / IntelliDealer gateway (no live DMS),
 rem and shop-laptop WinForms layout (primary buttons stay on screen).
 rem Needs no adapter. Sample KB data is built in %TEMP%. The shipped field database under kb\ is loaded as-is.
+rem Source list: sources\core.rsp (SelfTest) and sources\core.rsp plus sources\app.rsp (LayoutAudit).
+rem Add new source files to those response files. This script only names SelfTest.cs and tools\LayoutAudit.cs.
+rem Response files are relative to the current directory, so test from the repo root.
+cd /d "%~dp0."
+if not exist "sources\core.rsp" (
+  echo Could not enter the repo root
+  exit /b 1
+)
 set CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe
 if not exist "%CSC%" (
   echo Missing .NET 4 csc at %CSC%
@@ -19,10 +27,7 @@ if not exist "%CSC%" (
   /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
   /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
   /out:SelfTest.exe ^
-  SelfTest.cs J1939Decode.cs Names.cs Bam.cs Rp1210.cs Rp1210Api.cs Ini.cs J1939Clear.cs ^
-  BusMonitor.cs BusWorker.cs Trend.cs Timeline.cs History.cs JobReport.cs SessionData.cs ^
-  KbIndex.cs UserCodes.cs ShopSync.cs AppVersion.cs AppSettings.cs Updater.cs ^
-  WorkOrder.cs WorkOrderStore.cs IdSettings.cs IdGateway.cs
+  SelfTest.cs @sources\core.rsp
 if errorlevel 1 exit /b 1
 SelfTest.exe
 if errorlevel 1 exit /b 1
@@ -32,12 +37,7 @@ if errorlevel 1 exit /b 1
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Security.dll" ^
   /out:LayoutAudit.exe ^
-  tools\LayoutAudit.cs Program.cs ShellForm.cs SearchControl.cs CodeEditForm.cs NoteEditForm.cs SyncForm.cs ^
-  KbIndex.cs UserCodes.cs ShopSync.cs AppVersion.cs AppSettings.cs Updater.cs UiLayout.cs ^
-  WorkOrder.cs WorkOrderStore.cs WorkOrderControl.cs IdSettings.cs IdSettingsForm.cs IdGateway.cs ^
-  Inline7Control.cs TrendChart.cs Rp1210.cs Rp1210Api.cs Ini.cs J1939Clear.cs ^
-  BusMonitor.cs BusWorker.cs Trend.cs Timeline.cs History.cs JobReport.cs JobReportPrint.cs ^
-  J1939Decode.cs Names.cs CodeBook.cs FeatureBook.cs Bam.cs Session.cs SessionData.cs
+  tools\LayoutAudit.cs @sources\core.rsp @sources\app.rsp
 if errorlevel 1 exit /b 1
 LayoutAudit.exe
 if errorlevel 1 exit /b 1

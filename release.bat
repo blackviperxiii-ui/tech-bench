@@ -1,8 +1,8 @@
 @echo off
 setlocal EnableDelayedExpansion
 rem Compile TechBench.exe, SHA-256 it, write latest.json, and build the per-user Inno installer.
-rem latest.json url always points at the public dist repo (tech-bench-dist). Shop PCs never
-rem get a GitHub token. The setup exe is what techs run; it also does not contain a token.
+rem latest.json's url matches the built-in updater default, which is unchanged.
+rem The update path is manual Setup. Shop PCs never get a GitHub token.
 
 call "%~dp0build.bat"
 if errorlevel 1 exit /b 1
@@ -46,10 +46,9 @@ echo   sha256 !HASH!
 echo   latest.json written
 echo   dist\TechBench-Setup-!VERSION!.exe
 echo.
-echo Give techs the Setup exe (Start Menu + Desktop shortcuts, no admin).
-echo Upload TechBench.exe and latest.json to the public dist repo
-echo   https://github.com/blackviperxiii-ui/tech-bench-dist/releases
-echo so Help → Check for updates can GET them without a login.
-echo CI does that when DIST_REPO_TOKEN is set; otherwise upload the two files
-echo onto the v!VERSION! release by hand. Shop override: update-url.txt next to the installed exe.
+echo Attach dist\TechBench-Setup-!VERSION!.exe, TechBench.exe and latest.json
+echo to the private GitHub release v!VERSION! on blackviperxiii-ui/tech-bench.
+echo Techs install or upgrade by running the shop Setup (see docs\shop-rollout.md).
+echo Help -^> Check for updates has no published feed.
+echo A shop override update-url.txt next to the installed exe stays possible.
 endlocal

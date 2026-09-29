@@ -1,0 +1,27 @@
+# This is the only source list (with sources\app.rsp).
+# build.bat, test.bat SelfTest (core) and LayoutAudit (core+app) read it.
+# Add new files here. One file name per line, relative to the repo root.
+J1939Decode.cs
+Names.cs
+Bam.cs
+Rp1210.cs
+Rp1210Api.cs
+Ini.cs
+J1939Clear.cs
+BusMonitor.cs
+BusWorker.cs
+Trend.cs
+Timeline.cs
+History.cs
+JobReport.cs
+SessionData.cs
+KbIndex.cs
+UserCodes.cs
+ShopSync.cs
+AppVersion.cs
+AppSettings.cs
+Updater.cs
+WorkOrder.cs
+WorkOrderStore.cs
+IdSettings.cs
+IdGateway.cs
