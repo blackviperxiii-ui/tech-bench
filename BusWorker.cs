@@ -370,6 +370,10 @@ namespace J1939Reader
                     string report;
                     try { report = _rp.ClearPreviousFaults(EngineSaLocked()); }
                     catch (Exception ex) { report = "Clear previous FAILED: " + ex.Message; }
+                    // Rp1210 returns this exact string when the adapter is down. The inline report
+                    // box shows it next to the reset-success lamp, so name the failure here.
+                    if (report == "not connected")
+                        report = "Clear previous FAILED: adapter not connected.";
                     lock (_gate) _lastResetReport = report;
                     Log(report);
                     RequestCodes(true);

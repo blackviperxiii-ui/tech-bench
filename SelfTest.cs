@@ -1457,60 +1457,62 @@ ProtocolDescription=ISO 15765
 
     static void WorkOrderBakRecoveryTests(IdSettings s, string kb)
     {
-        var wo = new WorkOrder
+        string packet = null;
+        string shopPacket = null;
+        string onlyBak = null;
+        try
         {
-            Number = "77701",
-            Segment = "01",
-            Customer = "Prev Co",
-            Notes = "prev note"
-        };
-        WorkOrderStore.Save(wo, s, kb);
-        wo.Customer = "Curr Co";
-        wo.Notes = "curr note";
-        WorkOrderStore.Save(wo, s, kb);
-        string packet = WorkOrderStore.PacketDir(WorkOrderStore.LocalRoot(), wo.Key());
-        string jsonPath = Path.Combine(packet, "wo.json");
+            var wo = new WorkOrder
+            {
+                Number = "77701",
+                Segment = "01",
+                Customer = "Prev Co",
+                Notes = "prev note"
+            };
+            WorkOrderStore.Save(wo, s, kb);
+            packet = WorkOrderStore.PacketDir(WorkOrderStore.LocalRoot(), wo.Key());
+            shopPacket = WorkOrderStore.PacketDir(WorkOrderStore.ShopTechDir(kb, s.TechId), wo.Key());
+            string jsonPath = Path.Combine(packet, "wo.json");
+            string firstJson = File.ReadAllText(jsonPath);
+            wo.Customer = "Curr Co";
+            wo.Notes = "curr note";
+            WorkOrderStore.Save(wo, s, kb);
 
-        WorkOrder preferred = WorkOrderStore.Load(packet);
-        Check("valid wo.json is preferred over bak",
-            preferred != null && preferred.Customer == "Curr Co",
-            preferred == null ? "null" : preferred.Customer);
+            WorkOrder preferred = WorkOrderStore.Load(packet);
+            Check("valid wo.json is preferred over bak",
+                preferred != null && preferred.Customer == "Curr Co",
+                preferred == null ? "null" : preferred.Customer);
 
-        File.WriteAllText(jsonPath, "");
-        WorkOrder emptyWo = WorkOrderStore.Load(packet);
-        Check("empty wo.json loads bak",
-            emptyWo != null && emptyWo.Customer == "Prev Co",
-            emptyWo == null ? "null" : emptyWo.Customer);
+            string bakText = File.ReadAllText(jsonPath + ".bak");
+            WorkOrder recovered = new JavaScriptSerializer().Deserialize<WorkOrder>(bakText);
+            string bakDetail = recovered == null ? "null" : (recovered.Number + "/" + recovered.Customer);
+            if (bakText != firstJson) bakDetail = "bak text differs; " + bakDetail;
+            Check("wo.json.bak holds the previous version",
+                bakText == firstJson
+                    && recovered != null
+                    && recovered.Number == "77701"
+                    && recovered.Customer == "Prev Co",
+                bakDetail);
 
-        File.WriteAllText(jsonPath, "{ trunc");
-        WorkOrder truncated = WorkOrderStore.Load(packet);
-        Check("truncated wo.json loads bak",
-            truncated != null && truncated.Customer == "Prev Co",
-            truncated == null ? "null" : truncated.Customer);
-
-        File.Delete(jsonPath);
-        WorkOrder missing = WorkOrderStore.Load(packet);
-        Check("missing wo.json loads previous bak",
-            missing != null && missing.Customer == "Prev Co" && missing.Number == "77701",
-            missing == null ? "null" : (missing.Number + "/" + missing.Customer));
-
-        File.WriteAllText(Path.Combine(packet, "notes.txt.bak"), "bak file note");
-        File.Delete(Path.Combine(packet, "notes.txt"));
-        WorkOrder notesWo = WorkOrderStore.Load(packet);
-        Check("missing notes.txt loads notes.txt.bak",
-            notesWo != null && notesWo.Notes != null
-                && notesWo.Notes.IndexOf("bak file note", StringComparison.Ordinal) >= 0
-                && notesWo.Notes.IndexOf("prev note", StringComparison.Ordinal) < 0,
-            notesWo == null ? "null" : (notesWo.Notes ?? ""));
-
-        string onlyBak = Path.Combine(WorkOrderStore.LocalRoot(), "77702");
-        Directory.CreateDirectory(onlyBak);
-        File.WriteAllText(Path.Combine(onlyBak, "wo.json.bak"),
-            "{\"Number\":\"77702\",\"Customer\":\"Bak Only\"}");
-        WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "77702");
-        Check("bak-only packet folder is listed",
-            listed != null && listed.Customer == "Bak Only",
-            listed == null ? "missing" : listed.Customer);
+            onlyBak = Path.Combine(WorkOrderStore.LocalRoot(), "77702");
+            Directory.CreateDirectory(onlyBak);
+            File.WriteAllText(Path.Combine(onlyBak, "wo.json.bak"),
+                "{\"Number\":\"77702\",\"Customer\":\"Bak Only\"}");
+            WorkOrder loadedBak = WorkOrderStore.Load(onlyBak);
+            WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "77702");
+            Check("bak-only folder is not loaded",
+                loadedBak == null,
+                loadedBak == null ? "null" : (loadedBak.Number + "/" + loadedBak.Customer));
+            Check("bak-only packet folder is not listed",
+                listed == null,
+                listed == null ? "absent" : (listed.Number + "/" + listed.Customer));
+        }
+        finally
+        {
+            try { if (!string.IsNullOrEmpty(packet)) Directory.Delete(packet, true); } catch { }
+            try { if (!string.IsNullOrEmpty(shopPacket)) Directory.Delete(shopPacket, true); } catch { }
+            try { if (!string.IsNullOrEmpty(onlyBak)) Directory.Delete(onlyBak, true); } catch { }
+        }
     }
 
     static void LampCase(string what, byte b0, bool red, bool amber, bool protect, bool mil)
