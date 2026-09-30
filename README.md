@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.5** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
+Current stamp: **1.2.6** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
 
 ## What it does
 

@@ -31,8 +31,9 @@ namespace TechBench
     }
 
     /// <summary>
-    /// Public HTTPS latest.json + SHA-256 of TechBench.exe, then a tiny .cmd swap after the
-    /// process exits. Never sends credentials (no GitHub PAT). Never replaces a running session.
+    /// Anonymous latest.json (built-in URL or a shop override) plus SHA-256 of TechBench.exe,
+    /// then a tiny .cmd swap after the process exits. Never sends credentials (no GitHub PAT).
+    /// Never replaces a running session.
     /// </summary>
     internal static class Updater
     {
@@ -325,8 +326,10 @@ namespace TechBench
                 || msg.IndexOf("403", StringComparison.OrdinalIgnoreCase) >= 0
                 || msg.IndexOf("404", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return "Could not read the update feed. Host latest.json on a public HTTPS URL "
-                    + "(this app never uses a GitHub token).\n\n" + msg;
+                return "Update feed unavailable. Could not read update info. "
+                    + "This build is private. Use the shop Setup from whoever has repo access, "
+                    + "or your shop's configured URL if one is set. "
+                    + "This app never uses a GitHub token.\n\n" + msg;
             }
             return msg;
         }
