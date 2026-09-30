@@ -179,6 +179,14 @@ static class SelfTest
         DataSafetyTests();
 
         Console.WriteLine();
+        Console.WriteLine("== source list ==");
+        SourceListTests();
+
+        Console.WriteLine();
+        Console.WriteLine("== install smoke ==");
+        SmokeTests();
+
+        Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
         return _fail == 0 ? 0 : 1;
     }
@@ -1743,7 +1751,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.7");
+        Eq("stamped version", AppVersion.Number, "1.2.8");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;
@@ -2049,7 +2057,26 @@ ProtocolDescription=ISO 15765
                 "private-repo download URL");
             Check("release.bat asserts PE i386",
                 rel.IndexOf("assert-pe-i386.ps1", StringComparison.OrdinalIgnoreCase) >= 0, "no PE assert");
+            Check("release.bat mentions the private GitHub release",
+                rel.IndexOf("private GitHub release", StringComparison.OrdinalIgnoreCase) >= 0, "private release");
+            Check("release.bat mentions shop Setup",
+                rel.IndexOf("shop Setup", StringComparison.OrdinalIgnoreCase) >= 0, "shop Setup");
+            Check("release.bat has no public dist upload line",
+                rel.IndexOf("Upload TechBench.exe and latest.json to the public dist repo", StringComparison.Ordinal) < 0,
+                "upload line");
+            Check("release.bat has no DIST_REPO_TOKEN",
+                rel.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) < 0, "token");
         }
+
+        string readmePath = Path.Combine(root, "README.md");
+        string readme = File.Exists(readmePath) ? File.ReadAllText(readmePath) : "";
+        Check("README has no DIST_REPO_TOKEN",
+            readme.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) < 0, "token");
+        Check("README has no public-dist upload instruction",
+            readme.IndexOf("public dist repo", StringComparison.OrdinalIgnoreCase) < 0
+            && readme.IndexOf("Upload TechBench.exe and latest.json", StringComparison.Ordinal) < 0
+            && readme.IndexOf("publish-dist.ps1", StringComparison.OrdinalIgnoreCase) < 0,
+            "upload instruction");
 
         string peAssert = Path.Combine(root, "tools", "assert-pe-i386.ps1");
         Check("PE i386 assert script present", File.Exists(peAssert), peAssert);
@@ -2067,22 +2094,27 @@ ProtocolDescription=ISO 15765
         }
 
         string publish = Path.Combine(root, "tools", "publish-dist.ps1");
-        Check("dist publish script present", File.Exists(publish), publish);
-        if (File.Exists(publish))
-        {
-            string pub = File.ReadAllText(publish);
-            Check("dist publish targets tech-bench-dist",
-                pub.IndexOf("blackviperxiii-ui/tech-bench-dist", StringComparison.OrdinalIgnoreCase) >= 0, "wrong repo");
-            Check("dist publish documents DIST_REPO_TOKEN",
-                pub.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) >= 0, "no secret name");
-            Check("no GitHub PAT in publish-dist.ps1", !ContainsSecret(pub), "secret");
-        }
+        bool publishGone = !File.Exists(publish);
+        string pub = publishGone ? "" : File.ReadAllText(publish);
+        Check("dist publish script removed", publishGone, publish);
+        Check("dist publish does not target tech-bench-dist",
+            publishGone || pub.IndexOf("blackviperxiii-ui/tech-bench-dist", StringComparison.OrdinalIgnoreCase) < 0,
+            "still targets tech-bench-dist");
+        Check("dist publish does not document DIST_REPO_TOKEN",
+            publishGone || pub.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) < 0,
+            "still documents DIST_REPO_TOKEN");
+        Check("no GitHub PAT remains in publish-dist.ps1",
+            publishGone || !ContainsSecret(pub), "secret");
 
         string workflow = Path.Combine(root, ".github", "workflows", "windows-installer.yml");
         Check("windows installer workflow present", File.Exists(workflow), workflow);
         if (File.Exists(workflow))
         {
             string yml = File.ReadAllText(workflow);
+            Check("CI runs self-test",
+                yml.IndexOf("test.bat", StringComparison.OrdinalIgnoreCase) >= 0, "test.bat");
+            Check("CI runs release.bat",
+                yml.IndexOf("release.bat", StringComparison.OrdinalIgnoreCase) >= 0, "release.bat");
             Check("CI asserts PE i386",
                 yml.IndexOf("assert-pe-i386.ps1", StringComparison.OrdinalIgnoreCase) >= 0, "no PE assert step");
             Check("CI TechBench.exe assert keeps the CLR check",
@@ -2093,11 +2125,51 @@ ProtocolDescription=ISO 15765
                 yml.IndexOf("assert-pe-i386.ps1 -Native", StringComparison.OrdinalIgnoreCase) >= 0
                 && yml.IndexOf("TechBench-Setup-", StringComparison.OrdinalIgnoreCase) >= 0,
                 "setup exe is not fail-closed");
-            Check("CI documents DIST_REPO_TOKEN",
-                yml.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) >= 0, "no secret name");
+            Check("CI uploads the installer artifact",
+                yml.IndexOf("actions/upload-artifact@", StringComparison.Ordinal) >= 0, "upload-artifact");
+            Check("CI has no public dist publish step",
+                yml.IndexOf("Publish updater files to public dist repo", StringComparison.Ordinal) < 0
+                && yml.IndexOf("publish-dist.ps1", StringComparison.OrdinalIgnoreCase) < 0,
+                "publish step remains");
+            Check("CI does not reference DIST_REPO_TOKEN",
+                yml.IndexOf("DIST_REPO_TOKEN", StringComparison.Ordinal) < 0, "token");
+            Check("CI runs first-install smoke",
+                yml.IndexOf("install-smoke.ps1", StringComparison.OrdinalIgnoreCase) >= 0
+                && yml.IndexOf("First-install smoke", StringComparison.Ordinal) >= 0,
+                "smoke step");
             Check("CI does not invent a new installer workflow path",
                 yml.IndexOf("runs-on: windows-latest", StringComparison.OrdinalIgnoreCase) >= 0, yml);
         }
+
+        string smokePs1 = Path.Combine(root, "tools", "install-smoke.ps1");
+        Check("install-smoke.ps1 present", File.Exists(smokePs1), smokePs1);
+        if (File.Exists(smokePs1))
+        {
+            string smokeSrc = File.ReadAllText(smokePs1);
+            Check("install-smoke.ps1 uses /VERYSILENT",
+                smokeSrc.IndexOf("/VERYSILENT", StringComparison.Ordinal) >= 0, "silent");
+            Check("install-smoke.ps1 runs --smoke",
+                smokeSrc.IndexOf("--smoke", StringComparison.Ordinal) >= 0, "smoke");
+            Check("install-smoke.ps1 uninstalls with unins000.exe",
+                smokeSrc.IndexOf("unins000.exe", StringComparison.Ordinal) >= 0, "unins");
+            Check("install-smoke.ps1 checks the report kb= path",
+                smokeSrc.IndexOf("kb=", StringComparison.Ordinal) >= 0
+                && smokeSrc.IndexOf("air-compressor-kb", StringComparison.OrdinalIgnoreCase) >= 0,
+                "kb=");
+            Check("install-smoke.ps1 does not use /CURRENTUSER",
+                smokeSrc.IndexOf("/CURRENTUSER", StringComparison.OrdinalIgnoreCase) < 0,
+                "/CURRENTUSER");
+        }
+
+        int runAt = text.IndexOf("[Run]", StringComparison.OrdinalIgnoreCase);
+        int runNext = runAt < 0 ? -1 : text.IndexOf("\n[", runAt + 4, StringComparison.Ordinal);
+        string runSec = "";
+        if (runAt >= 0)
+            runSec = runNext < 0 ? text.Substring(runAt) : text.Substring(runAt, runNext - runAt);
+        Check("Inno [Run] line keeps skipifsilent",
+            runSec.IndexOf("skipifsilent", StringComparison.OrdinalIgnoreCase) >= 0
+            && runSec.IndexOf("postinstall", StringComparison.OrdinalIgnoreCase) >= 0,
+            runSec);
     }
 
     static string FindRepoRoot()
@@ -2560,5 +2632,282 @@ ProtocolDescription=ISO 15765
             try { Directory.Delete(usb, true); } catch { }
             try { Directory.Delete(cfg, true); } catch { }
         }
+    }
+
+    static void SourceListTests()
+    {
+        string root = FindRepoRoot();
+        string corePath = Path.Combine(root, "sources", "core.rsp");
+        string appPath = Path.Combine(root, "sources", "app.rsp");
+        string buildPath = Path.Combine(root, "build.bat");
+        string testPath = Path.Combine(root, "test.bat");
+        Check("sources\\core.rsp present", File.Exists(corePath), corePath);
+        Check("sources\\app.rsp present", File.Exists(appPath), appPath);
+        Check("build.bat present for source list", File.Exists(buildPath), buildPath);
+        Check("test.bat present for source list", File.Exists(testPath), testPath);
+
+        List<string> core = ReadRspNames(corePath);
+        List<string> app = ReadRspNames(appPath);
+        int dup = 0;
+        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            List<string> list = pass == 0 ? core : app;
+            string which = pass == 0 ? "core.rsp" : "app.rsp";
+            for (int i = 0; i < list.Count; i++)
+            {
+                string name = list[i];
+                string prior;
+                if (seen.TryGetValue(name, out prior))
+                {
+                    Check("no duplicate source " + name, false, prior + " and " + which);
+                    dup++;
+                }
+                else seen[name] = which;
+            }
+        }
+        if (dup == 0)
+            Check("response files have no duplicate sources", true, "");
+        Check("SelfTest.cs is not in a response file", !seen.ContainsKey("SelfTest.cs"), "listed");
+
+        int badListed = 0;
+        for (int i = 0; i < core.Count; i++) badListed += BadRspEntry(root, core[i]);
+        for (int i = 0; i < app.Count; i++) badListed += BadRspEntry(root, app[i]);
+        if (badListed == 0)
+            Check("every listed source file exists", true, "");
+
+        int missing = 0;
+        if (Directory.Exists(root))
+        {
+            string[] rootCs = Directory.GetFiles(root, "*.cs");
+            for (int i = 0; i < rootCs.Length; i++)
+            {
+                string name = Path.GetFileName(rootCs[i]);
+                if (string.Equals(name, "SelfTest.cs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string where;
+                if (!seen.TryGetValue(name, out where))
+                {
+                    Check("root source is listed (" + name + ")", false, "missing from core.rsp and app.rsp");
+                    missing++;
+                }
+            }
+        }
+        if (missing == 0 && dup == 0)
+            Check("every root .cs except SelfTest.cs is listed once", true, "");
+
+        string build = File.Exists(buildPath) ? File.ReadAllText(buildPath) : "";
+        string test = File.Exists(testPath) ? File.ReadAllText(testPath) : "";
+        Check("build.bat references sources\\core.rsp",
+            build.IndexOf(@"sources\core.rsp", StringComparison.OrdinalIgnoreCase) >= 0, "core.rsp");
+        Check("build.bat references sources\\app.rsp",
+            build.IndexOf(@"sources\app.rsp", StringComparison.OrdinalIgnoreCase) >= 0, "app.rsp");
+        List<string> buildCs = ListedCsTokens(build);
+        if (buildCs.Count == 0)
+            Check("build.bat has no inline .cs file names", true, "");
+        else
+        {
+            for (int i = 0; i < buildCs.Count; i++)
+                Check("build.bat has no inline .cs file names", false, buildCs[i]);
+        }
+
+        List<string> chunks = CscCompileChunks(test);
+        Check("test.bat has two csc compiles", chunks.Count == 2, chunks.Count.ToString());
+        if (chunks.Count >= 1)
+        {
+            string self = chunks[0];
+            Check("SelfTest compile references core.rsp",
+                self.IndexOf("SelfTest.cs", StringComparison.OrdinalIgnoreCase) >= 0
+                && self.IndexOf(@"sources\core.rsp", StringComparison.OrdinalIgnoreCase) >= 0,
+                "core");
+            Check("SelfTest compile does not reference app.rsp",
+                self.IndexOf(@"sources\app.rsp", StringComparison.OrdinalIgnoreCase) < 0,
+                "app.rsp");
+        }
+        if (chunks.Count >= 2)
+        {
+            string layout = chunks[1];
+            Check("LayoutAudit compile references both response files",
+                layout.IndexOf(@"tools\LayoutAudit.cs", StringComparison.OrdinalIgnoreCase) >= 0
+                && layout.IndexOf(@"sources\core.rsp", StringComparison.OrdinalIgnoreCase) >= 0
+                && layout.IndexOf(@"sources\app.rsp", StringComparison.OrdinalIgnoreCase) >= 0,
+                "layout");
+        }
+        List<string> testCs = ListedCsTokens(test);
+        int stray = 0;
+        for (int i = 0; i < testCs.Count; i++)
+        {
+            if (AllowedTestInline(testCs[i])) continue;
+            Check("test.bat inline .cs is only SelfTest or LayoutAudit", false, testCs[i]);
+            stray++;
+        }
+        if (stray == 0)
+            Check("test.bat lists no root .cs inline except SelfTest.cs and tools\\LayoutAudit.cs", true, "");
+
+        Check("build.bat has no *.cs wildcard",
+            build.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
+        Check("build.bat has no /recurse: wildcard",
+            build.IndexOf("/recurse:", StringComparison.OrdinalIgnoreCase) < 0, "/recurse:");
+        Check("test.bat has no *.cs wildcard",
+            test.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
+        Check("test.bat has no /recurse: wildcard",
+            test.IndexOf("/recurse:", StringComparison.OrdinalIgnoreCase) < 0, "/recurse:");
+    }
+
+    static int BadRspEntry(string root, string name)
+    {
+        if (string.IsNullOrEmpty(name)
+            || name.IndexOf('\\') >= 0 || name.IndexOf('/') >= 0
+            || name.IndexOf(' ') >= 0 || name.IndexOf('\t') >= 0)
+        {
+            Check("listed source is one root file name", false, name ?? "(null)");
+            return 1;
+        }
+        if (!File.Exists(Path.Combine(root, name)))
+        {
+            Check("listed source exists", false, name);
+            return 1;
+        }
+        return 0;
+    }
+
+    static bool AllowedTestInline(string token)
+    {
+        return string.Equals(token, "SelfTest.cs", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(token, @"tools\LayoutAudit.cs", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static List<string> ReadRspNames(string path)
+    {
+        var list = new List<string>();
+        if (!File.Exists(path)) return list;
+        string[] lines = File.ReadAllLines(path);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i] == null ? "" : lines[i].Trim();
+            if (line.Length > 0 && line[0] == '\uFEFF')
+                line = line.Substring(1).Trim();
+            if (line.Length == 0 || line[0] == '#') continue;
+            list.Add(line);
+        }
+        return list;
+    }
+
+    static List<string> CscCompileChunks(string bat)
+    {
+        var chunks = new List<string>();
+        if (string.IsNullOrEmpty(bat)) return chunks;
+        string needle = "\"%CSC%\" /nologo";
+        int from = 0;
+        while (from < bat.Length)
+        {
+            int i = bat.IndexOf(needle, from, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) break;
+            int next = bat.IndexOf(needle, i + needle.Length, StringComparison.OrdinalIgnoreCase);
+            if (next < 0) next = bat.Length;
+            chunks.Add(bat.Substring(i, next - i));
+            from = next;
+        }
+        return chunks;
+    }
+
+    static List<string> ListedCsTokens(string text)
+    {
+        var found = new List<string>();
+        if (string.IsNullOrEmpty(text)) return found;
+        for (int i = 0; i < text.Length - 2; i++)
+        {
+            if (text[i] != '.') continue;
+            char c1 = text[i + 1];
+            char c2 = text[i + 2];
+            if (c1 != 'c' && c1 != 'C') continue;
+            if (c2 != 's' && c2 != 'S') continue;
+            int after = i + 3;
+            if (after < text.Length)
+            {
+                char n = text[after];
+                if (char.IsLetterOrDigit(n) || n == '_') continue;
+            }
+            int start = i;
+            while (start > 0)
+            {
+                char p = text[start - 1];
+                if (char.IsLetterOrDigit(p) || p == '_') start--;
+                else break;
+            }
+            if (start == i) continue;
+            string name = text.Substring(start, i - start) + ".cs";
+            string token = name;
+            if (start >= 6)
+            {
+                string pre = text.Substring(start - 6, 6);
+                if (string.Equals(pre, "tools\\", StringComparison.OrdinalIgnoreCase))
+                    token = "tools\\" + name;
+            }
+            found.Add(token);
+        }
+        return found;
+    }
+
+    static void SmokeTests()
+    {
+        string kb = Path.Combine(FindRepoRoot(), "kb");
+        SmokeResult ok = InstallSmoke.Run(kb);
+        Check("smoke OK on shipped kb",
+            ok != null && ok.ExitCode == 0
+            && ok.Line != null
+            && ok.Line.IndexOf("TechBench " + AppVersion.Number + " smoke OK kb=", StringComparison.Ordinal) >= 0
+            && ok.Line.IndexOf(kb, StringComparison.OrdinalIgnoreCase) >= 0,
+            ok == null ? "(null)" : ok.Line);
+        int records = -1;
+        if (ok != null && ok.Line != null)
+        {
+            int recAt = ok.Line.IndexOf("records=", StringComparison.Ordinal);
+            if (recAt >= 0)
+            {
+                string tail = ok.Line.Substring(recAt + "records=".Length).Trim();
+                int.TryParse(tail, out records);
+            }
+        }
+        Check("smoke OK record count is positive", records > 0, records.ToString());
+
+        string empty = Path.Combine(Path.GetTempPath(), "tb-smoke-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(empty);
+        try
+        {
+            SmokeResult bad = InstallSmoke.Run(empty);
+            Check("smoke FAIL on empty kb dir",
+                bad != null && bad.ExitCode != 0
+                && bad.Line != null
+                && bad.Line.IndexOf("smoke FAIL:", StringComparison.Ordinal) >= 0
+                && bad.Line.IndexOf("smoke OK", StringComparison.Ordinal) < 0,
+                bad == null ? "(null)" : bad.Line);
+        }
+        finally
+        {
+            try { Directory.Delete(empty, true); } catch { }
+        }
+
+        string programPath = Path.Combine(FindRepoRoot(), "Program.cs");
+        string program = File.Exists(programPath) ? File.ReadAllText(programPath) : "";
+        int mainAt = program.IndexOf("static int Main(string[] args)", StringComparison.Ordinal);
+        int wantsAt = mainAt < 0 ? -1 : program.IndexOf("static bool WantsSmoke", mainAt, StringComparison.Ordinal);
+        string mainBody = "";
+        if (mainAt >= 0 && wantsAt > mainAt)
+            mainBody = program.Substring(mainAt, wantsAt - mainAt);
+        int callSmoke = mainBody.IndexOf("WantsSmoke(", StringComparison.Ordinal);
+        int callRun = mainBody.IndexOf("RunSmoke(", StringComparison.Ordinal);
+        int callSwap = mainBody.IndexOf("TryBeginPendingSwap", StringComparison.Ordinal);
+        int smokeLit = wantsAt < 0 ? -1 : program.IndexOf("\"--smoke\"", wantsAt, StringComparison.Ordinal);
+        Check("Program.cs routes --smoke before TryBeginPendingSwap",
+            mainAt >= 0 && wantsAt > mainAt
+            && callSmoke >= 0 && callRun > callSmoke && callSwap > callRun
+            && smokeLit > wantsAt,
+            "main=" + mainAt + " wants=" + wantsAt + " call=" + callSmoke
+            + " run=" + callRun + " swap=" + callSwap + " lit=" + smokeLit);
+        string appVerPath = Path.Combine(FindRepoRoot(), "AppVersion.cs");
+        string appVer = File.Exists(appVerPath) ? File.ReadAllText(appVerPath) : "";
+        Check("smoke loads through KbIndex.FindRoot",
+            appVer.IndexOf("KbIndex.FindRoot()", StringComparison.Ordinal) >= 0, "FindRoot");
     }
 }

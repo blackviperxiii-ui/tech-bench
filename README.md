@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.6** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
+Current stamp: **1.2.8** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
 
 ## What it does
 
@@ -15,7 +15,7 @@ Current stamp: **1.2.6** (Help → About). The field database ships with the app
 - **Report** — printable one-page summary for a work order
 - Job strip (model/serial) prefixes saved sessions and scopes the history
 - Remembers last model/serial and window size in `%LocalAppData%\TechBench\settings.json`
-- Help → Check for updates: public `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token)
+- Help → Check for updates: `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token). The built-in feed is not published
 - **Shop sync** — two-way share of tech notes, user codes, and shop files through the knowledge-base folder or a USB/network folder you pick in Shop → Sync
 - **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off. IntelliDealer Azure API Gateway log on / log off / sign off / multimedia post-back only when dealer credentials are in Shop → IntelliDealer
 
@@ -23,11 +23,11 @@ A missing knowledge base does not block launch — the search status line says t
 
 ## Install (shop PC)
 
-Run `TechBench-Setup-<version>.exe` (Windows installer CI artifact). It does **not** need administrator.
+Run `TechBench-Setup-<version>.exe` from the private GitHub release, or from the Windows installer CI artifact. It does **not** need administrator. The shop PC does not need a GitHub login. See [docs/shop-rollout.md](docs/shop-rollout.md).
 
 - Puts `TechBench.exe`, tab icons, and `air-compressor-kb` (the field database) in `%LocalAppData%\Programs\TechBench`
 - Start Menu shortcut (Uninstall is there too)
-- Desktop shortcut unless you untick it
+- Desktop shortcut unless you untick it. An upgrade keeps the earlier choice
 
 That folder is user-writable, so **Help → Check for updates** replaces the installed exe in place. Do not copy `TechBench.exe` onto the Desktop after that — you would update the wrong file.
 
@@ -44,6 +44,10 @@ build.bat
 
 That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
 
+`build.bat` compiles from `sources\core.rsp` and `sources\app.rsp`. Those response files are the only source list. `test.bat` compiles SelfTest from `sources\core.rsp`, and LayoutAudit from both. Add a new `.cs` file there instead of pasting it into the scripts.
+
+`TechBench.exe --smoke` checks the version stamp and the bundled knowledge base, then exits without a window. `--smoke-out <path>` writes the one-line report (the exe is a Windows program, so the CI gate reads that file). The Windows installer workflow runs this after a silent per-user install, then uninstalls.
+
 `/platform:x86` is not optional: RP1210 adapter drivers are 32-bit only. The Adapters page tells you if the running process is wrong.
 
 ### Release (hash + latest.json + installer)
@@ -59,14 +63,9 @@ Writes:
 
 Building the Setup exe needs the Inno Setup compiler (`ISCC.exe`). `installer\build.bat` looks in the usual install paths, then downloads a local copy into `tools\innosetup` (gitignored) if needed. Shop PCs never run that step — they only run the finished Setup exe.
 
-Upload **TechBench.exe** and **latest.json** to the public dist repo [blackviperxiii-ui/tech-bench-dist](https://github.com/blackviperxiii-ui/tech-bench-dist). Shop PCs download them anonymously. Hand techs the Setup exe for first install (and for machines that never had a copy).
+Attach `dist\TechBench-Setup-<version>.exe`, `TechBench.exe`, and `latest.json` to the private GitHub release `v<version>` on [blackviperxiii-ui/tech-bench](https://github.com/blackviperxiii-ui/tech-bench). Techs install or upgrade by running that shop Setup. See [docs/shop-rollout.md](docs/shop-rollout.md).
 
-Built-in updater URLs (this private source repo is not the feed):
-
-- `latest.json`: `https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`
-- `TechBench.exe`: `https://github.com/blackviperxiii-ui/tech-bench-dist/releases/download/v{VERSION}/TechBench.exe`
-
-CI publishes those two files after `release.bat` when repository secret `DIST_REPO_TOKEN` is set (a PAT with `contents:write` on `tech-bench-dist`). `GITHUB_TOKEN` cannot create releases on another repo; without `DIST_REPO_TOKEN` the job still builds and asserts PE i386, and you upload the two files onto the `v{VERSION}` dist release by hand. On a shop PC you can override the feed with `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed).
+The in-app updater's built-in default feed URL (`https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`) is unchanged and not published, so Help → Check for updates reports the feed as unavailable. On a shop PC you can override the feed with `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed).
 
 The updater never sends credentials and the installer does not contain a GitHub token. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start, in the same folder the Setup exe used.
 
@@ -76,7 +75,7 @@ The updater never sends credentials and the installer does not contain a GitHub 
 test.bat
 ```
 
-Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder.
+Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
 
 ## Knowledge base
 
