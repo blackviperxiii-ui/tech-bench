@@ -406,7 +406,7 @@ namespace TechBench
                 + "Process: " + bits + "\r\n"
                 + "Knowledge base: " + kb + "\r\n"
                 + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\r\n") : "")
-                + "\r\nUpdates download a public latest.json and a hashed TechBench.exe into this folder.\r\n"
+                + "\r\nUpdates read an anonymous manifest URL (the built-in default, or a shop override) and a hashed TechBench.exe into this folder.\r\n"
                 + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.");
         }
 
