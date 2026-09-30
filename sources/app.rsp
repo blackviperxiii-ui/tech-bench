@@ -1,0 +1,18 @@
+# This is the only source list (with sources\core.rsp).
+# build.bat and test.bat LayoutAudit read core+app. SelfTest reads core only.
+# Add new app-only files here. One file name per line, relative to the repo root.
+Program.cs
+ShellForm.cs
+SearchControl.cs
+CodeEditForm.cs
+NoteEditForm.cs
+SyncForm.cs
+UiLayout.cs
+WorkOrderControl.cs
+IdSettingsForm.cs
+Inline7Control.cs
+TrendChart.cs
+JobReportPrint.cs
+CodeBook.cs
+FeatureBook.cs
+Session.cs
