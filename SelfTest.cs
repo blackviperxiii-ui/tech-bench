@@ -2007,9 +2007,11 @@ ProtocolDescription=ISO 15765
         worker.IsBackground = true;
         worker.Start();
         UpdateCheck result = Updater.Check(url);
-        worker.Join(12000);
+        bool finished = worker.Join(12000);
         if (boom != null)
             Check("http feed server", false, boom.Message);
+        Check("http feed server finished", finished && !worker.IsAlive,
+            (worker.IsAlive ? "still running" : "join timed out") + " " + (url ?? ""));
         return result;
     }
 
@@ -2136,9 +2138,10 @@ ProtocolDescription=ISO 15765
             byte[] body = Encoding.UTF8.GetBytes(json);
             Check("near-cap manifest is under 64 KB",
                 body.Length < Updater.MaxManifestBytes && body.Length > 60000, body.Length.ToString());
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
             UpdateCheck near = Updater.Check(root + "near.json");
-            worker.Join(12000);
+            CheckServerDone("near-cap manifest", serverError, worker);
             Check("manifest just under the cap still parses",
                 Updater.IsAvailable(near)
                 && near.Manifest != null
@@ -2167,7 +2170,9 @@ ProtocolDescription=ISO 15765
         {
             string root = "http://127.0.0.1:" + port.ToString() + "/";
             string loc = "http://localhost:" + port.ToString() + "/x";
-            worker = ServeSteps(listener, new ScriptStep[] { Step(302, new byte[0], false, loc) }, paths, null);
+            // Client refuses before a second request; a writer fault is not a failure.
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, new ScriptStep[] { Step(302, new byte[0], false, loc) }, paths, serverError);
             UpdateCheck refused = Updater.Check(root + "start.json");
             worker.Join(12000);
             AssertUpdateRefused("cross-host redirect", refused, "another host");
@@ -2201,9 +2206,10 @@ ProtocolDescription=ISO 15765
                 Step(302, new byte[0], false, moved),
                 Step(200, body, false, null)
             };
-            worker = ServeSteps(listener, steps, paths, null);
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, steps, paths, serverError);
             UpdateCheck followed = Updater.Check(root + "start.json");
-            worker.Join(12000);
+            CheckServerDone("same-host redirect", serverError, worker);
             Check("same-host redirect is followed", Updater.IsAvailable(followed), Updater.StatusText(followed));
             Check("same-host redirect records the requested url",
                 followed.Manifest != null && followed.Manifest.SourceUrl == root + "start.json",
@@ -2232,9 +2238,10 @@ ProtocolDescription=ISO 15765
             ScriptStep[] steps = new ScriptStep[6];
             for (int i = 0; i < steps.Length; i++)
                 steps[i] = Step(302, new byte[0], false, root + "step" + i.ToString() + ".json");
-            worker = ServeSteps(listener, steps, paths, null);
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, steps, paths, serverError);
             UpdateCheck refused = Updater.Check(root + "chain.json");
-            worker.Join(12000);
+            CheckServerDone("too many redirects", serverError, worker);
             AssertUpdateRefused("too many redirects", refused, "more than 5");
             Check("too many redirects stopped after the cap",
                 paths.Count == Updater.MaxRedirects + 1, "hits=" + paths.Count.ToString());
@@ -2261,7 +2268,9 @@ ProtocolDescription=ISO 15765
             dir = NewTempDir("tb-cap-");
             string root = "http://127.0.0.1:" + port.ToString() + "/";
             byte[] body = RepeatByte((byte)'p', 4096);
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, chunked, null) }, null, null);
+            // Client stops at the cap; a short write on the server is expected.
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, chunked, null) }, null, serverError);
             Exception ex = CatchEx(delegate
             {
                 Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe", new string('a', 64), 1024L);
@@ -2298,13 +2307,14 @@ ProtocolDescription=ISO 15765
             dir = NewTempDir("tb-hash-");
             string root = "http://127.0.0.1:" + port.ToString() + "/";
             byte[] body = Encoding.UTF8.GetBytes("not-the-real-update");
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
             Exception ex = CatchEx(delegate
             {
                 Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe",
                     new string('b', 64), Updater.MaxPayloadBytes);
             });
-            worker.Join(12000);
+            CheckServerDone("payload hash mismatch", serverError, worker);
             Check("payload hash mismatch throws",
                 ex != null && ex.Message.IndexOf("did not match", StringComparison.Ordinal) >= 0,
                 ex == null ? "no throw" : ex.Message);
@@ -2336,13 +2346,14 @@ ProtocolDescription=ISO 15765
             string root = "http://127.0.0.1:" + port.ToString() + "/";
             byte[] body = Encoding.UTF8.GetBytes("tech-bench-payload-v129");
             string sha = Updater.Sha256Bytes(body);
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
             Exception ex = CatchEx(delegate
             {
                 Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe",
                     sha.ToUpperInvariant(), Updater.MaxPayloadBytes);
             });
-            worker.Join(12000);
+            CheckServerDone("payload happy path", serverError, worker);
             Check("payload happy path does not throw", ex == null, ex == null ? "" : ex.Message);
             string staged = Path.Combine(dir, "TechBench.exe.new");
             Check("payload happy path staged the exe", File.Exists(staged), staged);
@@ -2375,9 +2386,11 @@ ProtocolDescription=ISO 15765
         {
             dir = NewTempDir("tb-origin-");
             string root = "http://127.0.0.1:" + port.ToString() + "/";
+            // Origin is refused before any request, so the worker stays blocked in GetContext.
+            Exception[] serverError = new Exception[1];
             worker = ServeSteps(listener,
                 new ScriptStep[] { Step(200, Encoding.UTF8.GetBytes("should-not-download"), false, null) },
-                paths, null);
+                paths, serverError);
             Exception ex = CatchEx(delegate
             {
                 Updater.DownloadAndStage(dir, "http://127.0.0.1:1/latest.json", root + "TechBench.exe",
@@ -2412,9 +2425,10 @@ ProtocolDescription=ISO 15765
             string payloadHost = "localhost";
             string payload = "http://" + payloadHost + ":" + port.ToString() + "/TechBench.exe";
             byte[] body = Encoding.UTF8.GetBytes(ManifestJson("9.9.9", payload));
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
             UpdateCheck cross = Updater.Check(root + "latest.json");
-            worker.Join(12000);
+            CheckServerDone("http manifest other-host payload", serverError, worker);
             AssertUpdateRefused("http manifest other-host payload", cross, payloadHost);
         }
         finally
@@ -2466,7 +2480,9 @@ ProtocolDescription=ISO 15765
         Thread worker = null;
         try
         {
-            worker = ServeSteps(listener, steps, paths, null);
+            // Oversize feeds abort mid-body; do not fail on the writer's fault.
+            Exception[] serverError = new Exception[1];
+            worker = ServeSteps(listener, steps, paths, serverError);
             string url = "http://127.0.0.1:" + port.ToString() + "/" + (path ?? "");
             UpdateCheck result = Updater.Check(url);
             if (worker != null) worker.Join(12000);
@@ -2486,6 +2502,18 @@ ProtocolDescription=ISO 15765
         step.Chunked = chunked;
         step.Location = location;
         return step;
+    }
+
+    // Full-read tests only. A client that aborts the body can fault the writer.
+    static void CheckServerDone(string label, Exception[] error, Thread worker)
+    {
+        bool finished = false;
+        if (worker != null) finished = worker.Join(12000);
+        string errText = "";
+        if (error != null && error[0] != null) errText = error[0].ToString();
+        Check(label + " server error", error == null || error[0] == null, errText);
+        bool alive = worker != null && worker.IsAlive;
+        Check(label + " server finished", finished && !alive, alive ? "still running" : "join timed out");
     }
 
     static Thread ServeSteps(HttpListener listener, ScriptStep[] steps, List<string> paths, Exception[] error)
@@ -2531,15 +2559,16 @@ ProtocolDescription=ISO 15765
                         }
                         ctx.Response.OutputStream.Close();
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (error != null && error[0] == null) error[0] = ex;
                         try { ctx.Response.Abort(); } catch { }
                     }
                 }
             }
             catch (Exception ex)
             {
-                if (error != null) error[0] = ex;
+                if (error != null && error[0] == null) error[0] = ex;
             }
         });
         worker.IsBackground = true;
