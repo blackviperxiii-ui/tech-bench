@@ -1751,7 +1751,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.8");
+        Eq("stamped version", AppVersion.Number, "1.2.9");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;
@@ -1852,8 +1852,12 @@ ProtocolDescription=ISO 15765
 
         string samePath = Path.Combine(dir, "same-latest.json");
         File.WriteAllText(samePath, ManifestJson(AppVersion.Number, "file:///C:/TechBench.exe"));
-        UpdateCheck same = Updater.Check(new Uri(samePath).AbsoluteUri);
+        string sameUrl = new Uri(samePath).AbsoluteUri;
+        UpdateCheck same = Updater.Check(sameUrl);
         Check("same version file feed is current", Updater.IsCurrent(same), Updater.StatusText(same));
+        Check("file feed records the manifest url",
+            same.Manifest != null && same.Manifest.SourceUrl == sameUrl,
+            same.Manifest == null ? Updater.StatusText(same) : (same.Manifest.SourceUrl ?? "(null source)"));
         Check("same version says current",
             Updater.StatusText(same).IndexOf("is current", StringComparison.Ordinal) >= 0, Updater.StatusText(same));
 
@@ -1887,6 +1891,7 @@ ProtocolDescription=ISO 15765
             && updaterSrc.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0, "old copy");
 
         HttpFeedTests();
+        UpdaterHardeningTests();
         try { Directory.Delete(dir, true); } catch { }
     }
 
@@ -1968,6 +1973,9 @@ ProtocolDescription=ISO 15765
 
             UpdateCheck offer = CheckHttp(listener, 200, ManifestJson("9.9.9", root + "TechBench.exe"), root + "ok.json");
             Check("http feed can report a newer build", Updater.IsAvailable(offer), Updater.StatusText(offer));
+            Check("http feed records source url",
+                offer.Manifest != null && offer.Manifest.SourceUrl == root + "ok.json",
+                offer.Manifest == null ? Updater.StatusText(offer) : (offer.Manifest.SourceUrl ?? "(null source)"));
             Check("http is not forced to https", root.StartsWith("http://", StringComparison.OrdinalIgnoreCase), root);
         }
         finally
@@ -2003,6 +2011,631 @@ ProtocolDescription=ISO 15765
         if (boom != null)
             Check("http feed server", false, boom.Message);
         return result;
+    }
+
+    static void UpdaterHardeningTests()
+    {
+        Eq("manifest cap is 64 KB", Updater.MaxManifestBytes, 65536L);
+        Eq("payload cap is 32 MB", Updater.MaxPayloadBytes, 33554432L);
+        Eq("redirect cap is 5", Updater.MaxRedirects, 5);
+        RedirectRuleTests();
+        PayloadOriginRuleTests();
+        OversizeManifestTests();
+        NearCapManifestTest();
+        CrossHostRedirectTest();
+        SameHostRedirectTest();
+        TooManyRedirectsTest();
+        PayloadOversizeTest(false);
+        PayloadOversizeTest(true);
+        PayloadHashMismatchTest();
+        PayloadHappyPathTest();
+        PayloadOriginNoRequestTest();
+        HttpManifestOtherHostPayloadTest();
+        SilentBackgroundTest();
+    }
+
+    static void RedirectRuleTests()
+    {
+        string why;
+        bool down = Updater.RedirectAllowed(new Uri("https://example.com/a"), new Uri("http://example.com/b"), out why);
+        Check("https to http redirect refused", !down, why);
+        Check("https to http redirect message",
+            why == "Redirect from https to http was refused.", why);
+        bool httpsSame = Updater.RedirectAllowed(new Uri("https://example.com/a"), new Uri("https://example.com/b"), out why);
+        Check("https same host redirect allowed", httpsSame, why);
+        bool host = Updater.RedirectAllowed(new Uri("http://127.0.0.1:1234/a"), new Uri("http://localhost:1234/b"), out why);
+        Check("redirect host change refused", !host, why);
+        Check("redirect host change names both hosts",
+            why.IndexOf("127.0.0.1", StringComparison.Ordinal) >= 0
+            && why.IndexOf("localhost", StringComparison.Ordinal) >= 0, why);
+        bool port = Updater.RedirectAllowed(new Uri("http://127.0.0.1:1234/a"), new Uri("http://127.0.0.1:1235/a"), out why);
+        Check("redirect port change refused", !port, why);
+        bool schemeUp = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("https://example.com/b"), out why);
+        Check("http to https same-host default-port redirect allowed", schemeUp, why);
+        bool schemeUpHost = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("https://other.example/b"), out why);
+        Check("http to https redirect on another host refused", !schemeUpHost, why);
+        bool schemeUpPort = Updater.RedirectAllowed(new Uri("http://example.com:8080/a"), new Uri("https://example.com/b"), out why);
+        Check("http non-default port to https redirect refused", !schemeUpPort, why);
+        bool schemeUpToPort = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("https://example.com:8443/b"), out why);
+        Check("http to https non-default port redirect refused", !schemeUpToPort, why);
+        bool defPort = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("http://example.com:80/b"), out why);
+        Check("redirect to explicit default port allowed", defPort, why);
+    }
+
+    static void PayloadOriginRuleTests()
+    {
+        string why;
+        Check("same-origin http payload allowed",
+            Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "http://127.0.0.1/TechBench.exe", out why), why);
+        Check("payload host change refused",
+            !Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "http://localhost/TechBench.exe", out why), why);
+        Check("payload host change names the payload host",
+            why.IndexOf("localhost", StringComparison.Ordinal) >= 0, why);
+        Check("payload port change refused",
+            !Updater.PayloadOriginAllowed("http://127.0.0.1:8080/latest.json", "http://127.0.0.1:9090/TechBench.exe", out why), why);
+        Check("https manifest to http payload refused",
+            !Updater.PayloadOriginAllowed("https://example.com/latest.json", "http://example.com/TechBench.exe", out why), why);
+        Check("http manifest to https payload allowed",
+            Updater.PayloadOriginAllowed("http://example.com/latest.json", "https://example.com/TechBench.exe", out why), why);
+        Check("file local to file local allowed",
+            Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "file:///C:/TechBench.exe", out why), why);
+        string tempManifest = new Uri(Path.Combine(Path.GetTempPath(), "tb-latest.json")).AbsoluteUri;
+        Check("temp file manifest to local file payload allowed",
+            Updater.PayloadOriginAllowed(tempManifest, "file:///C:/TechBench.exe", out why),
+            why + " | " + tempManifest);
+        Check("file manifest to http payload allowed",
+            Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "http://127.0.0.1/TechBench.exe", out why), why);
+        Check("file manifest to https payload allowed",
+            Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "https://127.0.0.1/TechBench.exe", out why), why);
+        Check("file manifest to other scheme refused",
+            !Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "ftp://127.0.0.1/TechBench.exe", out why), why);
+        Check("non-http manifest scheme refused",
+            !Updater.PayloadOriginAllowed("ftp://127.0.0.1/latest.json", "ftp://127.0.0.1/TechBench.exe", out why), why);
+        Check("http manifest to file payload refused",
+            !Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "file:///C:/TechBench.exe", out why), why);
+        Check("relative payload refused",
+            !Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "TechBench.exe", out why), why);
+        Check("payload host compare ignores case",
+            Updater.PayloadOriginAllowed("http://Example.com/latest.json", "http://example.com/TechBench.exe", out why), why);
+        Check("explicit default http port matches",
+            Updater.PayloadOriginAllowed("http://example.com/latest.json", "http://example.com:80/TechBench.exe", out why), why);
+        Check("http non-default port cannot upgrade to https",
+            !Updater.PayloadOriginAllowed("http://example.com:8080/latest.json", "https://example.com/TechBench.exe", out why), why);
+        Check("unc file host case difference allowed",
+            Updater.PayloadOriginAllowed("file://shop/share/latest.json", "file://SHOP/share/TechBench.exe", out why), why);
+        Check("unc file host change allowed",
+            Updater.PayloadOriginAllowed("file://shop/share/latest.json", "file://other/share/TechBench.exe", out why), why);
+    }
+
+    static void OversizeManifestTests()
+    {
+        byte[] big = RepeatByte((byte)'x', 70000);
+        UpdateCheck withLen = ServeCheck("oversize manifest with Content-Length",
+            new ScriptStep[] { Step(200, big, false, null) }, "latest.json", null);
+        AssertUpdateRefused("oversize manifest with Content-Length", withLen, "64 KB");
+
+        UpdateCheck chunked = ServeCheck("oversize manifest without Content-Length",
+            new ScriptStep[] { Step(200, big, true, null) }, "chunked.json", null);
+        AssertUpdateRefused("oversize manifest without Content-Length", chunked, "64 KB");
+    }
+
+    static void NearCapManifestTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("near-cap manifest listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        Thread worker = null;
+        try
+        {
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            string payload = root + "TechBench.exe";
+            string notes = new string('n', 60000);
+            string json = "{\"version\":\"9.9.9\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"url\":\""
+                + payload + "\",\"notes\":\"" + notes + "\"}";
+            byte[] body = Encoding.UTF8.GetBytes(json);
+            Check("near-cap manifest is under 64 KB",
+                body.Length < Updater.MaxManifestBytes && body.Length > 60000, body.Length.ToString());
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            UpdateCheck near = Updater.Check(root + "near.json");
+            worker.Join(12000);
+            Check("manifest just under the cap still parses",
+                Updater.IsAvailable(near)
+                && near.Manifest != null
+                && near.Manifest.Notes != null
+                && near.Manifest.Notes.Length == 60000,
+                Updater.StatusText(near));
+            Check("near-cap manifest records source url",
+                near.Manifest != null && near.Manifest.SourceUrl == root + "near.json",
+                near.Manifest == null ? Updater.StatusText(near) : (near.Manifest.SourceUrl ?? "(null source)"));
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+        }
+    }
+
+    static void CrossHostRedirectTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("cross-host redirect listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        List<string> paths = new List<string>();
+        Thread worker = null;
+        try
+        {
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            string loc = "http://localhost:" + port.ToString() + "/x";
+            worker = ServeSteps(listener, new ScriptStep[] { Step(302, new byte[0], false, loc) }, paths, null);
+            UpdateCheck refused = Updater.Check(root + "start.json");
+            worker.Join(12000);
+            AssertUpdateRefused("cross-host redirect", refused, "another host");
+            Check("cross-host redirect names localhost",
+                Updater.StatusText(refused).IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0,
+                Updater.StatusText(refused));
+            Check("cross-host redirect did not request the other host",
+                paths.Count == 1, "hits=" + paths.Count.ToString() + Seen(paths));
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+        }
+    }
+
+    static void SameHostRedirectTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("same-host redirect listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        List<string> paths = new List<string>();
+        Thread worker = null;
+        try
+        {
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            string moved = root + "moved.json";
+            byte[] body = Encoding.UTF8.GetBytes(ManifestJson("9.9.9", root + "TechBench.exe"));
+            ScriptStep[] steps = new ScriptStep[]
+            {
+                Step(302, new byte[0], false, moved),
+                Step(200, body, false, null)
+            };
+            worker = ServeSteps(listener, steps, paths, null);
+            UpdateCheck followed = Updater.Check(root + "start.json");
+            worker.Join(12000);
+            Check("same-host redirect is followed", Updater.IsAvailable(followed), Updater.StatusText(followed));
+            Check("same-host redirect records the requested url",
+                followed.Manifest != null && followed.Manifest.SourceUrl == root + "start.json",
+                followed.Manifest == null ? Updater.StatusText(followed) : (followed.Manifest.SourceUrl ?? "(null source)"));
+            bool second = paths.Count == 2 && paths[1] != null
+                && paths[1].IndexOf("moved.json", StringComparison.Ordinal) >= 0;
+            Check("same-host redirect fetched moved.json", second, "hits=" + paths.Count.ToString() + Seen(paths));
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+        }
+    }
+
+    static void TooManyRedirectsTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("too many redirects listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        List<string> paths = new List<string>();
+        Thread worker = null;
+        try
+        {
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            ScriptStep[] steps = new ScriptStep[6];
+            for (int i = 0; i < steps.Length; i++)
+                steps[i] = Step(302, new byte[0], false, root + "step" + i.ToString() + ".json");
+            worker = ServeSteps(listener, steps, paths, null);
+            UpdateCheck refused = Updater.Check(root + "chain.json");
+            worker.Join(12000);
+            AssertUpdateRefused("too many redirects", refused, "more than 5");
+            Check("too many redirects stopped after the cap",
+                paths.Count == Updater.MaxRedirects + 1, "hits=" + paths.Count.ToString());
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+        }
+    }
+
+    static void PayloadOversizeTest(bool chunked)
+    {
+        string label = chunked
+            ? "oversize payload without Content-Length"
+            : "oversize payload with Content-Length";
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check(label + " listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        string dir = null;
+        Thread worker = null;
+        try
+        {
+            dir = NewTempDir("tb-cap-");
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            byte[] body = RepeatByte((byte)'p', 4096);
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, chunked, null) }, null, null);
+            Exception ex = CatchEx(delegate
+            {
+                Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe", new string('a', 64), 1024L);
+            });
+            worker.Join(12000);
+            Check(label + " throws", ex != null, "no throw");
+            Check(label + " names the limit",
+                ex != null && ex.Message.IndexOf("larger than", StringComparison.Ordinal) >= 0,
+                ex == null ? "(null)" : ex.Message);
+            Check(label + " uses shop setup wording",
+                ex != null
+                && ex.Message.IndexOf("shop Setup", StringComparison.Ordinal) >= 0
+                && ex.Message.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0,
+                ex == null ? "(null)" : ex.Message);
+            AssertNothingStaged(label, dir);
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+            if (dir != null) try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    static void PayloadHashMismatchTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("payload hash mismatch listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        string dir = null;
+        Thread worker = null;
+        try
+        {
+            dir = NewTempDir("tb-hash-");
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            byte[] body = Encoding.UTF8.GetBytes("not-the-real-update");
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            Exception ex = CatchEx(delegate
+            {
+                Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe",
+                    new string('b', 64), Updater.MaxPayloadBytes);
+            });
+            worker.Join(12000);
+            Check("payload hash mismatch throws",
+                ex != null && ex.Message.IndexOf("did not match", StringComparison.Ordinal) >= 0,
+                ex == null ? "no throw" : ex.Message);
+            Check("payload hash mismatch uses shop setup wording",
+                ex != null
+                && ex.Message.IndexOf("shop Setup", StringComparison.Ordinal) >= 0
+                && ex.Message.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0,
+                ex == null ? "(null)" : ex.Message);
+            AssertNothingStaged("payload hash mismatch", dir);
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+            if (dir != null) try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    static void PayloadHappyPathTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("payload happy path listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        string dir = null;
+        Thread worker = null;
+        try
+        {
+            dir = NewTempDir("tb-ok-");
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            byte[] body = Encoding.UTF8.GetBytes("tech-bench-payload-v129");
+            string sha = Updater.Sha256Bytes(body);
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            Exception ex = CatchEx(delegate
+            {
+                Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe",
+                    sha.ToUpperInvariant(), Updater.MaxPayloadBytes);
+            });
+            worker.Join(12000);
+            Check("payload happy path does not throw", ex == null, ex == null ? "" : ex.Message);
+            string staged = Path.Combine(dir, "TechBench.exe.new");
+            Check("payload happy path staged the exe", File.Exists(staged), staged);
+            if (File.Exists(staged))
+            {
+                byte[] got = File.ReadAllBytes(staged);
+                Check("payload happy path bytes match", BytesEqual(got, body), "len=" + got.Length.ToString());
+            }
+            Check("payload happy path verifies", Updater.HasVerifiedPending(dir), dir);
+            Check("payload happy path left no .part file",
+                !File.Exists(Path.Combine(dir, "TechBench.exe.new.part")), dir);
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+            if (dir != null) try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    static void PayloadOriginNoRequestTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("payload origin refusal listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        string dir = null;
+        List<string> paths = new List<string>();
+        Thread worker = null;
+        try
+        {
+            dir = NewTempDir("tb-origin-");
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            worker = ServeSteps(listener,
+                new ScriptStep[] { Step(200, Encoding.UTF8.GetBytes("should-not-download"), false, null) },
+                paths, null);
+            Exception ex = CatchEx(delegate
+            {
+                Updater.DownloadAndStage(dir, "http://127.0.0.1:1/latest.json", root + "TechBench.exe",
+                    new string('c', 64), 1024L);
+            });
+            Check("payload origin mismatch throws", ex != null, "no throw");
+            Check("payload origin mismatch made no request", paths.Count == 0, "hits=" + paths.Count.ToString());
+            Check("payload origin mismatch uses shop setup wording",
+                ex != null
+                && ex.Message.IndexOf("shop Setup", StringComparison.Ordinal) >= 0
+                && ex.Message.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0,
+                ex == null ? "(null)" : ex.Message);
+            AssertNothingStaged("payload origin mismatch", dir);
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+            if (dir != null) try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    static void HttpManifestOtherHostPayloadTest()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("http manifest other-host payload listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return;
+        Thread worker = null;
+        try
+        {
+            string root = "http://127.0.0.1:" + port.ToString() + "/";
+            string payloadHost = "localhost";
+            string payload = "http://" + payloadHost + ":" + port.ToString() + "/TechBench.exe";
+            byte[] body = Encoding.UTF8.GetBytes(ManifestJson("9.9.9", payload));
+            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, null);
+            UpdateCheck cross = Updater.Check(root + "latest.json");
+            worker.Join(12000);
+            AssertUpdateRefused("http manifest other-host payload", cross, payloadHost);
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+        }
+    }
+
+    static void SilentBackgroundTest()
+    {
+        string shellPath = Path.Combine(FindRepoRoot(), "ShellForm.cs");
+        string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
+        string finish = MethodSlice(shell, "void FinishCheck(", "void InstallReadyUpdate(");
+        string install = MethodSlice(shell, "void InstallReadyUpdate(", "Control BuildAdaptersPanel(");
+        Check("FinishCheck returns early when not interactive",
+            finish.IndexOf("if (!interactive) return;", StringComparison.Ordinal) >= 0, "FinishCheck");
+        int can = install.IndexOf("CanApplyNow", StringComparison.Ordinal);
+        int download = install.IndexOf("DownloadAndStage", StringComparison.Ordinal);
+        Check("InstallReadyUpdate checks CanApplyNow before downloading",
+            can >= 0 && download > can, "can=" + can.ToString() + " download=" + download.ToString());
+    }
+
+    static void AssertUpdateRefused(string label, UpdateCheck result, string extra)
+    {
+        string text = Updater.StatusText(result);
+        Check(label + " is not current", !Updater.IsCurrent(result), text);
+        Check(label + " is not available", !Updater.IsAvailable(result), text);
+        Check(label + " begins with update check failed",
+            text.IndexOf("Update check failed", StringComparison.Ordinal) == 0, text);
+        CheckPrivateFeedFailure(label, result);
+        if (!string.IsNullOrEmpty(extra))
+            Check(label + " names the reason", text.IndexOf(extra, StringComparison.Ordinal) >= 0, text);
+    }
+
+    static void AssertNothingStaged(string label, string dir)
+    {
+        Check(label + " left no .part file",
+            !File.Exists(Path.Combine(dir, "TechBench.exe.new.part")), label);
+        Check(label + " left no TechBench.exe.new",
+            !File.Exists(Path.Combine(dir, "TechBench.exe.new")), label);
+    }
+
+    static UpdateCheck ServeCheck(string label, ScriptStep[] steps, string path, List<string> paths)
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check(label + " listener", listener != null, "could not bind 127.0.0.1");
+        if (listener == null) return new UpdateCheck { Error = "no listener" };
+        Thread worker = null;
+        try
+        {
+            worker = ServeSteps(listener, steps, paths, null);
+            string url = "http://127.0.0.1:" + port.ToString() + "/" + (path ?? "");
+            UpdateCheck result = Updater.Check(url);
+            if (worker != null) worker.Join(12000);
+            return result;
+        }
+        finally
+        {
+            CloseFeed(listener, worker);
+        }
+    }
+
+    static ScriptStep Step(int status, byte[] body, bool chunked, string location)
+    {
+        ScriptStep step = new ScriptStep();
+        step.Status = status;
+        step.Body = body;
+        step.Chunked = chunked;
+        step.Location = location;
+        return step;
+    }
+
+    static Thread ServeSteps(HttpListener listener, ScriptStep[] steps, List<string> paths, Exception[] error)
+    {
+        Thread worker = new Thread(delegate()
+        {
+            try
+            {
+                for (int i = 0; i < steps.Length; i++)
+                {
+                    HttpListenerContext ctx = listener.GetContext();
+                    if (paths != null)
+                    {
+                        string raw = "";
+                        try
+                        {
+                            if (ctx.Request != null && ctx.Request.Url != null)
+                                raw = ctx.Request.RawUrl ?? "";
+                        }
+                        catch { raw = ""; }
+                        paths.Add(raw);
+                    }
+                    ScriptStep step = steps[i];
+                    try
+                    {
+                        int status = step.Status <= 0 ? 200 : step.Status;
+                        if (!string.IsNullOrEmpty(step.Location))
+                            ctx.Response.RedirectLocation = step.Location;
+                        ctx.Response.StatusCode = status;
+                        ctx.Response.KeepAlive = false;
+                        byte[] body = step.Body ?? new byte[0];
+                        if (step.Chunked)
+                            ctx.Response.SendChunked = true;
+                        else
+                            ctx.Response.ContentLength64 = body.Length;
+                        int offset = 0;
+                        while (offset < body.Length)
+                        {
+                            int n = body.Length - offset;
+                            if (n > 8192) n = 8192;
+                            ctx.Response.OutputStream.Write(body, offset, n);
+                            offset += n;
+                        }
+                        ctx.Response.OutputStream.Close();
+                    }
+                    catch
+                    {
+                        try { ctx.Response.Abort(); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (error != null) error[0] = ex;
+            }
+        });
+        worker.IsBackground = true;
+        worker.Start();
+        return worker;
+    }
+
+    static HttpListener BindLoopback(out int port)
+    {
+        port = 0;
+        Random rng = new Random();
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            int candidate = 21000 + rng.Next(20000);
+            HttpListener listener = new HttpListener();
+            try
+            {
+                listener.Prefixes.Add("http://127.0.0.1:" + candidate.ToString() + "/");
+                listener.Start();
+                try { listener.IgnoreWriteExceptions = true; } catch { }
+                port = candidate;
+                return listener;
+            }
+            catch
+            {
+                try { listener.Close(); } catch { }
+            }
+        }
+        return null;
+    }
+
+    static void CloseFeed(HttpListener listener, Thread worker)
+    {
+        try { if (listener != null) listener.Close(); } catch { }
+        if (worker != null) worker.Join(12000);
+    }
+
+    static Exception CatchEx(Action act)
+    {
+        try
+        {
+            act();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+    }
+
+    static string MethodSlice(string src, string startSig, string endSig)
+    {
+        if (string.IsNullOrEmpty(src)) return "";
+        int start = src.IndexOf(startSig, StringComparison.Ordinal);
+        if (start < 0) return "";
+        int end = src.IndexOf(endSig, start + startSig.Length, StringComparison.Ordinal);
+        if (end < 0) end = src.Length;
+        return src.Substring(start, end - start);
+    }
+
+    static string NewTempDir(string prefix)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    static byte[] RepeatByte(byte value, int count)
+    {
+        byte[] buf = new byte[count];
+        for (int i = 0; i < count; i++) buf[i] = value;
+        return buf;
+    }
+
+    static bool BytesEqual(byte[] a, byte[] b)
+    {
+        if (a == null || b == null || a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    static string Seen(List<string> paths)
+    {
+        if (paths == null || paths.Count == 0) return "";
+        string seen = "";
+        for (int i = 0; i < paths.Count; i++) seen = seen + " " + (paths[i] ?? "");
+        return seen;
+    }
+
+    sealed class ScriptStep
+    {
+        public int Status;
+        public byte[] Body;
+        public bool Chunked;
+        public string Location;
     }
 
     static void InstallerTests()

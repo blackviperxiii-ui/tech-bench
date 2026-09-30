@@ -486,8 +486,7 @@ namespace TechBench
             {
                 if (_ready != null)
                 {
-                    byte[] bytes = Updater.DownloadExe(_ready.Url);
-                    Updater.Stage(exeDir, bytes, _ready.Sha256);
+                    Updater.DownloadAndStage(exeDir, _ready);
                 }
                 else if (!Updater.HasVerifiedPending(exeDir))
                 {
