@@ -667,6 +667,12 @@ namespace TechBench
         {
             if (_current == null || _media.SelectedItem == null || string.IsNullOrEmpty(_current.Folder)) return;
             string path = Path.Combine(_current.Folder, "media", _media.SelectedItem.ToString());
+            if (LaunchPolicy.IsBlockedLaunchPath(path))
+            {
+                MessageBox.Show(this, LaunchPolicy.BlockedLaunchMessage(path),
+                    "Open file", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             if (!File.Exists(path)) return;
             try { System.Diagnostics.Process.Start(path); }
             catch (Exception ex) { Status(ex.Message); }

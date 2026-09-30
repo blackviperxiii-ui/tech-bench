@@ -437,21 +437,78 @@ namespace TechBench
                 if (!Directory.Exists(dir)) continue;
                 foreach (string src in Directory.GetFiles(dir, "*_dtcs.csv"))
                 {
-                    string dest = Path.Combine(sessionFolder, Path.GetFileName(src));
                     try
                     {
-                        if (File.Exists(dest))
-                        {
-                            if (HashFile(dest) == HashFile(src)) continue;
-                            continue; // same name, different bytes: leave the local session file alone
-                        }
-                        File.Copy(src, dest, false);
-                        n++;
+                        if (ImportOneHistory(sessionFolder, tech, src)) n++;
                     }
                     catch { }
                 }
             }
             return n;
+        }
+
+        /// <summary>
+        /// Copy one shop history CSV into the session folder. Identical bytes are skipped
+        /// wherever they already sit. A same name with different bytes is never overwritten;
+        /// it is copied beside the local file as base.techId-hash8_dtcs.csv so History still
+        /// reads it and the job stays in the CSV body. If that 8-hex name is already taken
+        /// by a different full hash, the copy uses base.techId-fullhash_dtcs.csv instead.
+        /// If that name also exists, the file is skipped.
+        /// </summary>
+        static bool ImportOneHistory(string sessionFolder, string tech, string src)
+        {
+            string hash = HashFile(src);
+            if (SessionCsvHasHash(sessionFolder, hash)) return false;
+
+            string fileName = Path.GetFileName(src);
+            string dest = Path.Combine(sessionFolder, fileName);
+            if (!File.Exists(dest))
+            {
+                File.Copy(src, dest, false);
+                return true;
+            }
+
+            string collision = CollisionHistoryPath(sessionFolder, tech, fileName, hash, true);
+            if (File.Exists(collision))
+            {
+                string have = "";
+                try { have = HashFile(collision); }
+                catch { }
+                if (have == hash) return false;
+                collision = CollisionHistoryPath(sessionFolder, tech, fileName, hash, false);
+                if (File.Exists(collision)) return false;
+            }
+            File.Copy(src, collision, false);
+            return true;
+        }
+
+        static string CollisionHistoryPath(string sessionFolder, string tech, string fileName, string hash, bool shortHash)
+        {
+            const string suffix = "_dtcs.csv";
+            string baseName = fileName ?? "";
+            if (baseName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                baseName = baseName.Substring(0, baseName.Length - suffix.Length);
+            string tag = hash ?? "";
+            if (shortHash && tag.Length > 8) tag = tag.Substring(0, 8);
+            string safeTech = SanitizeTechId(tech);
+            return Path.Combine(sessionFolder, baseName + "." + safeTech + "-" + tag + suffix);
+        }
+
+        static bool SessionCsvHasHash(string sessionFolder, string hash)
+        {
+            if (string.IsNullOrEmpty(hash) || !Directory.Exists(sessionFolder)) return false;
+            string[] files;
+            try { files = Directory.GetFiles(sessionFolder, "*_dtcs.csv"); }
+            catch { return false; }
+            for (int i = 0; i < files.Length; i++)
+            {
+                try
+                {
+                    if (HashFile(files[i]) == hash) return true;
+                }
+                catch { }
+            }
+            return false;
         }
 
         public static Dictionary<string, bool> KeepBothKeys(string kbRoot)
@@ -755,6 +812,7 @@ namespace TechBench
         {
             string name = Path.GetFileName(full);
             if (name.StartsWith("~$") || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0
                 || name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
                 return true;
