@@ -602,12 +602,12 @@ namespace TechBench
             EnsureTls();
             HttpWebRequest req;
             HttpWebResponse resp = GetManual(url, maxBytes, manifest, out req);
-            Stream input = null;
+            Stream httpInput = null;
             try
             {
-                input = resp.GetResponseStream();
-                if (input == null) throw new InvalidOperationException("Empty response.");
-                byte[] bytes = ReadStreamCapped(input, maxBytes, manifest);
+                httpInput = resp.GetResponseStream();
+                if (httpInput == null) throw new InvalidOperationException("Empty response.");
+                byte[] bytes = ReadStreamCapped(httpInput, maxBytes, manifest);
                 if (bytes.Length == 0)
                     throw new InvalidOperationException("Update feed was empty.");
                 return bytes;
@@ -621,7 +621,7 @@ namespace TechBench
             }
             finally
             {
-                if (input != null) try { input.Close(); } catch { }
+                if (httpInput != null) try { httpInput.Close(); } catch { }
                 try { resp.Close(); } catch { }
             }
         }
@@ -645,16 +645,16 @@ namespace TechBench
             EnsureTls();
             HttpWebRequest req;
             HttpWebResponse resp = GetManual(url, maxBytes, false, out req);
-            Stream input = null;
-            FileStream output = null;
+            Stream httpInput = null;
+            FileStream partOutput = null;
             try
             {
-                input = resp.GetResponseStream();
-                output = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                if (input == null) throw new InvalidOperationException("Empty response.");
-                string hash = StreamTo(input, output, maxBytes, false);
-                output.Close();
-                output = null;
+                httpInput = resp.GetResponseStream();
+                partOutput = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                if (httpInput == null) throw new InvalidOperationException("Empty response.");
+                string hash = StreamTo(httpInput, partOutput, maxBytes, false);
+                partOutput.Close();
+                partOutput = null;
                 return hash;
             }
             catch
@@ -666,8 +666,8 @@ namespace TechBench
             }
             finally
             {
-                if (output != null) try { output.Close(); } catch { }
-                if (input != null) try { input.Close(); } catch { }
+                if (partOutput != null) try { partOutput.Close(); } catch { }
+                if (httpInput != null) try { httpInput.Close(); } catch { }
                 try { resp.Close(); } catch { }
             }
         }
