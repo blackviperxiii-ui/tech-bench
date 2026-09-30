@@ -418,8 +418,12 @@ namespace TechBench
                 string got = DownloadPayloadToPart(payloadUrl, part, maxBytes);
                 if (!string.Equals(got, NormalizeHash(sha256), StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Update hash did not match latest.json (got " + got + ").");
-                if (File.Exists(staged)) File.Delete(staged);
-                File.Move(part, staged);
+                // Leave an older TechBench.exe.new in place until the new bytes replace it.
+                // File.Replace requires the destination to exist.
+                if (File.Exists(staged))
+                    File.Replace(part, staged, null);
+                else
+                    File.Move(part, staged);
                 stagedThisAttempt = true;
                 File.WriteAllText(Path.Combine(exeDir, HashSidecar), got);
             }
@@ -596,14 +600,29 @@ namespace TechBench
                 }
             }
             EnsureTls();
-            using (HttpWebResponse resp = GetManual(url, maxBytes, manifest))
-            using (Stream input = resp.GetResponseStream())
+            HttpWebRequest req;
+            HttpWebResponse resp = GetManual(url, maxBytes, manifest, out req);
+            Stream input = null;
+            try
             {
+                input = resp.GetResponseStream();
                 if (input == null) throw new InvalidOperationException("Empty response.");
                 byte[] bytes = ReadStreamCapped(input, maxBytes, manifest);
                 if (bytes.Length == 0)
                     throw new InvalidOperationException("Update feed was empty.");
                 return bytes;
+            }
+            catch
+            {
+                // Abort before Close so a cap or network failure cannot sit in Close draining the body.
+                // Swallow close errors so they cannot replace that failure.
+                try { req.Abort(); } catch { }
+                throw;
+            }
+            finally
+            {
+                if (input != null) try { input.Close(); } catch { }
+                try { resp.Close(); } catch { }
             }
         }
 
@@ -624,25 +643,46 @@ namespace TechBench
                     return StreamTo(input, output, maxBytes, false);
             }
             EnsureTls();
-            using (HttpWebResponse resp = GetManual(url, maxBytes, false))
-            using (Stream input = resp.GetResponseStream())
-            using (FileStream output = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            HttpWebRequest req;
+            HttpWebResponse resp = GetManual(url, maxBytes, false, out req);
+            Stream input = null;
+            FileStream output = null;
+            try
             {
+                input = resp.GetResponseStream();
+                output = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None);
                 if (input == null) throw new InvalidOperationException("Empty response.");
-                return StreamTo(input, output, maxBytes, false);
+                string hash = StreamTo(input, output, maxBytes, false);
+                output.Close();
+                output = null;
+                return hash;
+            }
+            catch
+            {
+                // Abort before Close so a cap or network failure cannot sit in Close draining the body.
+                // Swallow close errors so they cannot replace that failure.
+                try { req.Abort(); } catch { }
+                throw;
+            }
+            finally
+            {
+                if (output != null) try { output.Close(); } catch { }
+                if (input != null) try { input.Close(); } catch { }
+                try { resp.Close(); } catch { }
             }
         }
 
-        static HttpWebResponse GetManual(string url, long maxBytes, bool manifest)
+        static HttpWebResponse GetManual(string url, long maxBytes, bool manifest, out HttpWebRequest request)
         {
+            request = null;
             Uri current;
             if (!Uri.TryCreate(url, UriKind.Absolute, out current))
                 throw new InvalidOperationException("Update URL is empty.");
             int followed = 0;
             while (true)
             {
-                HttpWebRequest req = MakeRequest(current.AbsoluteUri);
-                HttpWebResponse resp = GetHttp(req);
+                request = MakeRequest(current.AbsoluteUri);
+                HttpWebResponse resp = GetHttp(request);
                 int status = (int)resp.StatusCode;
                 if (IsRedirectStatus(status))
                 {
@@ -663,6 +703,7 @@ namespace TechBench
                 }
                 if (resp.ContentLength >= 0 && resp.ContentLength > maxBytes)
                 {
+                    try { request.Abort(); } catch { }
                     CloseQuiet(resp);
                     throw new UpdateFeedRefusedException(TooLargeMessage(manifest, maxBytes));
                 }
