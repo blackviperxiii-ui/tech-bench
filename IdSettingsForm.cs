@@ -52,6 +52,7 @@ namespace TechBench
             _location = Row(table, "Location", "Branch / store");
             _gateway = Row(table, "Gateway URL", "https://….azure-api.net  (Azure API Gateway)");
             _key = Row(table, "Subscription key", "Ocp-Apim-Subscription-Key");
+            _key.UseSystemPasswordChar = true;
             _client = Row(table, "OAuth client id", "Optional");
             _secret = Row(table, "OAuth secret", "Optional");
             _secret.UseSystemPasswordChar = true;
