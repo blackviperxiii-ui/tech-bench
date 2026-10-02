@@ -21,3 +21,34 @@ tools/innosetup/
 id-settings.json
 id-settings*.json
 id-api.json
+
+# Secrets and credentials (never commit; IntelliDealer creds live in %LocalAppData%)
+.env
+.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
+*.cer
+*.crt
+*.token
+token.txt
+*-token.txt
+credentials.json
+secrets.json
+*.secret
+*.kdbx
+*.kdb
+# Password DB. kb/data/passwords/ifix-passwords.json is already TRACKED and build.bat/test.bat embed it,
+# so this pattern has no effect on it. Owner decision pending: do not untrack, move, or edit it.
+# This stops new or extra password files from being added.
+kb/data/passwords/
+
+# Build output and local tooling
+node_modules/
+publish/
+packages/
+*.suo
+*.part
+TestResults/
