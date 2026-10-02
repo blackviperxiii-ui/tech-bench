@@ -29,7 +29,12 @@ namespace J1939Reader
         readonly Dictionary<string, PgnRow> _pgns = new Dictionary<string, PgnRow>();
         readonly Dictionary<int, SaRow> _sas = new Dictionary<int, SaRow>();
         readonly Dictionary<int, ModuleFaults> _modules = new Dictionary<int, ModuleFaults>();
+        readonly List<AckReply> _acks = new List<AckReply>();
         readonly TrendLog _trend = new TrendLog();
+
+        const int MaxAcks = 64;
+        /// <summary>A non-engine FE56 is only used after the engine has been quiet on FE56 this long.</summary>
+        const double DefFallbackSeconds = 3.0;
 
         int _engineSaSetting = AutoEngineSa;
         int _engineSa = 0;
@@ -43,6 +48,10 @@ namespace J1939Reader
         public double DefTempC = double.NaN;
         public bool DefSilent = true;
         public AftState Aft = new AftState();
+        /// <summary>Who the DEF/SCR readout came from: the engine, or the module that actually sends FE56.</summary>
+        public int DefSa = -1;
+        public DateTime LastDef = DateTime.MinValue;
+        DateTime _lastEngineDef = DateTime.MinValue;
         public string Vin = "";
         public string Sw = "";
         public string CompId = "";
@@ -64,6 +73,13 @@ namespace J1939Reader
 
         public ModuleFaults Engine { get { return Module(_engineSa); } }
 
+        /// <summary>The module if it has said anything; unlike Module() this never creates one.</summary>
+        public ModuleFaults Peek(int sa)
+        {
+            ModuleFaults m;
+            return _modules.TryGetValue(sa, out m) ? m : null;
+        }
+
         public ModuleFaults Module(int sa)
         {
             ModuleFaults m;
@@ -84,12 +100,63 @@ namespace J1939Reader
             return list;
         }
 
+        /// <summary>Modules that have sent DM1 or DM2 — the ones a code clear should ask directly.</summary>
+        public List<int> DiagnosticModules()
+        {
+            var list = new List<int>();
+            foreach (KeyValuePair<int, ModuleFaults> kv in _modules)
+                if (kv.Value.HasDm1 || kv.Value.LastDm2 != DateTime.MinValue) list.Add(kv.Key);
+            list.Sort();
+            return list;
+        }
+
+        /// <summary>Has this source address sent anything at or after <paramref name="since"/>?</summary>
+        public bool SeenSince(int sa, DateTime since)
+        {
+            SaRow r;
+            return _sas.TryGetValue(sa, out r) && r.Last >= since;
+        }
+
+        /// <summary>Latest Acknowledgment from <paramref name="sa"/> for <paramref name="pgn"/> addressed to this tool.</summary>
+        public AckReply AckFrom(int sa, int pgn, DateTime since)
+        {
+            for (int i = _acks.Count - 1; i >= 0; i--)
+            {
+                AckReply a = _acks[i];
+                if (a.Time < since) break;
+                if (a.Sa == sa && a.Pgn == pgn && a.ForTool) return a;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// A module ACKed a clear but has not sent a fresh DM1/DM2 since. Some controllers only
+        /// broadcast DM1 while they have a fault, so the old list would otherwise stay up forever.
+        /// The next DM1/DM2 puts back anything that is really still there.
+        /// </summary>
+        public void MarkCleared(int sa, bool active, bool previous, DateTime now)
+        {
+            ModuleFaults m = Peek(sa);
+            if (m == null) return;
+            if (active)
+            {
+                m.Active.Clear();
+                m.Red = m.Amber = m.Protect = m.Mil = false;
+                m.Timeline.Update(m.Active, now, sa == _engineSa ? Rpm : double.NaN);
+            }
+            if (previous) m.Prev.Clear();
+        }
+
         public void ClearLive()
         {
             Rpm = CoolantC = OilKpa = BatteryV = FuelLph = double.NaN;
             DefPct = DefTempC = double.NaN;
             DefSilent = true;
             Aft = new AftState();
+            DefSa = -1;
+            LastDef = DateTime.MinValue;
+            _lastEngineDef = DateTime.MinValue;
+            _acks.Clear();
             Vin = Sw = CompId = HoursText = "";
             _modules.Clear();
             LastFrame = DateTime.MinValue;
@@ -113,6 +180,7 @@ namespace J1939Reader
         public bool Feed(J1939Frame raw, DateTime now)
         {
             if (raw == null || raw.Data == null) return false;
+            raw.Pgn = J1939Decode.NormalizePgn(raw.Pgn);
             Frames++;
             LastFrame = now;
             TrackBus(raw, now);
@@ -138,14 +206,26 @@ namespace J1939Reader
             switch (f.Pgn)
             {
                 case 0xFE56:
-                    if (engine)
+                    if (AcceptDef(f.Sa, engine, now))
                     {
                         DefSilent = f.Data.Length < 2 || f.Data[0] >= 0xFB;
                         DefPct = f.Data.Length > 0 && f.Data[0] < 0xFB ? f.Data[0] * 0.4 : double.NaN;
                         DefTempC = f.Data.Length > 1 && f.Data[1] < 0xFB ? f.Data[1] - 40 : double.NaN;
                         Aft = J1939Decode.ParseAftertreatment(f.Data);
+                        DefSa = f.Sa;
+                        LastDef = now;
                     }
                     return false;
+                case J1939Clear.Ack:
+                {
+                    AckReply ack;
+                    if (J1939Clear.TryParseAck(f, now, out ack))
+                    {
+                        if (_acks.Count >= MaxAcks) _acks.RemoveAt(0);
+                        _acks.Add(ack);
+                    }
+                    return false;
+                }
                 case 0xFEEE:
                     if (engine && f.Data.Length > 0)
                         CoolantC = f.Data[0] < 0xFB ? f.Data[0] - 40 : double.NaN;
@@ -212,6 +292,26 @@ namespace J1939Reader
         bool IsKnownEngine(int sa)
         {
             return _engineSa == sa;
+        }
+
+        /// <summary>
+        /// FE56 from the engine always wins. On machines where the DEF tank header or an
+        /// aftertreatment module sends FE56 itself, the engine never does, and dropping those
+        /// frames left the DEF/SCR lines at "not talking" with the tank on the bus.
+        /// </summary>
+        bool AcceptDef(int sa, bool engine, DateTime now)
+        {
+            if (engine)
+            {
+                _lastEngineDef = now;
+                return true;
+            }
+            if (_lastEngineDef != DateTime.MinValue && (now - _lastEngineDef).TotalSeconds < DefFallbackSeconds)
+                return false;
+            if (DefSa >= 0 && DefSa != sa && DefSa != _engineSa && LastDef != DateTime.MinValue
+                && (now - LastDef).TotalSeconds < DefFallbackSeconds)
+                return false;
+            return true;
         }
 
         static double Nan(double v)
@@ -295,7 +395,10 @@ namespace J1939Reader
 
         public string AftText()
         {
-            return (Aft ?? new AftState()).Text();
+            string text = (Aft ?? new AftState()).Text();
+            if (DefSa >= 0 && DefSa != _engineSa)
+                text += "\r\n(FE56 from " + Names.SaLabel(DefSa) + ", not the engine)";
+            return text;
         }
 
         public static string Fmt(double v, string unit, string fmt)
