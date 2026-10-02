@@ -56,6 +56,15 @@ namespace J1939Reader
             return BuiltInSa(sa);
         }
 
+        /// <summary>"SA 0 ECM 1", or just "SA 61" when the address has no name.</summary>
+        public static string SaLabel(int sa)
+        {
+            string bare = "SA " + sa;
+            string name = Sa(sa);
+            if (string.IsNullOrEmpty(name) || name == bare) return bare;
+            return bare + " " + name;
+        }
+
         public static string Pgn(int pgn)
         {
             string over = Lookup(_pgnOverride, pgn);
@@ -91,6 +100,7 @@ namespace J1939Reader
             switch (pgn)
             {
                 case 0x0000: return "TSC1 speed/torque";
+                case 0xE800: return "ACK / NACK";
                 case 0xEA00: return "Request";
                 case 0xEB00: return "TP.DT";
                 case 0xEC00: return "TP.CM";

@@ -210,7 +210,7 @@ namespace J1939Reader
                 sb.AppendLine();
             }
             sb.AppendLine("J1939: " + string.Join(", ", J1939Protocols.ToArray()));
-            sb.AppendLine("ISO15765 (for UDS clear): " + (SupportsIso15765 ? "yes" : "not advertised"));
+            sb.AppendLine("ISO15765: " + (SupportsIso15765 ? "yes" : "not advertised"));
             return sb.ToString();
         }
     }

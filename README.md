@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.9** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
+Current stamp: **1.2.10** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
 
 ## What it does
 
@@ -75,7 +75,7 @@ The updater never sends credentials and the installer does not contain a GitHub 
 test.bat
 ```
 
-Offline checks: J1939 decoding, BAM reassembly, RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
+Offline checks: J1939 decoding, BAM reassembly, DM11/DM3 code clear against simulated ECMs (ACK, refusal, silent controller, codes that come back, DEF from a separate module), RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
 
 ## Knowledge base
 
@@ -145,9 +145,28 @@ Adapters are discovered from `RP121032.INI`, so any installed RP1210 vendor DLL 
 
 All adapter traffic runs on a background thread, so a code reset no longer freezes the window.
 
-The **Module** box picks whose DM1/DM2 the code lists show. On a portable compressor the controller (usually SA 48) has its own faults, separate from the engine's. **Reset all codes** / **Clear previous** / **Clear codes after repair** send DM11/DM3 to the engine (SA 0 and the detected engine SA), the compressor controller (SA 48), and broadcast, then re-request DM1/DM2 and the DEF/SCR tank message (PGN FE56) from those same addresses. Broadcast-only was not enough for SA 48.
+The **Module** box picks whose DM1/DM2 the code lists show. On a portable compressor the controller (usually SA 48) has its own faults, separate from the engine's.
 
-The INLINE 7 strip shows DEF level (SPN 1761), tank temp (SPN 3031), SCR inducement (SPN 5246), and the DEF low-level lamp (SPN 5245) when PGN FE56 arrives. Until then each line says **no data**.
+### Clearing codes
+
+**Reset all codes** and **Clear codes after repair** clear active then previously active codes; **Clear previous** clears previously active only. Each one:
+
+1. Asks every module directly — the engine (SA 0 and the detected engine SA), the compressor controller (SA 48), and any other module that has sent DM1/DM2 on this hookup, such as a separate DEF/aftertreatment module — then everyone (SA 255). Broadcast-only was not enough for SA 48.
+2. Uses the J1939-73 method: a Request (PGN 59904) for DM11 (clear active), then for DM3 (clear previously active). DM11/DM3 are not sent as data.
+3. Waits for each module's answer (ACK, NACK, or access denied). A module that is on the bus but stays quiet gets one retry. An address with no traffic is asked but not waited on.
+4. Gives the modules a second to re-check, then reads DM1/DM2 and the DEF/SCR tank message (PGN FE56) back.
+5. Shows a report on the **Codes** tab (and **Advanced**): per module what it answered, how many codes before and after, which codes came straight back (DEF/SCR ones are tagged), the engine lamps from the fresh DM1, and the DEF level / temp / SCR inducement before and after. The report is also in the Log, the saved session, and the printed Report.
+
+Reading the result:
+
+- **Refused / access denied**: many ECMs only clear with key ON, engine OFF.
+- **Came straight back**: the clear worked, the fault is still true. Fix it and clear again.
+- **Did not answer**: the module does not take J1939 clears; some compressor controllers only reset from their own keypad.
+- **SCR inducement (5246)** is not ended by a code clear. The ECM drops it once it sees the repair working (DEF level, temp, quality reading real values, then a key cycle and run). Guidanz aftertreatment reset may still be required.
+
+A clear takes about 2–5 seconds and runs on the bus thread, so the window stays live; Disconnect stops it. On Connect the Log says whether the adapter claimed the tool address (SA 249). If that claim fails, the adapter refuses to send the clear requests.
+
+The INLINE 7 strip shows DEF level (SPN 1761), tank temp (SPN 3031), SCR inducement (SPN 5246), and the DEF low-level lamp (SPN 5245) when PGN FE56 arrives. Until then each line says **no data**. FE56 from the engine is used first. If only another module (for example the tank header) sends it, that module's FE56 is shown and the strip names its address.
 
 This tool does not disable DEF/SCR or Red Stop. Those lamps follow active DTCs. There is no public SAE routine that resets DEF dosing without disabling SCR, so Tech Bench does not invent one.
 

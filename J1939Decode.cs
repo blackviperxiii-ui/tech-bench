@@ -37,6 +37,18 @@ namespace J1939Reader
             return Names.Spn(spn);
         }
 
+        /// <summary>
+        /// PDU1 PGNs (PF below 0xF0) carry the destination in their low byte. Some RP1210 drivers
+        /// hand that back inside the PGN (0xE8F9 for an ACK to this tool), others zero it. Zero it
+        /// here so Request, ACK, and TP.CM/TP.DT always match one value.
+        /// </summary>
+        public static int NormalizePgn(int pgn)
+        {
+            pgn &= 0x3FFFF;
+            if (((pgn >> 8) & 0xFF) < 0xF0) pgn &= 0x3FF00;
+            return pgn;
+        }
+
         public static string FmiName(int fmi)
         {
             switch (fmi)
