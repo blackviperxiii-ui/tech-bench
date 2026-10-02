@@ -247,7 +247,7 @@ ProtocolDescription=ISO 15765
             "first was " + api.J1939Protocols[0]);
         Check("500 baud also offered", api.J1939Protocols.Contains("J1939:Baud=500"),
             string.Join(",", api.J1939Protocols.ToArray()));
-        Check("ISO15765 detected for UDS clear", api.SupportsIso15765, "not detected");
+        Check("ISO15765 detected", api.SupportsIso15765, "not detected");
         Check("recognised as INLINE 7", api.LooksLikeInline7(), "not recognised");
 
         // A vendor INI with no protocol section still has to produce something usable.
@@ -547,14 +547,6 @@ ProtocolDescription=ISO 15765
         Eq("TSC1 dest broadcast SA rejected", Rp1210.Tsc1Dest(255), (byte)0);
     }
 
-    static string DestList(int engineSa)
-    {
-        byte[] d = J1939Clear.Destinations(engineSa);
-        var parts = new string[d.Length];
-        for (int i = 0; i < d.Length; i++) parts[i] = d[i].ToString();
-        return string.Join(",", parts);
-    }
-
     static void AftertreatmentTests()
     {
         AftState empty = J1939Decode.ParseAftertreatment(null);
@@ -614,6 +606,179 @@ ProtocolDescription=ISO 15765
             mon.AftText().IndexOf("SCR inducement SPN 5246: no data", StringComparison.Ordinal) >= 0, mon.AftText());
     }
 
+    static string DestList(int engineSa, params int[] modules)
+    {
+        byte[] d = J1939Clear.Destinations(engineSa, modules);
+        var parts = new string[d.Length];
+        for (int i = 0; i < d.Length; i++) parts[i] = d[i].ToString();
+        return string.Join(",", parts);
+    }
+
+    static J1939Frame AckFrame(int sa, int control, int pgn, int da, int address)
+    {
+        return new J1939Frame
+        {
+            Pgn = J1939Clear.Ack, Sa = sa, Da = da,
+            Data = new byte[] { (byte)control, 0xFF, 0xFF, 0xFF, (byte)address,
+                (byte)(pgn & 0xFF), (byte)((pgn >> 8) & 0xFF), (byte)((pgn >> 16) & 0xFF) }
+        };
+    }
+
+    /// <summary>DM1/DM2 payload: lamps, reserved, then SPN/FMI/occ per code (or the empty pattern).</summary>
+    static J1939Frame DmFrame(int pgn, int sa, byte lamps, List<int[]> codes)
+    {
+        var data = new List<byte>();
+        data.Add(lamps);
+        data.Add(0xFF);
+        if (codes == null || codes.Count == 0)
+            data.AddRange(new byte[] { 0, 0, 0, 0, 0xFF, 0xFF });
+        else
+            foreach (int[] c in codes)
+            {
+                data.Add((byte)(c[0] & 0xFF));
+                data.Add((byte)((c[0] >> 8) & 0xFF));
+                data.Add((byte)((((c[0] >> 16) & 0x07) << 5) | (c[1] & 0x1F)));
+                data.Add(1);
+            }
+        while (data.Count < 8) data.Add(0xFF);
+        return new J1939Frame { Pgn = pgn, Sa = sa, Da = 255, Data = data.ToArray() };
+    }
+
+    static List<int[]> Codes(params int[] spnFmi)
+    {
+        var list = new List<int[]>();
+        for (int i = 0; i + 1 < spnFmi.Length; i += 2) list.Add(new[] { spnFmi[i], spnFmi[i + 1] });
+        return list;
+    }
+
+    /// <summary>One ECM on the simulated bus: what it holds and how it answers a clear.</summary>
+    sealed class SimModule
+    {
+        public int Sa;
+        /// <summary>ACK control for a directed DM11 / DM3; -1 = stays silent.</summary>
+        public int Dm11Control = J1939Clear.AckPositive;
+        public int Dm3Control = J1939Clear.AckPositive;
+        public List<int[]> Active = new List<int[]>();
+        public List<int[]> Prev = new List<int[]>();
+        /// <summary>Codes that are still true, so they re-latch right after a DM11.</summary>
+        public List<int[]> StillTrue = new List<int[]>();
+        public bool AnswersDm1 = true;
+        public bool AnswersDm2 = true;
+        /// <summary>FE56 payload this module sends when asked, or null.</summary>
+        public byte[] Def;
+        public byte[] DefAfterClear;
+        /// <summary>Sends some frame every pump step, so it counts as on the bus.</summary>
+        public bool Talks = true;
+
+        public byte Lamps()
+        {
+            foreach (int[] c in Active) if (c[0] == 5246) return 0x10;
+            return Active.Count > 0 ? (byte)0x04 : (byte)0x00;
+        }
+    }
+
+    /// <summary>IClearLink over a capture-mode Rp1210 and scripted ECMs, on a fake clock.</summary>
+    sealed class SimLink : IClearLink
+    {
+        public DateTime Clock = new DateTime(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
+        public readonly Rp1210 Rp = new Rp1210();
+        public readonly BusMonitor Mon = new BusMonitor();
+        public readonly List<SimModule> Modules = new List<SimModule>();
+        public int DropAtMs = -1;
+        public int PumpedMs;
+        public string LastProgress = "";
+        readonly List<J1939Frame> _pending = new List<J1939Frame>();
+
+        public SimLink() { Rp.Capture = new List<J1939Tx>(); }
+
+        public DateTime Now { get { return Clock; } }
+        public string LastError { get { return "simulated reject"; } }
+        public List<J1939Tx> Sent { get { return Rp.Capture; } }
+        public void Progress(string what) { LastProgress = what; }
+
+        public SimModule Add(int sa)
+        {
+            var m = new SimModule { Sa = sa };
+            Modules.Add(m);
+            return m;
+        }
+
+        /// <summary>Put what the modules hold onto the monitor, as a live hookup would have.</summary>
+        public void Prime()
+        {
+            foreach (SimModule m in Modules)
+            {
+                if (m.Talks) Mon.Feed(new J1939Frame { Pgn = 0xFEEE, Sa = m.Sa, Da = 255, Data = new byte[8] }, Clock);
+                if (m.AnswersDm1) Mon.Feed(DmFrame(J1939Clear.Dm1, m.Sa, m.Lamps(), m.Active), Clock);
+                if (m.AnswersDm2) Mon.Feed(DmFrame(J1939Clear.Dm2, m.Sa, 0, m.Prev), Clock);
+                if (m.Def != null) Mon.Feed(new J1939Frame { Pgn = J1939Clear.DefTank, Sa = m.Sa, Da = 255, Data = m.Def }, Clock);
+            }
+            Clock = Clock.AddSeconds(1);
+        }
+
+        public bool Send(J1939Tx tx)
+        {
+            if (!Rp.SendJ1939(tx)) return false;
+            int req = tx.RequestedPgn;
+            if (req < 0) return true;
+            foreach (SimModule m in Modules)
+            {
+                bool direct = tx.Dest == m.Sa;
+                if (!direct && tx.Dest != J1939Clear.Broadcast) continue;
+                if (req == J1939Clear.Dm11 || req == J1939Clear.Dm3)
+                {
+                    int control = req == J1939Clear.Dm11 ? m.Dm11Control : m.Dm3Control;
+                    if (control < 0) continue;
+                    if (control == J1939Clear.AckPositive)
+                    {
+                        if (req == J1939Clear.Dm11)
+                        {
+                            m.Active = new List<int[]>(m.StillTrue);
+                            if (m.DefAfterClear != null) m.Def = m.DefAfterClear;
+                        }
+                        else m.Prev.Clear();
+                    }
+                    // A global request is never acknowledged.
+                    if (direct) _pending.Add(AckFrame(m.Sa, control, req, J1939Clear.Broadcast, J1939Clear.ToolSa));
+                }
+                else if (req == J1939Clear.Dm1 && m.AnswersDm1)
+                    _pending.Add(DmFrame(J1939Clear.Dm1, m.Sa, m.Lamps(), m.Active));
+                else if (req == J1939Clear.Dm2 && m.AnswersDm2)
+                    _pending.Add(DmFrame(J1939Clear.Dm2, m.Sa, 0, m.Prev));
+                else if (req == J1939Clear.DefTank && m.Def != null)
+                    _pending.Add(new J1939Frame { Pgn = J1939Clear.DefTank, Sa = m.Sa, Da = 255, Data = m.Def });
+            }
+            return true;
+        }
+
+        public bool Pump(int ms, Func<bool> done)
+        {
+            const int step = 25;
+            for (int t = 0; t < ms; t += step)
+            {
+                Clock = Clock.AddMilliseconds(step);
+                PumpedMs += step;
+                if (DropAtMs >= 0 && PumpedMs >= DropAtMs) return false;
+                foreach (J1939Frame f in _pending) Mon.Feed(f, Clock);
+                _pending.Clear();
+                foreach (SimModule m in Modules)
+                    if (m.Talks) Mon.Feed(new J1939Frame { Pgn = 0xFEEE, Sa = m.Sa, Da = 255, Data = new byte[8] }, Clock);
+                if (done != null && done()) return true;
+            }
+            return true;
+        }
+    }
+
+    static bool Has(string text, string what)
+    {
+        return text != null && text.IndexOf(what, StringComparison.Ordinal) >= 0;
+    }
+
+    static string Lf(string text)
+    {
+        return text == null ? "" : text.Replace("\r\n", "\n");
+    }
+
     static void ClearCodesTests()
     {
         Eq("clear dests cover engine + compressor + broadcast", DestList(0), "0,48,255");
@@ -621,136 +786,293 @@ ProtocolDescription=ISO 15765
         Eq("compressor as engine SA is not duplicated", DestList(48), "0,48,255");
         Eq("unknown engine SA still hits 0 and 48", DestList(-1), "0,48,255");
         Eq("broadcast engine SA rejected from dest list", DestList(255), "0,48,255");
+        Eq("modules reporting faults get their own clear", DestList(0, 61, 48, 0), "0,48,61,255");
+        Eq("tool, null, global, and junk SAs are not module dests", DestList(0, 249, 254, 255, 300, -4), "0,48,255");
+        Eq("directed part drops global", string.Join(",",
+            J1939Clear.Directed(J1939Clear.Destinations(17, new[] { 61 })).ConvertAll(b => b.ToString()).ToArray()), "0,17,48,61");
 
-        byte[] dm11To48 = J1939Clear.Rp1210Message(J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Zeros8(), 6);
-        Eq("RP1210 DM11 PGN LSB", dm11To48[0], (byte)0xD3);
-        Eq("RP1210 DM11 PGN mid", dm11To48[1], (byte)0xFE);
-        Eq("RP1210 DM11 PGN msb", dm11To48[2], (byte)0x00);
-        Eq("RP1210 priority 6", dm11To48[3], (byte)6);
-        Eq("RP1210 tool SA F9", dm11To48[4], (byte)0xF9);
-        Eq("RP1210 dest compressor 48", dm11To48[5], (byte)48);
-        Eq("RP1210 DM11 zeros payload length", dm11To48.Length, 14);
+        // DM11 is a Request (PGN 59904) carrying the DM11 PGN, never DM11 sent as data.
+        J1939Tx reqDm11 = J1939Clear.RequestTx(J1939Clear.Dm11, J1939Clear.CompressorSa);
+        byte[] wire = reqDm11.Rp1210;
+        Eq("request wire length (6 header + 3 PGN)", wire.Length, 9);
+        Eq("request PGN LSB EA00", wire[0], (byte)0x00);
+        Eq("request PGN PF", wire[1], (byte)0xEA);
+        Eq("request PGN msb", wire[2], (byte)0x00);
+        Eq("request priority 6", wire[3], (byte)6);
+        Eq("request from tool SA F9", wire[4], (byte)0xF9);
+        Eq("request dest SA 48", wire[5], (byte)48);
+        Eq("request payload DM11 LSB", wire[6], (byte)0xD3);
+        Eq("request payload DM11 mid", wire[7], (byte)0xFE);
+        Eq("request payload DM11 msb", wire[8], (byte)0x00);
+        Eq("requested PGN read back", reqDm11.RequestedPgn, J1939Clear.Dm11);
 
-        byte[] reqDm11 = J1939Clear.Rp1210Message(J1939Clear.Request, J1939Clear.CompressorSa,
-            J1939Clear.RequestPayload(J1939Clear.Dm11), 6);
-        Eq("request PGN LSB EA00", reqDm11[0], (byte)0x00);
-        Eq("request PGN PF", reqDm11[1], (byte)0xEA);
-        Eq("request dest SA 48", reqDm11[5], (byte)48);
-        Eq("request payload DM11 LSB", reqDm11[6], (byte)0xD3);
-        Eq("request payload DM11 mid", reqDm11[7], (byte)0xFE);
-        Eq("request payload DM11 msb", reqDm11[8], (byte)0x00);
+        Eq("PDU1 PGN with dest byte normalized (ACK)", J1939Decode.NormalizePgn(0xE8F9), 0xE800);
+        Eq("PDU1 PGN with dest byte normalized (TP.CM)", J1939Decode.NormalizePgn(0xECFF), 0xEC00);
+        Eq("PDU2 PGN kept (DM1)", J1939Decode.NormalizePgn(0xFECA), 0xFECA);
+        Eq("data page kept", J1939Decode.NormalizePgn(0x1E8F9), 0x1E800);
 
-        var rp = new Rp1210();
-        Eq("reset without adapter or capture is not connected", rp.ResetAllFaults(0), "not connected");
+        Eq("tool NAME function is off-board service tool (129)", Rp1210.ToolName[5], (byte)129);
+        Check("tool NAME is arbitrary-address capable", (Rp1210.ToolName[7] & 0x80) != 0, "bit 63 clear");
 
-        rp.Capture = new List<J1939Tx>();
-        string report = rp.ResetAllFaults(0);
-        Check("capture reset is not 'not connected'", report != "not connected", report);
-        Check("report names DM11", report.IndexOf("DM11", StringComparison.Ordinal) >= 0, report);
-        Check("report names DM3", report.IndexOf("DM3", StringComparison.Ordinal) >= 0, report);
-        Check("report names compressor SA 48", report.IndexOf("SA 48", StringComparison.Ordinal) >= 0, report);
-        Check("capture mode does not attempt UDS",
-            report.IndexOf("UDS", StringComparison.Ordinal) < 0, report);
-        Check("capture send succeeded (no adapter reject line)",
-            report.IndexOf("Adapter rejected", StringComparison.Ordinal) < 0, report);
+        // Acknowledgment decode.
+        AckReply ack;
+        DateTime t0 = new DateTime(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
+        Check("ACK parsed", J1939Clear.TryParseAck(AckFrame(0, 0, J1939Clear.Dm11, 255, 0xF9), t0, out ack), "not parsed");
+        Eq("ACK control positive", ack.Control, J1939Clear.AckPositive);
+        Eq("ACK names DM11", ack.Pgn, J1939Clear.Dm11);
+        Check("ACK to global with tool address is ours", ack.ForTool, "not ours");
+        J1939Clear.TryParseAck(AckFrame(0, 1, J1939Clear.Dm3, 0xF9, 0xFF), t0, out ack);
+        Check("NACK sent to the tool is ours", ack.ForTool, "not ours");
+        Eq("NACK control", ack.Control, J1939Clear.AckNegative);
+        J1939Clear.TryParseAck(AckFrame(0, 0, J1939Clear.Dm11, 255, 0xFA), t0, out ack);
+        Check("ACK for another tool (SA FA) ignored", !ack.ForTool, "taken");
+        J1939Clear.TryParseAck(AckFrame(0, 0, J1939Clear.Dm11, 255, 0xFF), t0, out ack);
+        Check("pre-2006 ACK (address FF) accepted", ack.ForTool, "rejected");
+        Check("short ACK rejected", !J1939Clear.TryParseAck(new J1939Frame { Pgn = 0xE800, Sa = 0, Da = 255, Data = new byte[3] }, t0, out ack), "parsed");
 
-        List<J1939Tx> cap = rp.Capture;
-        Check("reset constructed frames", cap.Count > 0, "empty capture");
-        Eq("three rounds of DM11 zeros to engine",
-            J1939Clear.Count(cap, J1939Clear.Dm11, 0, J1939Clear.Zeros8()), J1939Clear.Rounds);
-        Eq("three rounds of DM11 0xFF to engine",
-            J1939Clear.Count(cap, J1939Clear.Dm11, 0, J1939Clear.Ff8()), J1939Clear.Rounds);
-        Eq("three rounds of DM11 zeros to compressor SA 48",
-            J1939Clear.Count(cap, J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Zeros8()), J1939Clear.Rounds);
-        Eq("three rounds of DM11 0xFF to compressor SA 48",
-            J1939Clear.Count(cap, J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Ff8()), J1939Clear.Rounds);
-        Eq("three rounds of DM11 zeros to broadcast",
-            J1939Clear.Count(cap, J1939Clear.Dm11, 255, J1939Clear.Zeros8()), J1939Clear.Rounds);
-        Eq("three rounds of DM3 zeros to compressor SA 48",
-            J1939Clear.Count(cap, J1939Clear.Dm3, J1939Clear.CompressorSa, J1939Clear.Zeros8()), J1939Clear.Rounds);
-        Eq("directed Request DM11 to compressor SA 48 x3",
-            J1939Clear.CountRequest(cap, J1939Clear.Dm11, J1939Clear.CompressorSa), J1939Clear.Rounds);
-        Eq("directed Request DM3 to compressor SA 48 x3",
-            J1939Clear.CountRequest(cap, J1939Clear.Dm3, J1939Clear.CompressorSa), J1939Clear.Rounds);
-        Eq("directed Request DM11 to engine x3",
-            J1939Clear.CountRequest(cap, J1939Clear.Dm11, 0), J1939Clear.Rounds);
-        Eq("refresh DM1 from compressor SA 48",
-            J1939Clear.CountRequest(cap, J1939Clear.Dm1, J1939Clear.CompressorSa), 1);
-        Eq("refresh DM2 from compressor SA 48",
-            J1939Clear.CountRequest(cap, J1939Clear.Dm2, J1939Clear.CompressorSa), 1);
-        Eq("refresh DM1 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 0), 1);
-        Eq("refresh DM1 from broadcast", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 255), 1);
-        Eq("refresh DM2 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm2, 0), 1);
+        var ackMon = new BusMonitor();
+        J1939Frame rawAck = AckFrame(0, 0, J1939Clear.Dm11, 0xF9, 0xF9);
+        rawAck.Pgn = 0xE8F9; // driver left the destination in the PGN
+        ackMon.Feed(rawAck, t0);
+        Check("monitor routes an un-normalized ACK", ackMon.AckFrom(0, J1939Clear.Dm11, t0) != null, "missed");
+        Check("ACK lookup honors the since time", ackMon.AckFrom(0, J1939Clear.Dm11, t0.AddMilliseconds(1)) == null, "stale ACK used");
+        Check("ACK lookup is per PGN", ackMon.AckFrom(0, J1939Clear.Dm3, t0) == null, "wrong PGN");
+        Check("ACK lookup is per module", ackMon.AckFrom(48, J1939Clear.Dm11, t0) == null, "wrong SA");
 
-        Eq("post-clear DEF tank request to engine",
-            J1939Clear.CountRequest(cap, J1939Clear.DefTank, 0), 1);
-        Eq("post-clear DEF tank request to compressor SA 48",
-            J1939Clear.CountRequest(cap, J1939Clear.DefTank, J1939Clear.CompressorSa), 1);
-        Eq("post-clear DEF tank request to broadcast",
-            J1939Clear.CountRequest(cap, J1939Clear.DefTank, 255), 1);
-        Check("report says this is not a dosing reset",
-            report.IndexOf("not a DEF dosing reset", StringComparison.Ordinal) >= 0, report);
+        Check("aftertreatment SPN 5246 flagged", J1939Clear.IsAftertreatmentSpn(5246), "missed");
+        Check("aftertreatment SPN 1761 flagged", J1939Clear.IsAftertreatmentSpn(1761), "missed");
+        Check("coolant SPN 110 not aftertreatment", !J1939Clear.IsAftertreatmentSpn(110), "flagged");
 
-        if (cap.Count >= 2)
-        {
-            J1939Tx last = cap[cap.Count - 1];
-            J1939Tx prev = cap[cap.Count - 2];
-            Check("last frames re-request the DEF/SCR tank",
-                last.Pgn == J1939Clear.Request && prev.Pgn == J1939Clear.Request &&
-                last.RequestedPgn == J1939Clear.DefTank && prev.RequestedPgn == J1939Clear.DefTank,
-                "last pgn=" + last.Pgn + " req=" + last.RequestedPgn);
-        }
+        ClearRunTests();
+        DefSourceTests();
+    }
 
+    static void ClearRunTests()
+    {
+        byte[] defInduced = { 125, 60, 0xFF, 0xFF, (byte)(1 << 5), (byte)(3 << 5), 0xFF, 0xFF };
+        byte[] defOk = { 125, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF };
+
+        // 1. Repaired machine: engine and controller both ACK, nothing comes back.
+        var sim = new SimLink();
+        SimModule eng = sim.Add(0);
+        eng.Active = Codes(5246, 31, 1761, 9);
+        eng.Prev = Codes(100, 1, 3364, 9);
+        eng.Def = defInduced;
+        eng.DefAfterClear = defOk;
+        SimModule comp = sim.Add(48);
+        comp.Active = Codes(520200, 3);
+        sim.Prime();
+        Eq("primed engine active codes", sim.Mon.Engine.Active.Count, 2);
+        var run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        string report = run.Execute();
+        List<J1939Tx> cap = sim.Sent;
+        Check("good clear headline", Has(report, "RESULT: cleared — no active codes came back."), report);
+        Eq("engine DM11 answer", run.Target(0).Dm11, ClearAnswer.Ack);
+        Eq("engine DM3 answer", run.Target(0).Dm3, ClearAnswer.Ack);
+        Eq("compressor DM11 answer", run.Target(48).Dm11, ClearAnswer.Ack);
+        Eq("DM11 request to engine once (ACKed, no retry)", J1939Clear.CountRequest(cap, J1939Clear.Dm11, 0), 1);
+        Eq("DM11 request to compressor SA 48 once", J1939Clear.CountRequest(cap, J1939Clear.Dm11, 48), 1);
+        Eq("DM11 request to everyone once", J1939Clear.CountRequest(cap, J1939Clear.Dm11, 255), 1);
+        Eq("DM3 request to engine once", J1939Clear.CountRequest(cap, J1939Clear.Dm3, 0), 1);
+        Eq("DM3 request to compressor SA 48 once", J1939Clear.CountRequest(cap, J1939Clear.Dm3, 48), 1);
+        Eq("DM3 request to everyone once", J1939Clear.CountRequest(cap, J1939Clear.Dm3, 255), 1);
+        Eq("DM11 is never sent as data", J1939Clear.CountPgn(cap, J1939Clear.Dm11), 0);
+        Eq("DM3 is never sent as data", J1939Clear.CountPgn(cap, J1939Clear.Dm3), 0);
+        int firstDm3 = cap.FindIndex(x => x.RequestedPgn == J1939Clear.Dm3);
+        int lastDm11 = cap.FindLastIndex(x => x.RequestedPgn == J1939Clear.Dm11);
+        Check("DM11 finishes before DM3 starts", lastDm11 >= 0 && lastDm11 < firstDm3, lastDm11 + " / " + firstDm3);
+        Eq("re-read DM1 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 0), 1);
+        Eq("re-read DM1 from compressor SA 48", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 48), 1);
+        Eq("re-read DM2 from engine", J1939Clear.CountRequest(cap, J1939Clear.Dm2, 0), 1);
+        Eq("re-read DM1 from everyone", J1939Clear.CountRequest(cap, J1939Clear.Dm1, 255), 1);
+        Eq("re-read DEF tank from engine", J1939Clear.CountRequest(cap, J1939Clear.DefTank, 0), 1);
+        Eq("re-read DEF tank from everyone", J1939Clear.CountRequest(cap, J1939Clear.DefTank, 255), 1);
         bool wireMatches = cap.Count > 0;
-        for (int i = 0; i < cap.Count; i++)
-        {
-            byte[] built = J1939Clear.Rp1210Message(cap[i].Pgn, cap[i].Dest, cap[i].Data, cap[i].Priority);
-            if (!J1939Clear.SameBytes(built, cap[i].Rp1210)) { wireMatches = false; break; }
-        }
+        foreach (J1939Tx tx in cap)
+            if (!J1939Clear.SameBytes(J1939Clear.Rp1210Message(tx.Pgn, tx.Dest, tx.Data, tx.Priority), tx.Rp1210)) wireMatches = false;
         Check("captured RP1210 bytes match constructor", wireMatches, "mismatch");
+        Eq("engine list empty after the fresh DM1", sim.Mon.Engine.Active.Count, 0);
+        Eq("engine previous list empty after the fresh DM2", sim.Mon.Engine.Prev.Count, 0);
+        Eq("controller list empty after its fresh DM1", sim.Mon.Module(48).Active.Count, 0);
+        Check("report shows engine went 2 → 0", Has(report, "Active: 2 before → 0 now"), report);
+        Check("report shows previous 2 → 0", Has(report, "Previous: 2 before → 0 now"), report);
+        Check("report reads engine lamps from the fresh DM1", Has(report, "Engine lamps now: Red Stop off"), report);
+        Check("report shows the DEF/SCR side read after the clear", Has(report, "read after the clear"), report);
+        Check("report shows inducement now", Has(report, "SCR inducement SPN 5246: not active"), report);
+        Check("report shows inducement before", Has(report, "SCR inducement was: level 3"), report);
+        Check("good clear has no fix-it advice", !Has(report, "What to do:"), report);
+        Check("good clear finished quickly", sim.PumpedMs < 2500, sim.PumpedMs + " ms");
 
-        // Detected engine SA 17 must get its own directed Request, not only SA 0.
-        var rp17 = new Rp1210();
-        rp17.Capture = new List<J1939Tx>();
-        rp17.ResetAllFaults(17);
-        Eq("DM11 zeros also go to detected engine SA 17",
-            J1939Clear.Count(rp17.Capture, J1939Clear.Dm11, 17, J1939Clear.Zeros8()), J1939Clear.Rounds);
-        Eq("refresh DM1 from detected engine SA 17",
-            J1939Clear.CountRequest(rp17.Capture, J1939Clear.Dm1, 17), 1);
+        // 2. Fault still true: ACKed, but SCR inducement re-latches in the next DM1.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        eng.Active = Codes(5246, 31, 1761, 9);
+        eng.StillTrue = Codes(5246, 31);
+        eng.Def = defInduced;
+        sim.Prime();
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Check("came-back headline", Has(report, "RESULT: cleared — 1 active code came straight back"), report);
+        Check("returning code listed and tagged", Has(report, "still active: SPN 5246 FMI 31") && Has(report, "[DEF/SCR]"), report);
+        Check("Red Stop read from the fresh DM1", Has(report, "Engine lamps now: Red Stop ON"), report);
+        Check("came-back advice", Has(report, "The clear worked; the fault did not go away"), report);
+        Check("inducement advice", Has(report, "a code clear does not end SCR inducement"), report);
+        Check("inducement advice never offers a delete", Has(report, "never disables DEF/SCR"), report);
+        Eq("monitor keeps the re-latched code", sim.Mon.Engine.Active.Count, 1);
 
-        var prevRp = new Rp1210();
-        prevRp.Capture = new List<J1939Tx>();
-        string prevReport = prevRp.ClearPreviousFaults(0);
-        Check("clear-previous report names SA 48",
-            prevReport.IndexOf("SA 48", StringComparison.Ordinal) >= 0, prevReport);
-        Eq("clear-previous DM3 zeros to compressor once",
-            J1939Clear.Count(prevRp.Capture, J1939Clear.Dm3, J1939Clear.CompressorSa, J1939Clear.Zeros8()), 1);
-        Eq("clear-previous does not send DM11",
-            J1939Clear.Count(prevRp.Capture, J1939Clear.Dm11, J1939Clear.CompressorSa, J1939Clear.Zeros8()), 0);
-        Eq("clear-previous still refreshes DM1 from SA 48",
-            J1939Clear.CountRequest(prevRp.Capture, J1939Clear.Dm1, J1939Clear.CompressorSa), 1);
-        Eq("clear-previous still refreshes DM2 from SA 48",
-            J1939Clear.CountRequest(prevRp.Capture, J1939Clear.Dm2, J1939Clear.CompressorSa), 1);
-        Check("clear-previous success keeps the sent sentence",
-            prevReport.IndexOf("Sent DM3 (clear previously active)", StringComparison.Ordinal) >= 0, prevReport);
-        Check("clear-previous success does not say FAILED",
-            prevReport.IndexOf("FAILED", StringComparison.Ordinal) < 0, prevReport);
+        // 3. Engine refuses (engine running): access denied.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        eng.Active = Codes(100, 1);
+        eng.Dm11Control = J1939Clear.AckDenied;
+        eng.Dm3Control = J1939Clear.AckDenied;
+        sim.Prime();
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Eq("denied answer recorded", run.Target(0).Dm11, ClearAnswer.Denied);
+        Check("refused headline", Has(report, "RESULT: REFUSED by SA 0"), report);
+        Check("refused advice", Has(report, "key ON, engine OFF"), report);
+        Check("a refused clear is not called a clear that worked", !Has(report, "The clear worked"), report);
+        Eq("a refusal is final (no retry)", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 0), 1);
 
-        Eq("clear-previous without adapter or capture is not connected",
-            new Rp1210().ClearPreviousFaults(0), "not connected");
+        // 4. Controller on the bus but ignores J1939 clears: one retry, then reported.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        eng.Active = Codes(100, 1);
+        comp = sim.Add(48);
+        comp.Active = Codes(520200, 3);
+        comp.StillTrue = Codes(520200, 3);
+        comp.Dm11Control = -1;
+        comp.Dm3Control = -1;
+        sim.Prime();
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Eq("silent controller retried once on DM11", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 48), 2);
+        Eq("ACKed engine not retried", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 0), 1);
+        Eq("silent controller answer", run.Target(48).Dm11, ClearAnswer.NoAnswer);
+        Check("silent controller headline", Has(report, "RESULT: partly cleared; SA 48 did not answer and still shows codes."), report);
+        Check("silent controller advice", Has(report, "did not answer, even after a retry") && Has(report, "own keypad"), report);
+        Check("unanswered code is not called a code that came back", !Has(report, "came straight back"), report);
+        Check("silent controller line", Has(Lf(report), "SA 48 Compressor controller\n  DM11 clear active: no answer"), report);
 
-        var failRp = new Rp1210();
-        failRp.Capture = new List<J1939Tx>();
-        failRp.FailSendsForTest = 2;
-        string failReport = failRp.ClearPreviousFaults(0);
-        int failTotal = J1939Clear.ClearPreviousFrames(0).Count + J1939Clear.RefreshDmFrames(0).Count;
-        Check("clear-previous partial failure says FAILED",
-            failReport.IndexOf("FAILED", StringComparison.Ordinal) >= 0, failReport);
-        Check("clear-previous partial failure counts rejects",
-            failReport.IndexOf("adapter rejected 2 of " + failTotal, StringComparison.Ordinal) >= 0, failReport);
-        Check("clear-previous partial failure omits the success sentence",
-            failReport.IndexOf("Sent DM3 (clear previously active)", StringComparison.Ordinal) < 0, failReport);
-        Eq("clear-previous failures are still captured", failRp.Capture.Count, failTotal);
+        // 5. Controller ACKs but stops sending DM1 once healthy: its stale list is emptied.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        comp = sim.Add(48);
+        comp.Active = Codes(520200, 3);
+        sim.Prime();
+        comp.AnswersDm1 = false;
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Check("controller list emptied on ACK", run.Target(48).EmptiedActive, report);
+        Eq("monitor no longer shows the cleared controller code", sim.Mon.Module(48).Active.Count, 0);
+        Check("emptied line explains why", Has(report, "ACKed, no DM1 since; the list was emptied"), report);
+
+        // 6. Adapter refuses every frame: fail fast, nothing waited on.
+        sim = new SimLink();
+        sim.Add(0).Active = Codes(100, 1);
+        sim.Prime();
+        sim.Rp.FailSendsForTest = 1000;
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Check("rejected headline", Has(report, "RESULT: FAILED — the adapter rejected every request (simulated reject)"), report);
+        Eq("rejected run did not wait for ACKs", sim.PumpedMs, 0);
+        Eq("rejected run stops before DM3", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm3, 0), 0);
+        Eq("rejected answer", run.Target(0).Dm11, ClearAnswer.SendFailed);
+
+        // 7. Disconnect / adapter drop in the middle.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        eng.Active = Codes(100, 1);
+        eng.Dm11Control = -1;
+        sim.Prime();
+        sim.DropAtMs = 300;
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Check("interrupted headline", Has(report, "RESULT: INTERRUPTED"), report);
+        Check("interrupted run does not blame the engine for not answering", !Has(report, "did not answer"), report);
+        Eq("interrupted run sends no DM3", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm3, 0), 0);
+        Eq("interrupted run keeps the codes it could not confirm", sim.Mon.Engine.Active.Count, 1);
+
+        // 8. Clear previous: DM3 only.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        eng.Active = Codes(100, 1);
+        eng.StillTrue = Codes(100, 1);
+        eng.Prev = Codes(110, 0, 3364, 9);
+        sim.Prime();
+        run = new CodeClearRun(ClearKind.Previous, sim.Mon, null, sim);
+        report = run.Execute();
+        Eq("clear previous sends no DM11", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 0)
+            + J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 255), 0);
+        Eq("clear previous sends DM3 to the engine", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm3, 0), 1);
+        Check("clear previous title", Has(report, "clear previously active codes (J1939 DM3)"), report);
+        Check("clear previous headline", Has(report, "RESULT: previously active codes cleared."), report);
+        Check("clear previous shows 2 → 0", Has(report, "Previous: 2 before → 0 now"), report);
+        Eq("clear previous leaves active codes alone", sim.Mon.Engine.Active.Count, 1);
+
+        // 9. Compressor controller not fitted: request still sent, nothing waited on it.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        eng.Active = Codes(100, 1);
+        sim.Prime();
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Eq("absent SA 48 still asked", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 48), 1);
+        Eq("absent SA 48 not retried", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm3, 48), 1);
+        Eq("absent SA 48 answer", run.Target(48).Dm11, ClearAnswer.NotOnBus);
+        Check("absent SA 48 is one line", Has(report, "SA 48 Compressor controller — not on the bus"), report);
+        Check("absent SA 48 does not hold the clear up", sim.PumpedMs < 2500, sim.PumpedMs + " ms");
+
+        // 10. Separate aftertreatment module at SA 61 with its own DM1: asked directly.
+        sim = new SimLink();
+        eng = sim.Add(0);
+        SimModule acm = sim.Add(61);
+        acm.Active = Codes(4364, 18);
+        sim.Prime();
+        run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        report = run.Execute();
+        Eq("aftertreatment module asked directly", J1939Clear.CountRequest(sim.Sent, J1939Clear.Dm11, 61), 1);
+        Eq("aftertreatment module ACK", run.Target(61).Dm11, ClearAnswer.Ack);
+        Check("aftertreatment module in report", Has(Lf(report), "SA 61\n  DM11 clear active: ACK (cleared)"), report);
+        Check("no FE56 on this bus is said plainly", Has(report, "no DEF tank message (PGN FE56) on this hookup"), report);
+    }
+
+    static void DefSourceTests()
+    {
+        DateTime t = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var m = new BusMonitor();
+        m.Feed(F(0xF004, 0, 0, 0, 0, 0x00, 0x19, 0, 0, 0), t);
+        // The tank header (here SA 163) sends FE56 itself; the ECM never does.
+        m.Feed(F(0xFE56, 163, 125, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF), t);
+        Eq("FE56 from a non-engine module used", m.DefPct, 50d);
+        Eq("DEF source remembered", m.DefSa, 163);
+        Check("panel says where FE56 came from", Has(m.AftText(), "FE56 from SA 163"), m.AftText());
+        m.Feed(F(0xFE56, 0, 100, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF), t.AddSeconds(1));
+        Eq("engine FE56 wins when it talks", m.DefPct, 40d);
+        Eq("DEF source switches to the engine", m.DefSa, 0);
+        m.Feed(F(0xFE56, 163, 250, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF), t.AddSeconds(2));
+        Eq("other FE56 ignored while the engine is talking", m.DefPct, 40d);
+        m.Feed(F(0xFE56, 163, 250, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF), t.AddSeconds(10));
+        Eq("falls back once the engine goes quiet", m.DefPct, 100d);
+
+        var two = new BusMonitor();
+        two.Feed(F(0xFE56, 163, 125, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF), t);
+        two.Feed(F(0xFE56, 164, 25, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF), t.AddMilliseconds(200));
+        Eq("a second non-engine FE56 does not flicker the readout", two.DefPct, 50d);
+        two.ClearLive();
+        Eq("clear live forgets the DEF source", two.DefSa, -1);
+
+        // Clear re-reads FE56 from the module that actually sends it.
+        var sim = new SimLink();
+        sim.Add(0);
+        SimModule tank = sim.Add(163);
+        tank.Def = new byte[] { 125, 60, 0xFF, 0xFF, 0, 0, 0xFF, 0xFF };
+        sim.Prime();
+        var run = new CodeClearRun(ClearKind.All, sim.Mon, null, sim);
+        string report = run.Execute();
+        Eq("clear re-reads FE56 from the tank header", J1939Clear.CountRequest(sim.Sent, J1939Clear.DefTank, 163), 1);
+        Check("report names the FE56 source", Has(report, "PGN FE56 from SA 163, read after the clear"), report);
     }
 
     // ---------------- history ----------------
@@ -980,6 +1302,12 @@ ProtocolDescription=ISO 15765
         Check("empty report says no job", emptyText.Contains("(not entered)"), "no job placeholder");
         Check("empty report marks faults as none", emptyText.Contains("(none)"), "no none marker");
         Check("empty report shows em dash for rpm", emptyText.Contains("RPM:      —"), emptyText);
+        Check("no clear run, no code clear section", !emptyText.Contains("LAST CODE CLEAR"), emptyText);
+
+        var cleared = new ReportData { CodeClear = "CODE CLEAR — reset all codes\r\nRESULT: cleared — no active codes came back.\r\n" };
+        string clearedText = JobReport.Text(cleared);
+        Check("code clear section printed", clearedText.Contains("LAST CODE CLEAR"), clearedText);
+        Check("code clear result carried onto the report", clearedText.Contains("  RESULT: cleared — no active codes came back."), clearedText);
     }
 
     static void WorkOrderTests()
@@ -1751,7 +2079,7 @@ ProtocolDescription=ISO 15765
 
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.9");
+        Eq("stamped version", AppVersion.Number, "1.2.10");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;

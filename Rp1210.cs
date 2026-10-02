@@ -37,6 +37,12 @@ namespace J1939Reader
         public const short CmdProtectAddr = 19;
         const byte OurSa = J1939Clear.ToolSa;
 
+        // RP1210C errors that mean the adapter no longer owns the tool's J1939 address.
+        const int ErrAddressClaimFailed = 146;
+        const int ErrCouldNotTxAddressClaimed = 152;
+        const int ErrAddressLost = 153;
+        const int ErrAddressNeverClaimed = 157;
+
         /// <summary>
         /// When set, SendJ1939 records each constructed RP1210 payload and succeeds with no adapter.
         /// SelfTest uses this. Production leaves it null.
@@ -65,6 +71,8 @@ namespace J1939Reader
         public bool IsConnected { get { return _client >= 0 && _client < 128; } }
         public bool IsLoaded { get { return _module != IntPtr.Zero; } }
         public string LastError { get; private set; }
+        /// <summary>Outcome of the last Protect_J1939_Address, for the log. Requests go out from this address.</summary>
+        public string ClaimStatus { get; private set; }
         public short DeviceId { get; private set; }
         public string Protocol { get; private set; }
 
@@ -228,11 +236,29 @@ namespace J1939Reader
             Unload();
         }
 
-        void SafeCommand(short cmd, byte[] data, short len)
+        /// <summary>RP1210_SendCommand; returns the driver's code, or short.MinValue if it threw / is missing.</summary>
+        short SafeCommand(short cmd, byte[] data, short len)
         {
-            if (_command == null) return;
-            try { _command(cmd, _client, data, len); }
-            catch (Exception ex) { LastError = "command " + cmd + " failed: " + ex.Message; }
+            if (_command == null) return short.MinValue;
+            try { return _command(cmd, _client, data, len); }
+            catch (Exception ex)
+            {
+                LastError = "command " + cmd + " failed: " + ex.Message;
+                return short.MinValue;
+            }
+        }
+
+        static bool IsAddressError(short rc)
+        {
+            int e = rc < 0 ? -rc : rc;
+            return e == ErrAddressClaimFailed || e == ErrCouldNotTxAddressClaimed
+                || e == ErrAddressLost || e == ErrAddressNeverClaimed;
+        }
+
+        public bool SendJ1939(J1939Tx tx)
+        {
+            if (tx == null) return false;
+            return SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority);
         }
 
         public bool SendJ1939(int pgn, byte dest, byte[] data)
@@ -254,11 +280,22 @@ namespace J1939Reader
                 }
                 return Capture != null;
             }
-            short rc;
-            try { rc = _send(_client, m, (short)m.Length, 0, 1); }
-            catch (Exception ex) { LastError = "send failed: " + ex.Message; return false; }
+            short rc = SendRaw(m);
+            // The adapter drops a claimed address on bus-off or when another tool takes it, and then
+            // refuses every request. Claim it back once instead of failing the whole code clear.
+            if (rc != 0 && rc != short.MinValue && IsAddressError(rc) && pgn != 0xEE00)
+            {
+                if (ClaimToolAddress()) rc = SendRaw(m);
+            }
+            if (rc == short.MinValue) return false;
             if (rc != 0) { LastError = ErrorText(rc); return false; }
             return true;
+        }
+
+        short SendRaw(byte[] m)
+        {
+            try { return _send(_client, m, (short)m.Length, 0, 1); }
+            catch (Exception ex) { LastError = "send failed: " + ex.Message; return short.MinValue; }
         }
 
         /// <summary>
@@ -295,17 +332,47 @@ namespace J1939Reader
             return J1939Clear.UnicastDest(engineSa, J1939Clear.EngineSa);
         }
 
-        static readonly byte[] ToolName = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x81 };
+        /// <summary>
+        /// J1939 NAME, LSB first: function 129 (off-board diagnostic-service tool), industry group 0,
+        /// arbitrary-address capable. The old NAME had function 0, which announced this laptop to the
+        /// bus as an engine.
+        /// </summary>
+        internal static readonly byte[] ToolName = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x81, 0x00, 0x80 };
 
-        public void ClaimToolAddress()
+        /// <summary>
+        /// RP1210 Protect_J1939_Address for SA 0xF9, blocking until the claim settles. The adapter
+        /// refuses to send from an address it has not claimed, so a failed claim is why a code clear
+        /// "does nothing" — the result is kept in ClaimStatus for the log.
+        /// </summary>
+        public bool ClaimToolAddress()
         {
-            if (!IsConnected) return;
+            if (!IsConnected) return false;
+            if (_command == null)
+            {
+                // No SendCommand export: announce the address by hand and hope the driver lets it send.
+                SendRaw(J1939Clear.Rp1210Message(0xEE00, 255, ToolName, 6));
+                ClaimStatus = "Driver has no RP1210_SendCommand; announced SA " + OurSa + " by hand.";
+                return true;
+            }
             byte[] cmd = new byte[10];
             cmd[0] = OurSa;
             Buffer.BlockCopy(ToolName, 0, cmd, 1, 8);
-            cmd[9] = 0;
-            SafeCommand(CmdProtectAddr, cmd, 10);
-            SendJ1939(0xEE00, 255, ToolName, 6);
+            cmd[9] = 0; // BLOCK_UNTIL_DONE
+            short rc = SafeCommand(CmdProtectAddr, cmd, 10);
+            if (rc >= 0 && rc < 128)
+            {
+                ClaimStatus = "Tool address SA " + OurSa + " (0x" + OurSa.ToString("X2") + ") claimed.";
+                return true;
+            }
+            if (rc == short.MinValue)
+            {
+                ClaimStatus = "Address claim for SA " + OurSa + " FAILED: " + (LastError ?? "driver call failed")
+                    + ". The adapter may refuse to send code-clear requests.";
+                return false;
+            }
+            ClaimStatus = "Address claim for SA " + OurSa + " FAILED: " + ErrorText(rc)
+                + ". The adapter may refuse to send code-clear requests — close other J1939 tools and Connect again.";
+            return false;
         }
 
         public void SendDm13(bool stopBroadcast)
@@ -316,183 +383,14 @@ namespace J1939Reader
             SendJ1939(0xDF00, 255, d, 6);
         }
 
-        /// <summary>
-        /// Full J1939 DM11/DM3 plus best-effort UDS 0x14. Hits engine SA 0, the detected engine SA,
-        /// compressor controller SA 48, and broadcast. Active faults whose condition is still true
-        /// will come back immediately. Blocking — call from the bus worker, never the UI thread.
-        /// </summary>
-        public string ResetAllFaults()
-        {
-            return ResetAllFaults(0);
-        }
-
-        public string ResetAllFaults(int engineSa)
-        {
-            if (!IsConnected && Capture == null) return "not connected";
-            var sb = new StringBuilder();
-            ClaimToolAddress();
-            int sent = 0, failed = 0;
-            for (int round = 0; round < J1939Clear.Rounds; round++)
-            {
-                List<J1939Tx> roundFrames = J1939Clear.ClearRoundFrames(engineSa);
-                for (int i = 0; i < roundFrames.Count; i++)
-                {
-                    J1939Tx tx = roundFrames[i];
-                    if (SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority)) sent++;
-                    else failed++;
-                }
-                if (IsConnected) System.Threading.Thread.Sleep(200);
-            }
-            sb.AppendLine("Sent J1939 DM11 (clear active) and DM3 (clear previously active) x" +
-                J1939Clear.Rounds + " to engine, compressor controller (SA " +
-                J1939Clear.CompressorSa + "), and broadcast.");
-            if (failed > 0)
-                sb.AppendLine("Adapter rejected " + failed + " of " + (sent + failed) + " J1939 frames.");
-            if (IsConnected)
-            {
-                string uds = TryUdsClear();
-                if (!string.IsNullOrEmpty(uds)) sb.AppendLine(uds);
-            }
-            RequestDmAfterClear(engineSa);
-            List<J1939Tx> aft = J1939Clear.AftertreatmentReadFrames(engineSa);
-            for (int i = 0; i < aft.Count; i++)
-                SendJ1939(aft[i].Pgn, aft[i].Dest, aft[i].Data, aft[i].Priority);
-            sb.AppendLine("Re-requested DM1/DM2 and DEF/SCR tank PGN FE56. This is a code clear, not a DEF dosing reset.");
-            return sb.ToString();
-        }
-
-        /// <summary>DM3 previously-active only, same shop destinations as reset-all.</summary>
-        public string ClearPreviousFaults(int engineSa)
-        {
-            if (!IsConnected && Capture == null) return "not connected";
-            ClaimToolAddress();
-            int sent = 0;
-            int failed = 0;
-            List<J1939Tx> frames = J1939Clear.ClearPreviousFrames(engineSa);
-            for (int i = 0; i < frames.Count; i++)
-            {
-                J1939Tx tx = frames[i];
-                if (SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority)) sent++;
-                else failed++;
-            }
-            int refreshFailed = RequestDmAfterClear(engineSa);
-            int refreshCount = J1939Clear.RefreshDmFrames(engineSa).Count;
-            sent += refreshCount - refreshFailed;
-            failed += refreshFailed;
-            if (failed > 0)
-            {
-                return "Clear previous FAILED: adapter rejected " + failed + " of " + (sent + failed)
-                    + " J1939 frames.";
-            }
-            return "Sent DM3 (clear previously active) to engine, compressor controller (SA " +
-                J1939Clear.CompressorSa + "), and broadcast.";
-        }
-
         /// <summary>Request DM1 and DM2 from engine, compressor controller, and broadcast. Returns how many sends failed.</summary>
-        public int RequestDmAfterClear(int engineSa)
+        public int RequestDm(int engineSa)
         {
             int failed = 0;
             List<J1939Tx> frames = J1939Clear.RefreshDmFrames(engineSa);
             for (int i = 0; i < frames.Count; i++)
-            {
-                J1939Tx tx = frames[i];
-                if (!SendJ1939(tx.Pgn, tx.Dest, tx.Data, tx.Priority)) failed++;
-            }
+                if (!SendJ1939(frames[i])) failed++;
             return failed;
-        }
-
-        string TryUdsClear()
-        {
-            try { return TryUdsClearCore(); }
-            catch (Exception ex) { return "UDS 0x14 not sent (" + ex.Message + ") — J1939 clear still sent."; }
-        }
-
-        string TryUdsClearCore()
-        {
-            if (_connect == null) return "";
-            // Opening a second client while the J1939 session is live is what many adapters refuse,
-            // so skip it unless the vendor INI actually advertises ISO15765.
-            if (Api != null && !Api.SupportsIso15765)
-                return "UDS 0x14 skipped (" + Api.Id + " does not advertise ISO15765) — J1939 clear still sent.";
-
-            // ISO 15765-2 / UDS service 0x14 ClearDiagnosticInformation (all groups). The J1939
-            // session is closed first: holding two clients on one device is what upsets the adapter.
-            short savedClient = _client;
-            short savedDevice = DeviceId;
-            string savedProto = Protocol;
-            _client = -1;
-            if (savedClient >= 0 && _disconnect != null)
-            {
-                try { _disconnect(savedClient); } catch { }
-            }
-
-            string result;
-            short iso = -1;
-            string used = null;
-            try
-            {
-                string[] protos = { "ISO15765:Baud=250", "ISO15765" };
-                foreach (string proto in protos)
-                {
-                    short id = _connect(IntPtr.Zero, savedDevice, proto, 0, 0, 0);
-                    if (id >= 0 && id < 128) { iso = id; used = "dev " + savedDevice + " " + proto; break; }
-                }
-                if (iso < 0)
-                {
-                    result = "UDS 0x14 not sent (ISO15765 did not open on this adapter — J1939 clear still sent).";
-                }
-                else
-                {
-                    if (_command != null) { try { _command(CmdFiltersPass, iso, null, 0); } catch { } }
-                    SendUdsClear(iso);
-                    System.Threading.Thread.Sleep(250);
-                    try { _disconnect(iso); } catch { }
-                    result = "Also sent UDS ClearDiagnosticInformation (0x14) on ISO15765 (" + used + ").";
-                }
-            }
-            finally
-            {
-                // Always put the J1939 session back, successful UDS or not.
-                short re = _connect(IntPtr.Zero, savedDevice, savedProto, 0, 0, 0);
-                if (re >= 0 && re < 128)
-                {
-                    _client = re;
-                    SafeCommand(CmdFiltersPass, null, 0);
-                    ClaimToolAddress();
-                }
-            }
-            if (!IsConnected)
-                result += " NOTE: the J1939 session did not come back — press Connect again.";
-            return result;
-        }
-
-        void SendUdsClear(short iso)
-        {
-            if (_send == null) return;
-            // Physical request to ECM 0 from tool F9, and functional 0x33
-            uint[] ids = { 0x18DA00F9, 0x18DB33F9 };
-            foreach (uint canId in ids)
-            {
-                byte[] msg = new byte[11];
-                msg[0] = 0x00; // 29-bit
-                msg[1] = (byte)((canId >> 24) & 0xFF);
-                msg[2] = (byte)((canId >> 16) & 0xFF);
-                msg[3] = (byte)((canId >> 8) & 0xFF);
-                msg[4] = (byte)(canId & 0xFF);
-                msg[5] = 0x00;
-                msg[6] = 0x14;
-                msg[7] = 0xFF;
-                msg[8] = 0xFF;
-                msg[9] = 0xFF;
-                try { _send(iso, msg, 10, 0, 1); } catch { }
-                // also PCI single-frame form
-                msg[6] = 0x04;
-                msg[7] = 0x14;
-                msg[8] = 0xFF;
-                msg[9] = 0xFF;
-                msg[10] = 0xFF;
-                try { _send(iso, msg, 11, 0, 1); } catch { }
-            }
         }
 
         public bool RequestPgn(int pgn, byte dest)
@@ -511,13 +409,13 @@ namespace J1939Reader
                 catch (Exception ex) { LastError = "read failed: " + ex.Message; return false; }
                 if (r < 0) { LastError = ErrorText(r); return false; }
                 if (r < 10) return false;
-                int pgn = _rx[4] | (_rx[5] << 8) | (_rx[6] << 16);
+                int pgn = J1939Decode.NormalizePgn(_rx[4] | (_rx[5] << 8) | (_rx[6] << 16));
                 int sa = _rx[8];
                 int da = _rx[9];
                 int dlen = r - 10;
                 byte[] data = new byte[dlen];
                 if (dlen > 0) Buffer.BlockCopy(_rx, 10, data, 0, dlen);
-                frame = new J1939Frame { Pgn = pgn & 0x3FFFF, Sa = sa, Da = da, Data = data };
+                frame = new J1939Frame { Pgn = pgn, Sa = sa, Da = da, Data = data };
             }
             return true;
         }

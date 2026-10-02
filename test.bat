@@ -1,5 +1,5 @@
 @echo off
-rem Offline self-test: J1939 decoding, BAM reassembly, DM11/DM3 code-clear construction, adapter discovery, trend, timeline,
+rem Offline self-test: J1939 decoding, BAM reassembly, DM11/DM3 code clear (simulated ECMs), adapter discovery, trend, timeline,
 rem unit history, KB load/search, user-code round-trip, snapshot diff, report text,
 rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way shop sync,
 rem work-order packets / IntelliDealer gateway (no live DMS),

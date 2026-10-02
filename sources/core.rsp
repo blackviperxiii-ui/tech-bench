@@ -8,6 +8,7 @@ Rp1210.cs
 Rp1210Api.cs
 Ini.cs
 J1939Clear.cs
+CodeClear.cs
 BusMonitor.cs
 BusWorker.cs
 Trend.cs

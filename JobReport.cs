@@ -22,6 +22,8 @@ namespace J1939Reader
         public List<string> Markers = new List<string>();
         public string Diff = "";
         public string HistoryNote = "";
+        /// <summary>The last DM11/DM3 clear report from this hookup, if one was run.</summary>
+        public string CodeClear = "";
     }
 
     /// <summary>
@@ -82,6 +84,14 @@ namespace J1939Reader
             {
                 L.Add("MARKERS");
                 foreach (string m in d.Markers) L.Add("  " + m);
+                L.Add("");
+            }
+
+            if (d.CodeClear != null && d.CodeClear.Trim().Length > 0)
+            {
+                L.Add("LAST CODE CLEAR");
+                foreach (string line in d.CodeClear.Replace("\r\n", "\n").Split('\n'))
+                    if (line.Trim().Length > 0) L.Add("  " + line.TrimEnd());
                 L.Add("");
             }
 
