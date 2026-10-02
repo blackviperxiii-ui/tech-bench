@@ -44,7 +44,7 @@ namespace J1939Reader
         Snap _snapA, _snapB;
         string _sigActive = "", _sigPrev = "", _sigModules = "", _sigTimeline = "", _sigLive = "";
         DateTime _lastBusUi = DateTime.MinValue;
-        string _shownResetReport = "";
+        int _shownResetSeq;
         bool _holdResetReport;
         int _tscRpm;
         History _history;
@@ -135,7 +135,7 @@ namespace J1939Reader
             _ui.Start();
 
             RefreshLiveList(_snap);
-            SetConnected(false);
+            SetConnected(false, false);
 
             Disposed += delegate
             {
@@ -262,7 +262,7 @@ namespace J1939Reader
             _btnPostRepair = Btn("Clear codes after repair", delegate { DoClearAfterRepair(); });
             _btnPostRepair.Font = new Font(_btnPostRepair.Font, FontStyle.Bold);
             _tip.SetToolTip(_btnPostRepair,
-                "DM11 + DM3 to the engine and compressor SA 48, then re-request DM1 and the DEF/SCR tank message. Not a DEF delete.");
+                "DM11 + DM3 to the engine, compressor SA 48, and any DEF/aftertreatment module; waits for each to ACK, then reads DM1/DM2 and the DEF/SCR tank message back. Not a DEF delete.");
             service.Controls.Add(_btnRefresh);
             service.Controls.Add(_btnClearPrev);
             service.Controls.Add(_btnClearActive);
@@ -712,16 +712,21 @@ namespace J1939Reader
             return _cboAdapter == null ? null : _cboAdapter.SelectedItem as Rp1210Api;
         }
 
-        void SetConnected(bool on)
+        /// <summary>
+        /// <paramref name="busy"/>: connecting or a code clear is running. Disconnect stays live so
+        /// a clear can be stopped; the clear buttons wait so a second clear is not queued behind it.
+        /// </summary>
+        void SetConnected(bool on, bool busy)
         {
-            _btnConnect.Enabled = !on;
-            _btnDisc.Enabled = on;
-            _btnRefresh.Enabled = on;
-            _btnClearPrev.Enabled = on;
-            _btnClearActive.Enabled = on;
-            if (_btnPostRepair != null) _btnPostRepair.Enabled = on;
-            _btnPing.Enabled = on;
-            _cboAdapter.Enabled = !on;
+            bool idle = on && !busy;
+            _btnConnect.Enabled = !on && !busy;
+            _btnDisc.Enabled = on || busy;
+            _btnRefresh.Enabled = idle;
+            _btnClearPrev.Enabled = idle;
+            _btnClearActive.Enabled = idle;
+            if (_btnPostRepair != null) _btnPostRepair.Enabled = idle;
+            _btnPing.Enabled = idle;
+            _cboAdapter.Enabled = !on && !busy;
             _chkTsc800.Enabled = on;
             _chkTsc1200.Enabled = on;
             _chkQuietBus.Enabled = on;
@@ -776,20 +781,22 @@ namespace J1939Reader
         void DoClearPrevious()
         {
             var r = MessageBox.Show(this,
-                "Clear PREVIOUSLY ACTIVE codes only (DM3) on the engine and compressor controller (SA 48)?\n\nActive faults that are still happening will stay.",
+                "Clear PREVIOUSLY ACTIVE codes only (DM3) on the engine, the compressor controller (SA 48), and any other module reporting faults?\n\n" +
+                "Each module is asked directly and has to ACK. Active faults that are still happening will stay.",
                 "Clear previous", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
+            Log("Clear previous queued — runs on the bus thread, window stays live.");
             _bus.Enqueue(new BusCommand(BusCmdKind.ClearPrevious));
         }
 
         void DoResetAll()
         {
             var r = MessageBox.Show(this,
-                "Reset all codes on the engine and compressor controller (SA 48)?\n\n" +
-                "Sends J1939 DM11 + DM3 (3 rounds) to SA 0, SA 48, and broadcast, then re-requests DM1/DM2. UDS 0x14 is also tried if ISO15765 opens.\n\n" +
+                "Reset all codes on the engine, the compressor controller (SA 48), and any DEF/aftertreatment module reporting faults?\n\n" +
+                "Sends J1939 DM11 (clear active) then DM3 (clear previously active) to each module directly and to everyone, waits for each one to ACK or refuse, then reads DM1/DM2 and the DEF/SCR tank message back. Takes a few seconds; the window stays live.\n\n" +
                 "Red Stop and Amber are not separate codes. They are lamp bits on DM1. They go OFF by themselves when the DTCs that set them are gone.\n" +
                 "There is no legal 'Red Stop off' / 'Amber off' switch — forcing the lamps off while 5246 / FMI 9 are still active would hide a no-fuel command, not diagnose it.\n\n" +
-                "If FMI 9 or inducement is still true, lamps and those SPNs will come right back.\n\nContinue?",
+                "Many ECMs only accept a clear with key ON, engine OFF. If a fault is still true it comes straight back; the report says which.\n\nContinue?",
                 "Reset all codes",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
@@ -801,13 +808,14 @@ namespace J1939Reader
         {
             var r = MessageBox.Show(this,
                 "Clear codes after repair?\n\n" +
-                "Sends the existing J1939 DM11 (clear active) and DM3 (clear previously active) to the engine and compressor controller (SA 48), then asks again for DM1 and the DEF/SCR tank message (PGN FE56: level 1761, temp 3031, inducement 5246, low-level 5245).\n\n" +
-                "This is a code clear. It does not reset DEF dosing, disable SCR, turn sensors off, or defeat lamps. There is no public SAE routine that resets DEF dosing without disabling SCR, so this button does not send one.\n\n" +
-                "If the fault is still true, those codes come back on the next DM1.\n\nContinue?",
+                "Same J1939 clear as Reset all codes: DM11 (clear active) and DM3 (clear previously active) to the engine, the compressor controller (SA 48), and any DEF/aftertreatment module, each one asked directly and checked for an ACK. " +
+                "Then it reads DM1/DM2 and the DEF/SCR tank message (PGN FE56: level 1761, temp 3031, inducement 5246, low-level 5245) back and reports what cleared and what came back.\n\n" +
+                "This is a code clear. It does not reset DEF dosing, disable SCR, turn sensors off, or defeat lamps. SCR inducement (5246) drops when the ECM sees the repair working; the report walks you through it.\n\n" +
+                "Best done key ON, engine OFF.\n\nContinue?",
                 "Clear codes after repair",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
-            Log("Clear codes after repair queued — DM11/DM3, then re-read DM1 and DEF/SCR. Not a DEF delete.");
+            Log("Clear codes after repair queued — DM11/DM3 with ACK check, then re-read DM1/DM2 and DEF/SCR. Not a DEF delete.");
             _bus.Enqueue(new BusCommand(BusCmdKind.ResetAll));
         }
 
@@ -921,7 +929,7 @@ namespace J1939Reader
             List<string> lines = _bus.DrainLog();
             if (lines != null) foreach (string l in lines) Log(l);
 
-            SetConnected(s.Connected || s.Busy);
+            SetConnected(s.Connected, s.Busy);
 
             string status;
             if (s.Busy) status = "Working: " + s.BusyWhat + "…";
@@ -968,38 +976,21 @@ namespace J1939Reader
             if (_innerPage == 4) RefreshTimeline();
             if (_innerPage == 5) RefreshHistory(false);
 
-            if (s.LastResetReport != _shownResetReport && s.LastResetReport.Length > 0)
+            // The worker writes the report after the fresh DM1/DM2/FE56 are in, so it is shown as-is.
+            // Building the lamp lines here used the snapshot from before the codes were re-read.
+            if (s.ResetSeq != _shownResetSeq && s.LastResetReport.Length > 0)
             {
-                _shownResetReport = s.LastResetReport;
+                _shownResetSeq = s.ResetSeq;
                 _holdResetReport = true;
-                if (s.LastResetReport.IndexOf("FAILED", StringComparison.Ordinal) >= 0)
-                    _idBox.Text = s.LastResetReport;
-                else
-                    _idBox.Text = s.LastResetReport + "\r\n\r\n"
-                        + "Red Stop: " + (s.Red ? "STILL ON" : "off") + "     Amber: " + (s.Amber ? "STILL ON" : "off") + "\r\n"
-                        + "Lamps are not cleared separately. They track the active DTCs below.\r\n\r\n"
-                        + LampHolders(s)
-                        + "\r\nIf Red Stop stays on, SPN 5246 / 1569 are still latched or the tank header is still FMI 9. Fix that, reset again. Guidanz aftertreatment reset may still be required for 5246.";
+                _idBox.Text = s.LastResetReport;
+                // The buttons live on the toolbar; most techs are on the Codes tab when they press them.
+                _codeHelp.Text = s.LastResetReport;
+                _codeHelp.SelectionStart = 0;
+                _codeHelp.ScrollToCaret();
             }
         }
 
         static string OnOff(bool v) { return v ? "ON" : "off"; }
-
-        static string LampHolders(BusSnapshot s)
-        {
-            if (s.Active.Count == 0)
-                return "No active DTCs parsed yet — wait a second for DM1, or the reset held and lamps should drop.\r\n";
-            var sb = new StringBuilder();
-            sb.AppendLine("Active DTCs holding the lamps:");
-            foreach (Dtc d in s.Active)
-            {
-                string role = "";
-                if (d.Spn == 5246 || d.Spn == 1569 || d.Spn == 5245) role = "  ← drives Red Stop / no-fuel";
-                else if (d.Spn == 1761 || d.Spn == 3031 || d.Spn == 3364) role = "  ← tank not talking; feeds inducement";
-                sb.AppendLine("  SPN " + d.Spn + " FMI " + d.Fmi + "  " + d.Name + role);
-            }
-            return sb.ToString();
-        }
 
         /// <summary>
         /// DM1 lands every 2 s. Rebuilding the box every time drops the selection, which fires
@@ -1040,7 +1031,7 @@ namespace J1939Reader
             _cboModule.Items.Clear();
             _cboModule.Items.Add("Engine (auto)");
             foreach (int sa in s.FaultModules)
-                _cboModule.Items.Add("SA " + sa + " " + Names.Sa(sa));
+                _cboModule.Items.Add(Names.SaLabel(sa));
             _cboModule.EndUpdate();
             int idx = keep == null ? 0 : _cboModule.Items.IndexOf(keep);
             _cboModule.SelectedIndex = idx >= 0 ? idx : 0;
@@ -1255,7 +1246,8 @@ namespace J1939Reader
                 Oil = s.OilText,
                 Batt = BusMonitor.Fmt(s.BatteryV, " V", "0.00"),
                 Fuel = BusMonitor.Fmt(s.FuelLph, " L/h", "0.00"),
-                Diff = SessionIo.Diff(_snapA, _snapB)
+                Diff = SessionIo.Diff(_snapA, _snapB),
+                CodeClear = s.LastResetReport ?? ""
             };
             d.Active.AddRange(s.Active);
             d.Prev.AddRange(s.Prev);
@@ -1330,6 +1322,13 @@ namespace J1939Reader
             sb.AppendLine("Markers:");
             if (_markers.Count == 0) sb.AppendLine("  (none)");
             else foreach (string m in _markers) sb.AppendLine("  " + m);
+            if (!string.IsNullOrEmpty(s.LastResetReport))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Last code clear:");
+                foreach (string line in s.LastResetReport.Replace("\r\n", "\n").Split('\n'))
+                    if (line.Trim().Length > 0) sb.AppendLine("  " + line.TrimEnd());
+            }
             sb.AppendLine();
             sb.AppendLine("Modules:");
             foreach (SaRow r in s.Sas)

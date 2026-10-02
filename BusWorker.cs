@@ -60,6 +60,9 @@ namespace J1939Reader
         public bool Red, Amber, Protect, Mil;
         public bool HasSpn5246, HasTankFmi9, Has1569;
         public string LastResetReport = "";
+        /// <summary>Bumps on every finished clear, so the same report text twice still shows.</summary>
+        public int ResetSeq;
+        public int DefSa = -1;
         public List<Dtc> Active = new List<Dtc>();
         public List<Dtc> Prev = new List<Dtc>();
         public List<int> FaultModules = new List<int>();
@@ -75,6 +78,7 @@ namespace J1939Reader
             Rpm = CoolantC = OilKpa = BatteryV = FuelLph = double.NaN;
             DefText = "—";
             AftText = new AftState().Text();
+            DefSa = -1;
             SeverityRaw = -1;
             LowLampRaw = -1;
             OilText = "—";
@@ -91,9 +95,9 @@ namespace J1939Reader
     }
 
     /// <summary>
-    /// Owns the adapter on a background thread. Everything that blocks — SendMessage, the 850 ms
-    /// code reset, the ISO15765 probe, reconnect attempts — used to run on the UI thread from a 40 ms
-    /// timer, which froze the window during a reset and stuttered while connected.
+    /// Owns the adapter on a background thread. Everything that blocks — SendMessage, a code clear
+    /// waiting on ACKs, reconnect attempts — used to run on the UI thread from a 40 ms timer, which
+    /// froze the window during a reset and stuttered while connected.
     /// </summary>
     internal sealed class BusWorker : IDisposable
     {
@@ -123,6 +127,7 @@ namespace J1939Reader
 
         Rp1210Api _api;
         string _lastResetReport = "";
+        int _resetSeq;
         DateTime _lastReq = DateTime.MinValue;
         DateTime _lastTsc = DateTime.MinValue;
         DateTime _lastReconnect = DateTime.MinValue;
@@ -264,15 +269,38 @@ namespace J1939Reader
             }
 
             DrainCommands();
+            if (!_rp.IsConnected) return;
+            // A code clear in DrainCommands can take several seconds.
+            now = DateTime.UtcNow;
 
+            if (_autoRefresh && (now - _lastReq).TotalMilliseconds >= AutoRefreshMs)
+                RequestCodes(false);
+
+            ServiceBus(now);
+
+            // An adapter that stops answering keeps IsConnected true, so silence is the real signal.
+            if (_autoReconnect && _lastGood != DateTime.MinValue
+                && (now - _lastGood).TotalSeconds > 6
+                && (now - _lastReconnect).TotalMilliseconds > ReconnectEveryMs)
+            {
+                _lastReconnect = now;
+                Log("Auto-reconnect…");
+                _rp.Disconnect();
+                lock (_gate) _mon.ClearLive();
+            }
+        }
+
+        /// <summary>
+        /// TSC1 heartbeat, frame reads, frames/s, and the trend sample. Also runs while a code clear
+        /// waits, so ACKs and the fresh DM1/DM2 are read instead of piling up in the adapter.
+        /// </summary>
+        void ServiceBus(DateTime now)
+        {
             if (_tscRpm > 0 && (now - _lastTsc).TotalMilliseconds >= TscHeartbeatMs)
             {
                 _lastTsc = now;
                 _rp.SendTsc1(_tscRpm, EngineSaLocked());
             }
-
-            if (_autoRefresh && (now - _lastReq).TotalMilliseconds >= AutoRefreshMs)
-                RequestCodes(false);
 
             int read = 0;
             J1939Frame f;
@@ -292,17 +320,6 @@ namespace J1939Reader
             }
 
             lock (_gate) _mon.SampleTrend(now);
-
-            // An adapter that stops answering keeps IsConnected true, so silence is the real signal.
-            if (_autoReconnect && _lastGood != DateTime.MinValue
-                && (now - _lastGood).TotalSeconds > 6
-                && (now - _lastReconnect).TotalMilliseconds > ReconnectEveryMs)
-            {
-                _lastReconnect = now;
-                Log("Auto-reconnect…");
-                _rp.Disconnect();
-                lock (_gate) _mon.ClearLive();
-            }
         }
 
         void TryConnect(DateTime now)
@@ -328,6 +345,7 @@ namespace J1939Reader
             _framesThisWindow = 0;
             lock (_gate) _mon.ClearLive();
             Log("Connected  device " + _rp.DeviceId + "  " + _rp.Protocol);
+            if (!string.IsNullOrEmpty(_rp.ClaimStatus)) Log(_rp.ClaimStatus);
             RequestCodes(true);
         }
 
@@ -340,6 +358,13 @@ namespace J1939Reader
                     BusCommand c = _cmds.Dequeue();
                     if (c.Kind == BusCmdKind.ClearBusStats) _mon.ClearBusStats();
                     else if (c.Kind == BusCmdKind.ClearHistory) _mon.ClearHistory();
+                    else if (c.Kind == BusCmdKind.ResetAll || c.Kind == BusCmdKind.ClearPrevious)
+                    {
+                        // The inline report box shows this next to the last clear, so name the failure.
+                        _lastResetReport = (c.Kind == BusCmdKind.ResetAll ? "Reset all codes" : "Clear previous")
+                            + " FAILED: adapter not connected — nothing was sent.\r\n";
+                        _resetSeq++;
+                    }
                 }
             }
         }
@@ -366,32 +391,11 @@ namespace J1939Reader
                     RequestCodes(true);
                     break;
                 case BusCmdKind.ClearPrevious:
-                {
-                    string report;
-                    try { report = _rp.ClearPreviousFaults(EngineSaLocked()); }
-                    catch (Exception ex) { report = "Clear previous FAILED: " + ex.Message; }
-                    // Rp1210 returns this exact string when the adapter is down. The inline report
-                    // box shows it next to the reset-success lamp, so name the failure here.
-                    if (report == "not connected")
-                        report = "Clear previous FAILED: adapter not connected.";
-                    lock (_gate) _lastResetReport = report;
-                    Log(report);
-                    RequestCodes(true);
+                    RunClear(ClearKind.Previous);
                     break;
-                }
                 case BusCmdKind.ResetAll:
-                {
-                    _busy = true; _busyWhat = "resetting codes";
-                    string report;
-                    try { report = _rp.ResetAllFaults(EngineSaLocked()); }
-                    catch (Exception ex) { report = "Reset failed: " + ex.Message; }
-                    finally { _busy = false; _busyWhat = ""; }
-                    lock (_gate) _lastResetReport = report;
-                    Log(report.Replace("\r\n", " | "));
-                    Thread.Sleep(400);
-                    RequestCodes(true);
+                    RunClear(ClearKind.All);
                     break;
-                }
                 case BusCmdKind.PingIdentity:
                     lock (_gate)
                     {
@@ -443,12 +447,88 @@ namespace J1939Reader
             lock (_gate) return _mon.EngineSa;
         }
 
+        /// <summary>DM11/DM3 clear on the bus thread; the window stays live and shows progress.</summary>
+        void RunClear(ClearKind kind)
+        {
+            _busy = true;
+            _busyWhat = kind == ClearKind.All ? "resetting codes" : "clearing previous codes";
+            string report;
+            string headline;
+            try
+            {
+                var run = new CodeClearRun(kind, _mon, _gate, new WorkerClearLink(this));
+                report = run.Execute();
+                headline = run.Headline;
+            }
+            catch (Exception ex)
+            {
+                report = (kind == ClearKind.All ? "Reset all codes" : "Clear previous") + " FAILED: " + ex.Message + "\r\n";
+                headline = report.TrimEnd();
+            }
+            finally
+            {
+                _busy = false;
+                _busyWhat = "";
+            }
+            lock (_gate)
+            {
+                _lastResetReport = report;
+                _resetSeq++;
+            }
+            Log("Code clear — " + headline + Environment.NewLine + report.TrimEnd());
+            // The clear just re-read DM1/DM2/FE56; the next auto-refresh can wait its turn.
+            _lastReq = DateTime.UtcNow;
+        }
+
+        /// <summary>The live adapter as a code clear sees it.</summary>
+        sealed class WorkerClearLink : IClearLink
+        {
+            readonly BusWorker _w;
+
+            public WorkerClearLink(BusWorker w) { _w = w; }
+
+            public DateTime Now { get { return DateTime.UtcNow; } }
+
+            public string LastError { get { return _w._rp.LastError; } }
+
+            public bool Send(J1939Tx tx)
+            {
+                return _w._rp.SendJ1939(tx);
+            }
+
+            public bool Pump(int ms, Func<bool> done)
+            {
+                DateTime end = DateTime.UtcNow.AddMilliseconds(ms);
+                while (true)
+                {
+                    if (_w._stop || !_w._wantConnected || !_w._rp.IsConnected) return false;
+                    _w.ServiceBus(DateTime.UtcNow);
+                    if (done != null && done()) return true;
+                    if (DateTime.UtcNow >= end) return true;
+                    Thread.Sleep(CycleMs);
+                }
+            }
+
+            public void Progress(string what)
+            {
+                _w._busyWhat = what ?? "";
+            }
+        }
+
         void RequestCodes(bool log)
         {
             if (!_rp.IsConnected) return;
-            int engineSa = EngineSaLocked();
-            _rp.RequestDmAfterClear(engineSa);
-            _rp.RequestPgn(0xFE56, Rp1210.Tsc1Dest(engineSa));
+            int engineSa, defSa;
+            lock (_gate)
+            {
+                engineSa = _mon.EngineSa;
+                defSa = _mon.DefSa;
+            }
+            _rp.RequestDm(engineSa);
+            byte engine = Rp1210.Tsc1Dest(engineSa);
+            _rp.RequestPgn(J1939Clear.DefTank, engine);
+            // Some machines send FE56 from the tank header or an aftertreatment module, not the ECM.
+            if (defSa >= 0 && defSa <= 253 && defSa != engine) _rp.RequestPgn(J1939Clear.DefTank, (byte)defSa);
             _lastReq = DateTime.UtcNow;
             if (log) Log("Requested DM1 / DM2 / DEF tank (engine + compressor SA " + J1939Clear.CompressorSa + ")");
         }
@@ -497,6 +577,8 @@ namespace J1939Reader
                 s.Pgns = _mon.PgnRows();
                 s.Sas = _mon.SaRows();
                 s.LastResetReport = _lastResetReport;
+                s.ResetSeq = _resetSeq;
+                s.DefSa = _mon.DefSa;
             }
             if (!s.Connected)
                 s.BlankDisconnectedReadouts();
