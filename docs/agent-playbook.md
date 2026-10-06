@@ -85,3 +85,22 @@ git switch -c cursor/<topic> origin/main
 - Any new ECU action needs Jeremy's OK and a confirm dialog. Irreversible engine commands need a human check on a real engine; CI can't prove them.
 - Updater (v1.2.9, `docs/specs/v1.2.9.md`): 64 KiB manifest cap and 32 MiB payload cap enforced while streaming; manual redirects, at most 5, same host only, never https to http; payload on the manifest's host and port; SHA-256 checked before staging; `.part` cleanup; no credentials or token ever sent; nothing applied while an INLINE 7 session is live. `Updater.DefaultManifestUrl` is unchanged.
 - No installs, new dependencies or NuGet packages without asking. No spending, and no code signing.
+
+
+## 14. Branch cleanup
+- After a PR **merges or closes**, delete the head branch you created (`gh pr view <n> --json headRefName -q .headRefName`, then `git push origin --delete <branch>` if it still exists). Prefer `gh api -X DELETE repos/blackviperxiii-ui/tech-bench/git/refs/heads/<branch>` when the local tracking branch is gone.
+- Delete scratch and test branches as soon as they are unused (no open PR).
+- Never delete `main`. Never delete `beta` if that branch exists. Don't mass-delete someone else's open-PR branches.
+- Repo setting `delete_branch_on_merge` is currently **false**. Do **not** flip it. When Jeremy approves later: `gh api -X PATCH repos/blackviperxiii-ui/tech-bench -f delete_branch_on_merge=true`. Confirm with `gh api repos/blackviperxiii-ui/tech-bench --jq .delete_branch_on_merge`.
+
+## 15. Tooling choice (Grok Build vs Cursor)
+- Pick **Grok Build CLI** or **Cursor** (cloud agent / IDE) per job, whichever fits scope, machine access, and token budget. Document the choice in the brief.
+- Cursor usage may be paused by Jeremy (e.g. out until a stated date); then use Grok Build / box work. Keep the rule general: whichever fits when both are available.
+- Windows CI `installer` and Cursor Bugbot still gate every PR. Local Linux/Mono is only a hint.
+
+## 16. Semgrep, dyl-review, Continual Learning
+- **Semgrep:** before a **code** PR counts Ready, run Semgrep on the touched area (or the repo). Fix findings or justify them under `Skipped / not verified` / Notes. Docs-only PRs may mark Semgrep N/A, but still keep this gate in the playbook.
+- **`dyl-review`:** quick by default for PR review drafts; deep only when asked. Never posts to the PR by itself.
+- **Continual Learning:** keep this repo's `AGENTS.md` current via the continual-learning / `agents-memory-updater` flow. No secrets in `AGENTS.md`.
+- **Banned:** do **not** use `dyl-ready-pr` **merge** or **babysit** steps. Nothing merges without Jeremy's say. No auto-merge, no merge queues that bypass that rule.
+

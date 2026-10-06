@@ -6,13 +6,16 @@ C# WinForms shop tool, .NET Framework 4, **x86 only** (RP1210 drivers are 32-bit
 - **Main is protected** (ruleset): PR only, required check `installer`, branch up to date before merge, no force-push or delete. Never push to `main`.
 - **Fresh base:** `git fetch origin` and start from the latest `main`. Bring a branch current with `main` before touching it, and re-check before merge or tag. Never plan, review or screenshot from a stale checkout. Put the starting `main` SHA in every PR and report.
 - **Merging:** get PRs green and ready, then stop. Never merge, tag or release without Jeremy's explicit word. When he says merge, squash and merge.
+- **Branch cleanup:** after a PR merges or closes, delete your own head branch. Delete scratch/test branches right away. Never delete `main` (or `beta` if it exists). GitHub auto-delete head branches stays **off** until Jeremy says flip it.
+- **Tooling:** pick Grok Build CLI or Cursor per job (whichever fits). CI `installer` and Bugbot still gate every PR.
+- **Ready gates:** Semgrep scan before a code PR counts Ready; `dyl-review` quick by default; Continual Learning keeps `AGENTS.md` current. Never use `dyl-ready-pr` merge or babysit steps. No auto-merge.
 - **Release:** only on his word, by the normal path in the playbook (green `main` CI artifact attached with `gh release create`).
 - **Proof of work:** CI green is the floor, not the proof. Every PR names the real thing it ran and what it saw. PRs and reports include a `Skipped / not verified` line.
 - **Tests:** `test.bat` locally; Windows CI `installer` is the gate. Assert real behavior against literal expected values, no tautological tests. Never delete, skip or loosen an existing test; report it instead. Before a refactor, add behavior tests for that code in the same PR.
 - **Findings:** log them and fix them in batches, never one PR per finding.
-- **Briefs:** intent, data shape, scope and non-goals, evidence needed, file pointers. Exact error plus at most 20 log lines. One fresh session per task, context passed as pointers.
+- **Briefs:** intent, data shape, scope and non-goals, evidence needed, file pointers. Exact error plus at most 20 log lines. One fresh session per task, context passed as pointers. Use `/workspace/plans/templates/cloud-agent-brief.md`.
 - **CI failures:** find the cause before rerunning; at most one rerun. If a bug survives one fix, reproduce it and add logging first.
-- **UI changes:** before/after screenshots and a design review before the PR is called green.
+- **UI changes:** before/after screenshots and a Critiquito design review before the PR is called green.
 - **PR shape:** title `Version: vX.Y.Z ...`, spec `docs/specs/vX.Y.Z.md` whose first line is `Version: vX.Y.Z`, the PR body sections, and the 4-spot lockstep version bump (playbook).
 - **Owner gates:** no `.github/` changes without Jeremy's OK. No installs, new dependencies, spending or code signing.
 - **Secrets:** never commit `.env*`, tokens, keys/certs, `id-settings*.json` or the IntelliDealer key. If you see one, stop and report it masked; don't rewrite history. Never use `DIST_REPO_TOKEN` or any PAT.
