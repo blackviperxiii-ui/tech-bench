@@ -5,13 +5,17 @@ using System.Web.Script.Serialization;
 namespace TechBench
 {
     /// <summary>
-    /// Tiny LocalAppData settings: last job (model/serial) and window size.
+    /// Tiny LocalAppData settings: last job (model/serial/customer/WO key) and window size.
     /// Missing or corrupt file is a no-op — the app still launches.
     /// </summary>
     internal sealed class AppSettings
     {
+        internal static string PathOverride;
+
         public string Model = "";
         public string Serial = "";
+        public string Customer = "";
+        public string LastWo = "";
         public int X;
         public int Y;
         public int Width;
@@ -41,6 +45,8 @@ namespace TechBench
 
         public static AppSettings Load()
         {
+            if (!string.IsNullOrEmpty(PathOverride))
+                return LoadFrom(PathOverride);
             return LoadFrom(PathName());
         }
 
@@ -51,7 +57,10 @@ namespace TechBench
                 if (string.IsNullOrEmpty(path) || !File.Exists(path)) return new AppSettings();
                 var ser = new JavaScriptSerializer();
                 var s = ser.Deserialize<AppSettings>(File.ReadAllText(path));
-                return s ?? new AppSettings();
+                if (s == null) return new AppSettings();
+                if (s.Customer == null) s.Customer = "";
+                if (s.LastWo == null) s.LastWo = "";
+                return s;
             }
             catch
             {
@@ -61,7 +70,20 @@ namespace TechBench
 
         public void Save()
         {
-            SaveTo(PathName());
+            string path = !string.IsNullOrEmpty(PathOverride) ? PathOverride : PathName();
+            try
+            {
+                if (File.Exists(path))
+                {
+                    AppSettings onDisk = LoadFrom(path);
+                    if (string.IsNullOrEmpty(Customer) && !string.IsNullOrEmpty(onDisk.Customer))
+                        Customer = onDisk.Customer;
+                    if (string.IsNullOrEmpty(LastWo) && !string.IsNullOrEmpty(onDisk.LastWo))
+                        LastWo = onDisk.LastWo;
+                }
+            }
+            catch { }
+            SaveTo(path);
         }
 
         public void SaveTo(string path)
