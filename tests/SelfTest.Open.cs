@@ -103,12 +103,16 @@ static partial class SelfTest
         string root = FindRepoRoot();
         string search = File.Exists(Path.Combine(root, "SearchControl.cs"))
             ? File.ReadAllText(Path.Combine(root, "SearchControl.cs")) : "";
-        Check("OpenSel refuses a blocked launch",
-            search.IndexOf("IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "SearchControl");
+        Check("OpenSel uses SafeOpen",
+            search.IndexOf("SafeOpen.TryOpen", StringComparison.Ordinal) >= 0, "SearchControl");
         string woSrc = File.Exists(Path.Combine(root, "WorkOrderControl.cs"))
             ? File.ReadAllText(Path.Combine(root, "WorkOrderControl.cs")) : "";
-        Check("OpenMedia refuses a blocked launch",
-            woSrc.IndexOf("IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+        Check("OpenMedia uses SafeOpen",
+            woSrc.IndexOf("SafeOpen.TryOpen", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+        string kbSrc = File.Exists(Path.Combine(root, "KbIndex.cs"))
+            ? File.ReadAllText(Path.Combine(root, "KbIndex.cs")) : "";
+        Check("LaunchPolicy delegates to SafeOpen",
+            kbSrc.IndexOf("SafeOpen.IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "KbIndex");
     }
 
     static void ManifestVersionTests()
@@ -200,7 +204,28 @@ static partial class SelfTest
 
     static void OpenTests()
     {
-        Check("SafeOpen stub compiles", typeof(SafeOpen).Name == "SafeOpen", "type");
+        string err;
+        Check("blocked exe is refused",
+            !SafeOpen.TryOpen(@"C:\kb\files\setup.exe", out err)
+            && err != null
+            && err.IndexOf("won't open program or script", StringComparison.Ordinal) >= 0
+            && err.IndexOf("setup.exe", StringComparison.Ordinal) >= 0, err);
+        string missing = Path.Combine(Path.GetTempPath(), "tb-missing-" + Guid.NewGuid().ToString("N") + ".pdf");
+        Check("missing file is refused",
+            !SafeOpen.TryOpen(missing, out err)
+            && err != null
+            && err.IndexOf("Cannot find this file", StringComparison.Ordinal) >= 0
+            && err.IndexOf(missing, StringComparison.Ordinal) >= 0, err);
+
+        string dir = Path.Combine(Path.GetTempPath(), "tb-open-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string noAssoc = Path.Combine(dir, "note.tb_no_assoc_test");
+        File.WriteAllText(noAssoc, "x");
+        Check("no-association file is refused",
+            !SafeOpen.TryOpen(noAssoc, out err)
+            && err != null
+            && err.IndexOf("No program is associated", StringComparison.Ordinal) >= 0, err);
+        try { Directory.Delete(dir, true); } catch { }
     }
 
 }
