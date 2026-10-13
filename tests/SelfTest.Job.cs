@@ -324,6 +324,7 @@ static partial class SelfTest
             TokenCacheTests(live, wo);
             WorkOrderMergeTests(s, kb);
             WorkOrderBakRecoveryTests(s, kb);
+            JobStripSettingsTests(s, kb, root);
         }
         finally
         {
@@ -335,6 +336,67 @@ static partial class SelfTest
             IdGateway.HttpOverride = prevHttp;
             IdGateway.ClearTokenCache();
             try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    static void JobStripSettingsTests(IdSettings s, string kb, string root)
+    {
+        string prevPath = AppSettings.PathOverride;
+        string settingsPath = Path.Combine(root, "settings.json");
+        AppSettings.PathOverride = settingsPath;
+        try
+        {
+            var prefs = new AppSettings
+            {
+                Model = "HP450",
+                Serial = "999",
+                Customer = "Strip Customer",
+                LastWo = "44551-01"
+            };
+            prefs.SaveTo(settingsPath);
+            var roundTrip = AppSettings.LoadFrom(settingsPath);
+            Eq("job settings customer", roundTrip.Customer, "Strip Customer");
+            Eq("job settings last wo", roundTrip.LastWo, "44551-01");
+
+            File.WriteAllText(settingsPath, "{\"Model\":\"HP450\",\"Serial\":\"999\"}");
+            var legacy = AppSettings.LoadFrom(settingsPath);
+            Eq("legacy job customer empty", legacy.Customer, "");
+            Eq("legacy last wo empty", legacy.LastWo, "");
+
+            File.WriteAllText(settingsPath,
+                "{\"Model\":\"HP450\",\"Serial\":\"999\",\"Customer\":\"KeepMe\",\"LastWo\":\"44551-01\"}");
+            var windowOnly = AppSettings.LoadFrom(settingsPath);
+            windowOnly.Customer = "";
+            windowOnly.LastWo = "";
+            windowOnly.Save();
+            var merged = AppSettings.LoadFrom(settingsPath);
+            Eq("shell save keeps job customer", merged.Customer, "KeepMe");
+            Eq("shell save keeps last wo", merged.LastWo, "44551-01");
+
+            List<WorkOrder> listed = WorkOrderStore.ListAll(s, kb);
+            Eq("restore matches saved wo key",
+                AppSettings.MatchWorkOrderKey(listed, "44551-01"), "44551-01");
+            Eq("missing wo key does not match",
+                AppSettings.MatchWorkOrderKey(listed, "gone-99"), "");
+
+            var wipe = new AppSettings { Customer = "X", LastWo = "44551-01" };
+            wipe.SaveTo(settingsPath);
+            wipe.Customer = "";
+            wipe.LastWo = "";
+            wipe.SaveTo(settingsPath);
+            var afterClear = AppSettings.LoadFrom(settingsPath);
+            Eq("clear job wipes customer", afterClear.Customer, "");
+            Eq("clear job wipes last wo", afterClear.LastWo, "");
+
+            string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "WorkOrderControl.cs"));
+            Check("clear job button present",
+                woSrc.IndexOf("Clear job", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+            Check("restore waits for list load",
+                woSrc.IndexOf("MatchWorkOrderKey(_orders", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+        }
+        finally
+        {
+            AppSettings.PathOverride = prevPath;
         }
     }
 

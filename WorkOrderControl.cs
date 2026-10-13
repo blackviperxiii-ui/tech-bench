@@ -27,8 +27,14 @@ namespace TechBench
         WorkOrder _current;
         bool _filling;
         readonly List<WorkOrder> _orders = new List<WorkOrder>();
+        readonly AppSettings _appSettings;
+        bool _jobWoRestoreDone;
 
         public Action<WorkOrder> CurrentChanged;
+        /// <summary>Fired after Clear job wipes saved customer and work-order key (shell clears the strip).</summary>
+        public Action JobStripCleared;
+        /// <summary>Customer from settings.json on launch, before the job strip is filled.</summary>
+        public string SavedJobCustomer { get { return _appSettings.Customer ?? ""; } }
         public Func<string> LiveReportText;
 
         public WorkOrder Current { get { return _current; } }
@@ -36,6 +42,7 @@ namespace TechBench
         public WorkOrderControl(string kbRoot)
         {
             _kbRoot = kbRoot;
+            _appSettings = AppSettings.Load();
             _settings = IdSettings.Load();
             Dock = DockStyle.Fill;
             AutoScaleMode = AutoScaleMode.Font;
@@ -47,6 +54,7 @@ namespace TechBench
             leftBar.Controls.Add(Btn("New", delegate { NewOrder(); }));
             leftBar.Controls.Add(Btn("Refresh", delegate { Reload(true); }));
             leftBar.Controls.Add(Btn("From ID", delegate { PullAssigned(); }));
+            leftBar.Controls.Add(Btn("Clear job", delegate { ClearSavedJob(); }));
             var left = new Panel { Dock = DockStyle.Fill };
             left.Controls.Add(_list);
             left.Controls.Add(leftBar);
@@ -141,16 +149,22 @@ namespace TechBench
 
         public WorkOrder SelectKey(string key)
         {
-            if (string.IsNullOrWhiteSpace(key)) return _current;
+            TrySelectKey(key);
+            return _current;
+        }
+
+        public bool TrySelectKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
             for (int i = 0; i < _orders.Count; i++)
             {
                 if (string.Equals(_orders[i].Key(), key, StringComparison.OrdinalIgnoreCase))
                 {
                     _list.SelectedIndex = i;
-                    return _current;
+                    return true;
                 }
             }
-            return _current;
+            return false;
         }
 
         public List<WorkOrder> Orders()
@@ -160,6 +174,7 @@ namespace TechBench
 
         public void ApplyHeader(string model, string serial, string customer)
         {
+            PersistJobCustomer(customer);
             if (_current == null) return;
             _current.Model = model ?? "";
             _current.Serial = serial ?? "";
@@ -209,6 +224,11 @@ namespace TechBench
         public void Reload(bool fromDisk)
         {
             string keep = _current == null ? "" : _current.Key();
+            if (keep.Length == 0 && !_jobWoRestoreDone && !string.IsNullOrWhiteSpace(_appSettings.LastWo))
+            {
+                keep = _appSettings.LastWo.Trim();
+                _jobWoRestoreDone = true;
+            }
             if (fromDisk) _settings = IdSettings.Load();
             _orders.Clear();
             _orders.AddRange(WorkOrderStore.ListAll(_settings, _kbRoot));
@@ -216,7 +236,18 @@ namespace TechBench
             _list.Items.Clear();
             foreach (WorkOrder wo in _orders) _list.Items.Add(wo.ListLabel());
             _list.EndUpdate();
-            if (keep.Length > 0) SelectKey(keep);
+            if (keep.Length > 0)
+            {
+                if (AppSettings.MatchWorkOrderKey(_orders, keep).Length == 0)
+                {
+                    _list.SelectedIndex = -1;
+                    _current = null;
+                    ClearFields();
+                    RaiseChanged();
+                }
+                else
+                    TrySelectKey(keep);
+            }
             else if (_orders.Count > 0) _list.SelectedIndex = 0;
             else
             {
@@ -417,6 +448,7 @@ namespace TechBench
             }
             _current = _orders[_list.SelectedIndex];
             ShowCurrent();
+            PersistJobWorkOrder();
             RaiseChanged();
         }
 
@@ -707,6 +739,42 @@ namespace TechBench
         void RaiseChanged()
         {
             if (CurrentChanged != null) CurrentChanged(_current);
+        }
+
+        void PersistJobCustomer(string customer)
+        {
+            AppSettings disk = AppSettings.Load();
+            disk.Customer = (customer ?? "").Trim();
+            disk.SaveTo(AppSettings.PathOverride ?? AppSettings.PathName());
+            _appSettings.Customer = disk.Customer;
+        }
+
+        void PersistJobWorkOrder()
+        {
+            AppSettings disk = AppSettings.Load();
+            disk.LastWo = _current == null ? "" : _current.Key();
+            disk.SaveTo(AppSettings.PathOverride ?? AppSettings.PathName());
+            _appSettings.LastWo = disk.LastWo;
+        }
+
+        public void ClearSavedJob()
+        {
+            string path = AppSettings.PathOverride ?? AppSettings.PathName();
+            AppSettings disk = AppSettings.Load();
+            disk.Customer = "";
+            disk.LastWo = "";
+            disk.SaveTo(path);
+            _appSettings.Customer = "";
+            _appSettings.LastWo = "";
+            _jobWoRestoreDone = true;
+            _filling = true;
+            _list.SelectedIndex = -1;
+            _current = null;
+            ClearFields();
+            _filling = false;
+            RaiseChanged();
+            if (JobStripCleared != null) JobStripCleared();
+            Status("Cleared saved job (customer and work order).");
         }
     }
 }
