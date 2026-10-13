@@ -34,6 +34,7 @@ namespace J1939Reader
         Control[] _innerPages;
         Font _innerNorm, _innerBold;
         int _innerPage;
+        bool _adapterPrefsMatched;
         TrendChart _chart;
         Button _btnKbLookup;
 
@@ -82,6 +83,18 @@ namespace J1939Reader
         public string LiveReportText()
         {
             return JobReport.Text(BuildReportData());
+        }
+
+        /// <summary>True when startup restored prefs because the saved adapter id is still installed.</summary>
+        public bool AdapterPrefsMatched
+        {
+            get { return _adapterPrefsMatched; }
+        }
+
+        public string CurrentAdapterId()
+        {
+            Rp1210Api api = SelectedAdapter();
+            return api == null ? "" : api.Id;
         }
 
         public Inline7Control()
@@ -144,6 +157,8 @@ namespace J1939Reader
                 _bus.Dispose();
                 _tip.Dispose();
             };
+
+            ApplyAdapterPrefsOnStartup();
         }
 
         // ---------- layout helpers ----------
@@ -168,6 +183,7 @@ namespace J1939Reader
             if (i == 3 && _chart != null) _chart.SetData(_bus.TrendCopy());
             if (i == 4) RefreshTimeline();
             if (i == 5) RefreshHistory(false);
+            PersistAdapterPrefs(i);
         }
 
         static Button Btn(string text, EventHandler onClick)
@@ -246,7 +262,7 @@ namespace J1939Reader
             };
             foreach (Rp1210Api a in _adapters) _cboAdapter.Items.Add(a);
             if (_adapters.Count == 0) _cboAdapter.Items.Add("(no RP1210 adapter installed)");
-            _cboAdapter.SelectedIndex = 0;
+            _cboAdapter.SelectedIndexChanged += delegate { PersistAdapterPrefs(null); };
             _tip.SetToolTip(_cboAdapter,
                 "RP1210 adapters this PC has installed, read from RP121032.INI. Cummins INLINE 7 is listed first when present.");
             connect.Controls.Add(_cboAdapter);
@@ -710,6 +726,52 @@ namespace J1939Reader
         Rp1210Api SelectedAdapter()
         {
             return _cboAdapter == null ? null : _cboAdapter.SelectedItem as Rp1210Api;
+        }
+
+        void ApplyAdapterPrefsOnStartup()
+        {
+            if (_cboAdapter == null) return;
+            AdapterPrefsData prefs = AdapterPrefs.Load();
+            _adapterPrefsMatched = false;
+            Rp1210Api pick = null;
+            if (prefs.AdapterId.Length > 0)
+            {
+                foreach (Rp1210Api a in _adapters)
+                {
+                    if (string.Equals(a.Id, prefs.AdapterId, StringComparison.Ordinal))
+                    {
+                        pick = a;
+                        _adapterPrefsMatched = true;
+                        break;
+                    }
+                }
+            }
+            if (pick == null)
+            {
+                pick = Rp1210Api.Preferred(_adapters);
+                if (pick == null && _adapters.Count > 0) pick = _adapters[0];
+            }
+            if (pick != null)
+            {
+                for (int i = 0; i < _cboAdapter.Items.Count; i++)
+                {
+                    if (_cboAdapter.Items[i] as Rp1210Api == pick)
+                    {
+                        _cboAdapter.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            else if (_cboAdapter.Items.Count > 0) _cboAdapter.SelectedIndex = 0;
+
+            if (_adapterPrefsMatched)
+                ShowInner(AdapterPrefs.ClampInner(prefs.InnerPage));
+        }
+
+        void PersistAdapterPrefs(int? innerPage)
+        {
+            if (_cboAdapter == null) return;
+            AdapterPrefs.Merge(CurrentAdapterId(), null, innerPage);
         }
 
         /// <summary>
