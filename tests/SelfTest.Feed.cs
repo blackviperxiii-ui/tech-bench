@@ -153,6 +153,7 @@ static partial class SelfTest
             updaterSrc.IndexOf("Host latest.json on a public HTTPS URL", StringComparison.Ordinal) < 0
             && updaterSrc.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0, "old copy");
 
+        ShopShareFeedTests();
         HttpFeedTests();
         UpdaterHardeningTests();
         try { Directory.Delete(dir, true); } catch { }
@@ -183,6 +184,73 @@ static partial class SelfTest
         return "{\"version\":\"" + version
             + "\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"url\":\""
             + url + "\"}";
+    }
+
+    static string ManifestJson(string version, string url, string sha256)
+    {
+        return "{\"version\":\"" + version + "\",\"sha256\":\"" + sha256 + "\",\"url\":\"" + url + "\"}";
+    }
+
+    static void ShopShareFeedTests()
+    {
+        string prevExe = Updater.ExeDirOverride;
+        string cfgDir = Path.Combine(Path.GetTempPath(), "tb-feed-cfg-" + Guid.NewGuid().ToString("N"));
+        string share = Path.Combine(Path.GetTempPath(), "tb-feed-share-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(cfgDir);
+        Directory.CreateDirectory(share);
+        Updater.ExeDirOverride = cfgDir;
+        try
+        {
+            File.WriteAllText(Path.Combine(cfgDir, "update-feed-path.txt"), share);
+            string manifestUrl = Updater.ShopShareManifestUrl();
+            Check("shop share manifest url is a file uri",
+                manifestUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase), manifestUrl);
+            Eq("ManifestUrl uses shop share", Updater.ManifestUrl(null), manifestUrl);
+
+            File.WriteAllText(Path.Combine(cfgDir, "update-url.txt"), "file:///Z:/override/latest.json");
+            Check("update-url overrides shop share",
+                Updater.ManifestUrl(null) == "file:///Z:/override/latest.json", Updater.ManifestUrl(null));
+            File.Delete(Path.Combine(cfgDir, "update-url.txt"));
+
+            byte[] payload = Encoding.UTF8.GetBytes("shop-share-techbench-payload");
+            string sha = Updater.Sha256Bytes(payload);
+            string exePath = Path.Combine(share, "TechBench.exe");
+            File.WriteAllBytes(exePath, payload);
+            string exeUrl = new Uri(exePath).AbsoluteUri;
+            File.WriteAllText(Path.Combine(share, "latest.json"),
+                ManifestJson("9.9.9", exeUrl, sha));
+
+            UpdateCheck offer = Updater.Check(manifestUrl);
+            Check("verified shop share offers newer build", Updater.IsAvailable(offer), Updater.StatusText(offer));
+            Check("verified shop share is not called current",
+                Updater.StatusText(offer).IndexOf("is current", StringComparison.Ordinal) < 0,
+                Updater.StatusText(offer));
+
+            File.WriteAllText(Path.Combine(share, "latest.json"),
+                ManifestJson("9.9.9", exeUrl, new string('a', 64)));
+            UpdateCheck badHash = Updater.Check(manifestUrl);
+            Check("hash mismatch is not available", !Updater.IsAvailable(badHash), Updater.StatusText(badHash));
+            Check("hash mismatch is not current", !Updater.IsCurrent(badHash), Updater.StatusText(badHash));
+            Check("hash mismatch says could not check",
+                Updater.StatusText(badHash).IndexOf("Couldn't check", StringComparison.Ordinal) >= 0
+                && Updater.StatusText(badHash).IndexOf("is current", StringComparison.Ordinal) < 0,
+                Updater.StatusText(badHash));
+
+            File.Delete(Path.Combine(share, "latest.json"));
+            UpdateCheck missing = Updater.Check(manifestUrl);
+            Check("unreachable shop share is not current", !Updater.IsCurrent(missing), Updater.StatusText(missing));
+            Check("unreachable shop share is not available", !Updater.IsAvailable(missing), Updater.StatusText(missing));
+            Check("unreachable shop share says could not check",
+                Updater.StatusText(missing).IndexOf("Couldn't check", StringComparison.Ordinal) >= 0
+                && Updater.StatusText(missing).IndexOf("is current", StringComparison.Ordinal) < 0,
+                Updater.StatusText(missing));
+        }
+        finally
+        {
+            Updater.ExeDirOverride = prevExe;
+            try { Directory.Delete(cfgDir, true); } catch { }
+            try { Directory.Delete(share, true); } catch { }
+        }
     }
 
     static void HttpFeedTests()
