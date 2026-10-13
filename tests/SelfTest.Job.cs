@@ -393,6 +393,13 @@ static partial class SelfTest
                 woSrc.IndexOf("Clear job", StringComparison.Ordinal) >= 0, "WorkOrderControl");
             Check("restore waits for list load",
                 woSrc.IndexOf("MatchWorkOrderKey(_orders", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+
+            string shellSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "ShellForm.cs"));
+            Check("shell hooks job strip cleared",
+                shellSrc.IndexOf("JobStripCleared", StringComparison.Ordinal) >= 0, "ShellForm");
+            Check("shell restores saved job customer",
+                shellSrc.IndexOf("SavedJobCustomer", StringComparison.Ordinal) >= 0
+                && shellSrc.IndexOf("_settings.Customer", StringComparison.Ordinal) >= 0, "ShellForm");
         }
         finally
         {
