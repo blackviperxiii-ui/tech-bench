@@ -40,6 +40,57 @@ static partial class SelfTest
         Check("Describe mentions the DLL", api.Describe().Contains("CMNSI7.DLL"), api.Describe());
         Check("Preferred on empty list is null", Rp1210Api.Preferred(new List<Rp1210Api>()) == null, "not null");
         Check("Installed() does not throw off Windows", Rp1210Api.Installed() != null, "threw or null");
+
+        AdapterPrefsTests();
+    }
+
+    static void AdapterPrefsTests()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "tb-adapter-prefs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string prev = AdapterPrefs.FolderOverride;
+        AdapterPrefs.FolderOverride = dir;
+        try
+        {
+            Eq("default shell page", AdapterPrefs.ClampShell(-3), 0);
+            Eq("default inner page", AdapterPrefs.ClampInner(99), 6);
+            Check("fresh load is empty", AdapterPrefs.Load().AdapterId == "", "had id");
+
+            var data = new AdapterPrefsData { AdapterId = "CMNSI7", ShellPage = 2, InnerPage = 4 };
+            AdapterPrefs.Save(data);
+            string path = AdapterPrefs.PathName();
+            Check("prefs file name is version-neutral", path.EndsWith("adapter-prefs.json", StringComparison.Ordinal), path);
+
+            AdapterPrefsData round = AdapterPrefs.Load();
+            Eq("round-trip adapter id", round.AdapterId, "CMNSI7");
+            Eq("round-trip shell page", round.ShellPage, 2);
+            Eq("round-trip inner page", round.InnerPage, 4);
+
+            AdapterPrefs.Merge("OTHER", 3, 1);
+            AdapterPrefsData merged = AdapterPrefs.Load();
+            Eq("merge adapter", merged.AdapterId, "OTHER");
+            Eq("merge shell", merged.ShellPage, 3);
+            Eq("merge inner", merged.InnerPage, 1);
+
+            Check("exact adapter match", AdapterPrefs.SavedAdapterMatches("CMNSI7", "CMNSI7"), "no");
+            Check("case-sensitive adapter match", !AdapterPrefs.SavedAdapterMatches("cmnsi7", "CMNSI7"), "matched");
+            Check("empty saved id does not match", !AdapterPrefs.SavedAdapterMatches("", "CMNSI7"), "matched");
+
+            File.WriteAllText(path, "{not json");
+            Check("corrupt file loads defaults", AdapterPrefs.Load().AdapterId == "", "had id");
+
+            AdapterPrefs.Save(new AdapterPrefsData { AdapterId = "CMNSI7", ShellPage = 2, InnerPage = 4 });
+            string frozen = File.ReadAllText(path);
+            Check("prefs json has no app version stamp",
+                frozen.IndexOf(AppVersion.Number, StringComparison.Ordinal) < 0, frozen);
+            Eq("prefs reload after simulated upgrade", AdapterPrefs.LoadFrom(path).InnerPage, 4);
+        }
+        finally
+        {
+            AdapterPrefs.FolderOverride = prev;
+            try { Directory.Delete(dir, true); }
+            catch { }
+        }
     }
 
     // ---------------- names ----------------
