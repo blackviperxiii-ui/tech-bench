@@ -23,6 +23,7 @@ rem Source list: sources\core.rsp and sources\app.rsp. Add new files there, not 
   /resource:kb\data\usb-manuals.json,TechBench.BundledKb.data.usb-manuals.json ^
   /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
   /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
+  /resource:assets\cheatsheet.rtf,TechBench.assets.cheatsheet.rtf ^
   /out:TechBench.exe ^
   @sources\core.rsp @sources\app.rsp
 if errorlevel 1 exit /b 1

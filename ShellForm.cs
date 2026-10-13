@@ -44,6 +44,7 @@ namespace TechBench
         ShopSyncResult _sync;
         bool _syncing;
         bool _filling;
+        CheatSheetForm _cheatSheet;
 
         public ShellForm(KbIndex kb)
         {
@@ -259,6 +260,11 @@ namespace TechBench
                     AddOrEditCode();
                     e.Handled = true;
                 }
+                else if (e.KeyCode == Keys.F1)
+                {
+                    ShowCheatSheet();
+                    e.Handled = true;
+                }
             };
 
             _watchDebounce.Interval = 900;
@@ -400,6 +406,23 @@ namespace TechBench
             _settings.Width = r.Width;
             _settings.Height = r.Height;
             _settings.Save();
+        }
+
+        void ShowCheatSheet()
+        {
+            if (_cheatSheet == null || _cheatSheet.IsDisposed)
+            {
+                _cheatSheet = new CheatSheetForm();
+                _cheatSheet.Owner = this;
+                _cheatSheet.FormClosed += delegate { _cheatSheet = null; };
+                _cheatSheet.Show(this);
+            }
+            if (_cheatSheet.WindowState == FormWindowState.Minimized)
+                _cheatSheet.WindowState = FormWindowState.Normal;
+            _cheatSheet.Show();
+            _cheatSheet.BringToFront();
+            _cheatSheet.Activate();
+            _cheatSheet.Focus();
         }
 
         void ShowAbout()
