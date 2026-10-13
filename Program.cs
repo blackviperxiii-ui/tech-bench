@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Windows.Forms;
 using J1939Reader;
 
@@ -88,12 +89,36 @@ namespace TechBench
 
         static void Crash(string where, Exception ex)
         {
-            string path = SessionIo.LogError(where, ex);
-            string detail = ex == null ? "(no detail)" : ex.Message;
-            MessageBox.Show(
-                "Tech Bench hit an unexpected error (" + where + "):\n\n" + detail +
-                (path == null ? "" : "\n\nDetails written to:\n" + path),
-                "Tech Bench", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            string path = CrashForm.WriteCrashLog(where, ex);
+            string clip = CrashForm.BuildClipboardText(where, ex, path);
+            string message =
+                "Tech Bench hit an unexpected error and needs to close.\n\n"
+                + "Details were saved on this PC only. Nothing was sent over the network."
+                + (path == null ? "" : "\n\nLog file:\n" + path);
+
+            Action show = delegate
+            {
+                using (var form = new CrashForm(message, clip))
+                    form.ShowDialog();
+            };
+
+            try
+            {
+                if (Application.MessageLoop)
+                {
+                    Form host = Form.ActiveForm;
+                    if (host != null && host.InvokeRequired)
+                        host.Invoke(show);
+                    else
+                        show();
+                }
+                else
+                    show();
+            }
+            catch
+            {
+                try { show(); } catch { }
+            }
         }
     }
 }
