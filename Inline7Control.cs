@@ -22,7 +22,8 @@ namespace J1939Reader
         readonly List<Rp1210Api> _adapters;
 
         ComboBox _cboAdapter, _cboModule, _cboChannel;
-        Button _btnConnect, _btnDisc, _btnRefresh, _btnClearPrev, _btnClearActive, _btnPostRepair, _btnPing;
+        Button _btnConnect, _btnDisc, _btnRefresh, _btnClearCodes, _btnPing;
+        ContextMenuStrip _clearCodesMenu;
         Label _rpm, _lamps, _def;
         TextBox _status, _mon, _aft;
         ListBox _lstActive, _lstPrev, _lstLive, _lstPgn, _lstSa, _lstTimeline, _lstGuidanz;
@@ -207,6 +208,23 @@ namespace J1939Reader
             return new Label { Text = text, AutoSize = true, Margin = new Padding(0, 7, 4, 0) };
         }
 
+        static Control BarSep()
+        {
+            return new Panel
+            {
+                Width = 1,
+                Height = 26,
+                BackColor = SystemColors.ControlDark,
+                Margin = new Padding(4, 2, 4, 0)
+            };
+        }
+
+        void ShowClearCodesMenu()
+        {
+            if (_clearCodesMenu == null || _btnClearCodes == null) return;
+            _clearCodesMenu.Show(_btnClearCodes, new Point(0, _btnClearCodes.Height));
+        }
+
         static TextBox HelpBox()
         {
             return new TextBox
@@ -273,16 +291,23 @@ namespace J1939Reader
             connect.Controls.Add(_btnDisc);
 
             _btnRefresh = Btn("Refresh codes", delegate { _bus.Enqueue(new BusCommand(BusCmdKind.RequestCodes)); });
-            _btnClearPrev = Btn("Clear previous", delegate { DoClearPrevious(); });
-            _btnClearActive = Btn("Reset all codes", delegate { DoResetAll(); });
-            _btnPostRepair = Btn("Clear codes after repair", delegate { DoClearAfterRepair(); });
-            _btnPostRepair.Font = new Font(_btnPostRepair.Font, FontStyle.Bold);
-            _tip.SetToolTip(_btnPostRepair,
-                "DM11 + DM3 to the engine, compressor SA 48, and any DEF/aftertreatment module; waits for each to ACK, then reads DM1/DM2 and the DEF/SCR tank message back. Not a DEF delete.");
             service.Controls.Add(_btnRefresh);
-            service.Controls.Add(_btnClearPrev);
-            service.Controls.Add(_btnClearActive);
-            service.Controls.Add(_btnPostRepair);
+            service.Controls.Add(BarSep());
+
+            _clearCodesMenu = new ContextMenuStrip();
+            var mniClearPrev = new ToolStripMenuItem("Clear previous", null, delegate { DoClearPrevious(); });
+            var mniResetAll = new ToolStripMenuItem("Reset all codes", null, delegate { DoResetAll(); });
+            var mniPostRepair = new ToolStripMenuItem("Clear codes after repair", null, delegate { DoClearAfterRepair(); });
+            mniPostRepair.Font = new Font(mniPostRepair.Font, FontStyle.Bold);
+            mniPostRepair.ToolTipText =
+                "DM11 + DM3 to the engine, compressor SA 48, and any DEF/aftertreatment module; waits for each to ACK, then reads DM1/DM2 and the DEF/SCR tank message back. Not a DEF delete.";
+            _clearCodesMenu.Items.Add(mniClearPrev);
+            _clearCodesMenu.Items.Add(mniResetAll);
+            _clearCodesMenu.Items.Add(mniPostRepair);
+            _btnClearCodes = Btn("Clear codes", delegate { ShowClearCodesMenu(); });
+            _tip.SetToolTip(_btnClearCodes,
+                "DM3/DM11 clears for the engine, compressor SA 48, and other faulted modules. Pick an action from the menu.");
+            service.Controls.Add(_btnClearCodes);
             service.Controls.Add(Btn("Save", delegate { SaveSession(); }));
             service.Controls.Add(Btn("Report", delegate { PrintReport(true); }));
             service.Controls.Add(Btn("Shot", delegate { TakeShot(); }));
@@ -784,9 +809,7 @@ namespace J1939Reader
             _btnConnect.Enabled = !on && !busy;
             _btnDisc.Enabled = on || busy;
             _btnRefresh.Enabled = idle;
-            _btnClearPrev.Enabled = idle;
-            _btnClearActive.Enabled = idle;
-            if (_btnPostRepair != null) _btnPostRepair.Enabled = idle;
+            if (_btnClearCodes != null) _btnClearCodes.Enabled = idle;
             _btnPing.Enabled = idle;
             _cboAdapter.Enabled = !on && !busy;
             _chkTsc800.Enabled = on;
@@ -845,7 +868,7 @@ namespace J1939Reader
             var r = MessageBox.Show(this,
                 "Clear PREVIOUSLY ACTIVE codes only (DM3) on the engine, the compressor controller (SA 48), and any other module reporting faults?\n\n" +
                 "Each module is asked directly and has to ACK. Active faults that are still happening will stay.",
-                "Clear previous", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                "Clear previous", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
             if (r != DialogResult.Yes) return;
             Log("Clear previous queued — runs on the bus thread, window stays live.");
             _bus.Enqueue(new BusCommand(BusCmdKind.ClearPrevious));
@@ -860,7 +883,7 @@ namespace J1939Reader
                 "There is no legal 'Red Stop off' / 'Amber off' switch — forcing the lamps off while 5246 / FMI 9 are still active would hide a no-fuel command, not diagnose it.\n\n" +
                 "Many ECMs only accept a clear with key ON, engine OFF. If a fault is still true it comes straight back; the report says which.\n\nContinue?",
                 "Reset all codes",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
             if (r != DialogResult.Yes) return;
             Log("Reset all codes queued — runs on the bus thread, window stays live.");
             _bus.Enqueue(new BusCommand(BusCmdKind.ResetAll));
@@ -875,7 +898,7 @@ namespace J1939Reader
                 "This is a code clear. It does not reset DEF dosing, disable SCR, turn sensors off, or defeat lamps. SCR inducement (5246) drops when the ECM sees the repair working; the report walks you through it.\n\n" +
                 "Best done key ON, engine OFF.\n\nContinue?",
                 "Clear codes after repair",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
             if (r != DialogResult.Yes) return;
             Log("Clear codes after repair queued — DM11/DM3 with ACK check, then re-read DM1/DM2 and DEF/SCR. Not a DEF delete.");
             _bus.Enqueue(new BusCommand(BusCmdKind.ResetAll));
