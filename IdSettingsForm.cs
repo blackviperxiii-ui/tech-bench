@@ -41,7 +41,8 @@ namespace TechBench
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             TextBox hint = UiLayout.WrapText(
                 "Copy credentials from IntelliDealer → Configuration → API Gateway. "
-                + "Until they are here, work orders are file-backed and sign-off is not posted to the DMS.");
+                + "Live ServiceToday work orders need both the gateway URL and subscription key; "
+                + "until then, work orders stay file-backed and sign-off is not posted to the DMS.");
             hint.ForeColor = Color.DimGray;
             table.SetColumnSpan(hint, 2);
             table.Controls.Add(hint, 0, 0);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Web.Script.Serialization;
 
 namespace TechBench
@@ -22,8 +23,13 @@ namespace TechBench
         public int Status;
         public string Body = "";
         public string Error = "";
+        /// <summary>Seconds from a 429 Retry-After header (tests may set directly).</summary>
+        public int RetryAfterSeconds;
 
-        public bool Ok { get { return Status >= 200 && Status < 300; } }
+        public bool Ok
+        {
+            get { return Status == 200 || Status == 201 || Status == 204; }
+        }
     }
 
     public sealed class IdCallResult
@@ -31,6 +37,7 @@ namespace TechBench
         public bool Posted;
         public string Message = "";
         public int Status;
+        public bool NeedsReSignIn;
         public readonly List<WorkOrder> WorkOrders = new List<WorkOrder>();
     }
 
@@ -98,6 +105,7 @@ namespace TechBench
             string url = CombineUrl(settings.GatewayUrl, Expand(settings.AssignedPath, settings, null));
             IdHttpResponse resp = Send(settings, "GET", url, null, null);
             result.Status = resp.Status;
+            if (resp != null && resp.Status == 401) result.NeedsReSignIn = true;
             if (!resp.Ok)
             {
                 result.Message = Fail("assigned work orders", resp);
@@ -163,6 +171,7 @@ namespace TechBench
             string url = CombineUrl(settings.GatewayUrl, Expand(settings.MultimediaPath, settings, wo));
             IdHttpResponse resp = Send(settings, "POST", url, null, filePath);
             result.Status = resp.Status;
+            if (resp != null && resp.Status == 401) result.NeedsReSignIn = true;
             if (!resp.Ok)
             {
                 result.Message = Fail("multimedia post-back", resp);
@@ -190,6 +199,7 @@ namespace TechBench
             string body = ClockBody(settings, wo, kind);
             IdHttpResponse resp = Send(settings, "POST", url, body, null);
             result.Status = resp.Status;
+            if (resp != null && resp.Status == 401) result.NeedsReSignIn = true;
             if (!resp.Ok)
             {
                 result.Message = Fail(label, resp);
@@ -216,6 +226,25 @@ namespace TechBench
 
         static IdHttpResponse Send(IdSettings settings, string method, string url, string body, string filePath)
         {
+            const int maxRateRetries = 5;
+            for (int attempt = 0; attempt <= maxRateRetries; attempt++)
+            {
+                IdHttpResponse resp = SendOnce(settings, method, url, body, filePath);
+                if (resp == null) return new IdHttpResponse();
+                if (resp.Ok || resp.Status == 401 || resp.Status == 403) return resp;
+                if (resp.Status == 429 && attempt < maxRateRetries)
+                {
+                    int waitMs = RetryAfterMs(resp);
+                    if (waitMs > 0) Thread.Sleep(waitMs);
+                    continue;
+                }
+                return resp;
+            }
+            return new IdHttpResponse { Status = 429, Error = "rate limited" };
+        }
+
+        static IdHttpResponse SendOnce(IdSettings settings, string method, string url, string body, string filePath)
+        {
             var req = new IdHttpRequest
             {
                 Method = method,
@@ -231,6 +260,13 @@ namespace TechBench
 
             if (HttpOverride != null) return HttpOverride(req);
             return RealSend(req);
+        }
+
+        static int RetryAfterMs(IdHttpResponse resp)
+        {
+            if (resp == null) return 0;
+            if (resp.RetryAfterSeconds > 0) return resp.RetryAfterSeconds * 1000;
+            return 0;
         }
 
         public static string Token(IdSettings settings)
@@ -317,6 +353,7 @@ namespace TechBench
                 if (resp != null)
                 {
                     result.Status = (int)resp.StatusCode;
+                    result.RetryAfterSeconds = ParseRetryAfterHeader(resp.Headers["Retry-After"]);
                     try
                     {
                         using (var r = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
@@ -354,8 +391,29 @@ namespace TechBench
             }
         }
 
+        static int ParseRetryAfterHeader(string header)
+        {
+            if (string.IsNullOrWhiteSpace(header)) return 0;
+            header = header.Trim();
+            int seconds;
+            if (int.TryParse(header, out seconds) && seconds >= 0) return seconds;
+            DateTime when;
+            if (DateTime.TryParse(header, out when))
+            {
+                double delta = (when.ToUniversalTime() - DateTime.UtcNow).TotalSeconds;
+                if (delta < 0) return 0;
+                if (delta > int.MaxValue) return int.MaxValue;
+                return (int)Math.Ceiling(delta);
+            }
+            return 0;
+        }
+
         static string Fail(string what, IdHttpResponse resp)
         {
+            if (resp != null && resp.Status == 401)
+                return "IntelliDealer rejected the API credentials (HTTP 401). "
+                    + "Open Shop → IntelliDealer and sign in again with a valid subscription key "
+                    + "and OAuth secret if your dealer uses client credentials.";
             string extra = "";
             if (resp == null) extra = "no response";
             else if (!string.IsNullOrEmpty(resp.Error)) extra = resp.Error;

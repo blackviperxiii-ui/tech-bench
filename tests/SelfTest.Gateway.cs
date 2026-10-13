@@ -75,6 +75,106 @@ static partial class SelfTest
         Eq("beside-only url used", onlyBeside.GatewayUrl, "https://exe.azure-api.net");
         Eq("beside-only secret ignored", onlyBeside.ClientSecret, "");
         Eq("beside-only key ignored", onlyBeside.SubscriptionKey, "");
+
+        string legacyPath = Path.Combine(IdSettings.Folder(), "legacy-plain-key.json");
+        File.WriteAllText(legacyPath,
+            "{\"GatewayUrl\":\"https://legacy.azure-api.net\",\"SubscriptionKey\":\"legacy-plain-key\"}");
+        var legacy = IdSettings.LoadFrom(legacyPath);
+        string legacyJson = File.ReadAllText(legacyPath);
+        Check("plaintext subscription key migrated off disk", legacyJson.IndexOf("legacy-plain-key") < 0, legacyJson);
+        Check("migrated file keeps DPAPI field",
+            legacyJson.IndexOf("SubscriptionKeyProtected") >= 0, legacyJson);
+        Eq("migrated key still loads", legacy.SubscriptionKey, "legacy-plain-key");
+        try { File.Delete(legacyPath); } catch { }
+
+        GatewayServiceTodayTests();
+    }
+
+    static void GatewayServiceTodayTests()
+    {
+        var prevHttp = IdGateway.HttpOverride;
+        try
+        {
+            IdGateway.ClearTokenCache();
+            var urlOnly = new IdSettings { GatewayUrl = "https://dealer.azure-api.net" };
+            Check("gateway off without subscription key", !urlOnly.GatewayConfigured(), urlOnly.GatewayUrl);
+            var oauthOnly = new IdSettings
+            {
+                GatewayUrl = "https://dealer.azure-api.net",
+                ClientId = "cid",
+                ClientSecret = "sec"
+            };
+            Check("oauth alone does not enable gateway", !oauthOnly.GatewayConfigured(), "oauth");
+
+            IdCallResult missing = IdGateway.FetchAssigned(urlOnly);
+            Check("unconfigured ServiceToday fetch", !missing.Posted, missing.Message);
+            Check("unconfigured names gateway", missing.Message.IndexOf("API Gateway") >= 0, missing.Message);
+
+            var live = new IdSettings
+            {
+                GatewayUrl = "https://dealer.azure-api.net",
+                SubscriptionKey = "test-key",
+                TechNumber = "T12",
+                AssignedPath = "/service/technicians/{tech}/workorders"
+            };
+
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                Check("ServiceToday GET only",
+                    req.Method == "GET" && req.Url.IndexOf("workorders") >= 0, req.Method + " " + req.Url);
+                Check("subscription key on ServiceToday GET",
+                    req.Headers.ContainsKey("Ocp-Apim-Subscription-Key")
+                    && req.Headers["Ocp-Apim-Subscription-Key"] == "test-key",
+                    "missing key");
+                return new IdHttpResponse
+                {
+                    Status = 201,
+                    Body = "[{\"Number\":\"ST-1\",\"Customer\":\"ServiceToday\"}]"
+                };
+            };
+            IdCallResult ok = IdGateway.FetchAssigned(live);
+            Check("ServiceToday 201 is success", ok.Posted, ok.Message);
+            Eq("ServiceToday wo count", ok.WorkOrders.Count, 1);
+            Eq("ServiceToday wo number", ok.WorkOrders[0].Number, "ST-1");
+
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                return new IdHttpResponse { Status = 401, Body = "unauthorized" };
+            };
+            IdCallResult unauthorized = IdGateway.FetchAssigned(live);
+            Check("401 not posted", !unauthorized.Posted, unauthorized.Message);
+            Check("401 prompts re-sign-in", unauthorized.NeedsReSignIn, unauthorized.Message);
+            Check("401 message mentions sign in",
+                unauthorized.Message.IndexOf("sign in", StringComparison.OrdinalIgnoreCase) >= 0,
+                unauthorized.Message);
+
+            int attempts = 0;
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                attempts++;
+                return new IdHttpResponse { Status = 403, Body = "forbidden" };
+            };
+            IdCallResult forbidden = IdGateway.FetchAssigned(live);
+            Check("403 not posted", !forbidden.Posted, forbidden.Message);
+            Eq("403 is not retried", attempts, 1);
+
+            attempts = 0;
+            IdGateway.HttpOverride = delegate(IdHttpRequest req)
+            {
+                attempts++;
+                if (attempts == 1)
+                    return new IdHttpResponse { Status = 429, RetryAfterSeconds = 0 };
+                return new IdHttpResponse { Status = 204, Body = "" };
+            };
+            IdCallResult throttled = IdGateway.FetchAssigned(live);
+            Check("429 then 204 succeeds", throttled.Posted, throttled.Message);
+            Eq("429 retried once", attempts, 2);
+        }
+        finally
+        {
+            IdGateway.HttpOverride = prevHttp;
+            IdGateway.ClearTokenCache();
+        }
     }
 
     static void TokenCacheTests(IdSettings live, WorkOrder wo)
