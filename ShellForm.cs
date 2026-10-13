@@ -206,7 +206,9 @@ namespace TechBench
             string jobCustomer = !string.IsNullOrEmpty(_settings.Customer)
                 ? _settings.Customer
                 : _orders.SavedJobCustomer;
+            _filling = true;
             if (!string.IsNullOrEmpty(jobCustomer)) _customer.Text = jobCustomer;
+            _filling = false;
             ApplyWindow(_settings);
 
             useJob.Click += delegate
