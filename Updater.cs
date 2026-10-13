@@ -56,8 +56,14 @@ namespace TechBench
             + "or your shop's configured URL if one is set. "
             + "This app never uses a GitHub token.";
 
+        public const string ShopManifestName = "latest.json";
+
+        /// <summary>Tests point this at a temp folder for update-url.txt / update-feed-path.txt.</summary>
+        public static string ExeDirOverride;
+
         public static string ExeDir()
         {
+            if (!string.IsNullOrEmpty(ExeDirOverride)) return ExeDirOverride;
             return AppDomain.CurrentDomain.BaseDirectory;
         }
 
@@ -65,20 +71,36 @@ namespace TechBench
         {
             if (settings != null && !string.IsNullOrWhiteSpace(settings.ManifestUrl))
                 return settings.ManifestUrl.Trim();
+            string fromFile = ReadBesideExeUrl("update-url.txt");
+            if (!string.IsNullOrEmpty(fromFile)) return fromFile;
+            string shop = ShopShareManifestUrl();
+            if (!string.IsNullOrEmpty(shop)) return shop;
+            return DefaultManifestUrl;
+        }
+
+        /// <summary>
+        /// UNC or drive path from update-feed-path.txt beside the exe, pointing at a folder that
+        /// holds latest.json (and usually TechBench.exe). Lines starting with # are comments.
+        /// </summary>
+        public static string ShopShareFolder()
+        {
+            return ReadBesideExePath("update-feed-path.txt");
+        }
+
+        /// <summary>file: URI to latest.json on the configured shop share, or empty when unset.</summary>
+        public static string ShopShareManifestUrl()
+        {
+            string folder = ShopShareFolder();
+            if (string.IsNullOrWhiteSpace(folder)) return "";
             try
             {
-                string cfg = Path.Combine(ExeDir(), "update-url.txt");
-                if (File.Exists(cfg))
-                {
-                    foreach (string line in File.ReadAllLines(cfg))
-                    {
-                        string t = line.Trim();
-                        if (t.Length > 0 && !t.StartsWith("#")) return t;
-                    }
-                }
+                string manifest = Path.Combine(folder.Trim(), ShopManifestName);
+                return new Uri(manifest).AbsoluteUri;
             }
-            catch { }
-            return DefaultManifestUrl;
+            catch
+            {
+                return "";
+            }
         }
 
         public static bool TryParseVersion(string text, out Version version)
@@ -121,6 +143,8 @@ namespace TechBench
             string detail = result == null || result.Error == null ? "" : result.Error.Trim();
             if (detail.Length == 0)
                 return "Update check failed.";
+            if (detail.StartsWith("Couldn't check", StringComparison.OrdinalIgnoreCase))
+                return detail;
             if (detail.StartsWith("Update check failed", StringComparison.OrdinalIgnoreCase))
                 return detail;
             return "Update check failed. " + detail;
@@ -504,6 +528,18 @@ namespace TechBench
                 if (!PayloadOriginAllowed(manifestUrl, result.Manifest.Url, out originReason))
                     throw new UpdateFeedRefusedException(originReason);
                 result.Newer = IsNewer(result.Manifest.Version, AppVersion.Number);
+                if (result.Newer)
+                {
+                    string hashWhy;
+                    if (!VerifyOfferedPayload(manifestUrl, result.Manifest, out hashWhy))
+                    {
+                        result.Manifest = null;
+                        result.Newer = false;
+                        result.Checked = false;
+                        result.Error = hashWhy;
+                        return result;
+                    }
+                }
                 result.Checked = true;
             }
             catch (Exception ex)
@@ -511,7 +547,7 @@ namespace TechBench
                 result.Manifest = null;
                 result.Newer = false;
                 result.Checked = false;
-                result.Error = FriendlyNetError(ex);
+                result.Error = FriendlyNetError(manifestUrl, ex);
             }
             return result;
         }
@@ -522,15 +558,114 @@ namespace TechBench
             return DownloadBytes(url, MaxPayloadBytes, false);
         }
 
-        static string FriendlyNetError(Exception ex)
+        static string FriendlyNetError(string manifestUrl, Exception ex)
         {
             string msg = ex == null || ex.Message == null ? "network error" : ex.Message;
+            if (ManifestFromShopShare(manifestUrl)
+                && (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is IOException))
+                return CouldNotCheckMessage("The shop update share could not be read.", msg);
             if (ex is UpdateFeedRefusedException
                 || msg.IndexOf("401", StringComparison.OrdinalIgnoreCase) >= 0
                 || msg.IndexOf("403", StringComparison.OrdinalIgnoreCase) >= 0
                 || msg.IndexOf("404", StringComparison.OrdinalIgnoreCase) >= 0)
                 return PrivateFeedMessage(msg);
             return msg;
+        }
+
+        static string CouldNotCheckMessage(string summary, string detail)
+        {
+            string head = "Couldn't check for updates.";
+            if (string.IsNullOrWhiteSpace(summary)) return head;
+            string tail = detail == null ? "" : detail.Trim();
+            if (tail.Length == 0) return head + " " + summary.Trim();
+            return head + " " + summary.Trim() + " " + tail;
+        }
+
+        static bool ManifestFromShopShare(string manifestUrl)
+        {
+            string shop = ShopShareManifestUrl();
+            return shop.Length > 0
+                && string.Equals(shop, manifestUrl ?? "", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Before offering a newer build from a shop share, the payload on disk must match latest.json.
+        /// Remote http(s) payloads are verified only when downloaded.
+        /// </summary>
+        static bool VerifyOfferedPayload(string manifestUrl, UpdateManifest manifest, out string error)
+        {
+            error = "";
+            if (manifest == null) return true;
+            string path;
+            if (!TryResolveLocalPayloadPath(manifestUrl, manifest.Url, out path))
+                return true;
+            if (!File.Exists(path))
+            {
+                error = CouldNotCheckMessage("TechBench.exe was not found on the shop share.", "");
+                return false;
+            }
+            if (!HashMatches(path, manifest.Sha256))
+            {
+                error = CouldNotCheckMessage(
+                    "TechBench.exe on the shop share did not match the hash in latest.json.", "");
+                return false;
+            }
+            return true;
+        }
+
+        static bool TryResolveLocalPayloadPath(string manifestUrl, string payloadUrl, out string path)
+        {
+            path = "";
+            if (string.IsNullOrWhiteSpace(payloadUrl)) return false;
+            Uri payload;
+            if (Uri.TryCreate(payloadUrl, UriKind.Absolute, out payload) && IsFileScheme(payload.Scheme))
+            {
+                path = payload.LocalPath;
+                return !string.IsNullOrEmpty(path);
+            }
+            if (payloadUrl.IndexOf("://", StringComparison.Ordinal) >= 0) return false;
+            Uri manifest;
+            if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest) || !IsFileScheme(manifest.Scheme))
+                return false;
+            string dir = Path.GetDirectoryName(manifest.LocalPath);
+            if (string.IsNullOrEmpty(dir)) return false;
+            path = Path.Combine(dir, payloadUrl);
+            return true;
+        }
+
+        static string ReadBesideExeUrl(string fileName)
+        {
+            string line = ReadBesideExePath(fileName);
+            if (string.IsNullOrEmpty(line)) return "";
+            if (line.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("http:", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("https:", StringComparison.OrdinalIgnoreCase))
+                return line;
+            try
+            {
+                return new Uri(line).AbsoluteUri;
+            }
+            catch
+            {
+                return line;
+            }
+        }
+
+        static string ReadBesideExePath(string fileName)
+        {
+            try
+            {
+                string cfg = Path.Combine(ExeDir(), fileName);
+                if (!File.Exists(cfg)) return "";
+                foreach (string raw in File.ReadAllLines(cfg))
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line.StartsWith("#")) continue;
+                    return line;
+                }
+            }
+            catch { }
+            return "";
         }
 
         static string PrivateFeedMessage(string detail)
