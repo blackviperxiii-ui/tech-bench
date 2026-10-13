@@ -526,7 +526,11 @@ namespace TechBench
                 }
                 string originReason;
                 if (!PayloadOriginAllowed(manifestUrl, result.Manifest.Url, out originReason))
-                    throw new UpdateFeedRefusedException(originReason);
+                {
+                    string localPayload;
+                    if (!TryResolveLocalPayloadPath(manifestUrl, result.Manifest.Url, out localPayload))
+                        throw new UpdateFeedRefusedException(originReason);
+                }
                 result.Newer = IsNewer(result.Manifest.Version, AppVersion.Number);
                 if (result.Newer)
                 {
