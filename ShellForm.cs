@@ -186,6 +186,11 @@ namespace TechBench
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
                 delegate(int i) { ShowPage(i); });
             ShowPage(0);
+            if (_inline.AdapterPrefsMatched)
+            {
+                int shell = AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage);
+                if (shell != 0) ShowPage(shell);
+            }
 
             // Last-added docks nearest the edge: menu, switches, identity, then actions.
             Controls.Add(_host);
@@ -343,6 +348,8 @@ namespace TechBench
             _host.Controls.Add(page);
             _host.ResumeLayout(true);
             PaintNav();
+            if (_inline != null)
+                AdapterPrefs.Merge(_inline.CurrentAdapterId(), i, null);
         }
 
         static Panel ShellPage(string name, Control body)
