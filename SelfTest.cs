@@ -1929,10 +1929,10 @@ ProtocolDescription=ISO 15765
         int missingTest = 0;
         if (Directory.Exists(testsDir))
         {
-            string[] testCs = Directory.GetFiles(testsDir, "*.cs");
-            for (int i = 0; i < testCs.Length; i++)
+            string[] testsDirCs = Directory.GetFiles(testsDir, "*.cs");
+            for (int i = 0; i < testsDirCs.Length; i++)
             {
-                string rel = "tests\\" + Path.GetFileName(testCs[i]);
+                string rel = "tests\\" + Path.GetFileName(testsDirCs[i]);
                 if (!selfSeen.ContainsKey(rel))
                 {
                     Check("tests source is listed in selftest.rsp (" + rel + ")", false, "missing");
