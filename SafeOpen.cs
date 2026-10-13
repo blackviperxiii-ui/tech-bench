@@ -2,6 +2,8 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace TechBench
 {
@@ -57,6 +59,11 @@ namespace TechBench
             if (!PathExists(path))
             {
                 error = MissingFileMessage(path);
+                return false;
+            }
+            if (!HasExecutableAssociation(path))
+            {
+                error = NoAssociationMessage(path);
                 return false;
             }
             try
@@ -134,6 +141,32 @@ namespace TechBench
         {
             try { return File.Exists(path); }
             catch { return false; }
+        }
+
+        const int AssocStrExecutable = 2;
+
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern int AssocQueryString(
+            int flags,
+            int str,
+            string pszAssoc,
+            string pszExtra,
+            StringBuilder pszOut,
+            ref uint pcchOut);
+
+        static bool HasExecutableAssociation(string path)
+        {
+            string ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) return false;
+            ext = ext.TrimEnd(' ', '.');
+            if (ext.Length == 0 || ext[0] != '.') return false;
+            uint length = 0;
+            int hr = AssocQueryString(0, AssocStrExecutable, ext, null, null, ref length);
+            if (hr == 1) return false;
+            if (hr != 0) return false;
+            var sb = new StringBuilder((int)length + 1);
+            hr = AssocQueryString(0, AssocStrExecutable, ext, null, sb, ref length);
+            return hr == 0 && sb.Length > 0;
         }
 
         static void SplitStream(string path, out string file, out string stream)
