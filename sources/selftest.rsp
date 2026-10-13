@@ -5,3 +5,4 @@ tests\SelfTest.Adapter.cs
 tests\SelfTest.Job.cs
 tests\SelfTest.Open.cs
 tests\SelfTest.Gateway.cs
+tests\SelfTest.Crash.cs

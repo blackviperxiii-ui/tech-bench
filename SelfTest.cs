@@ -175,6 +175,10 @@ static partial class SelfTest
         WorkOrderTests();
 
         Console.WriteLine();
+        Console.WriteLine("== crash log (TB1d) ==");
+        CrashFormTests();
+
+        Console.WriteLine();
         Console.WriteLine("== data safety ==");
         DataSafetyTests();
 
@@ -2008,11 +2012,11 @@ ProtocolDescription=ISO 15765
         for (int i = 0; i < testCs.Count; i++)
         {
             if (AllowedTestInline(testCs[i])) continue;
-            Check("test.bat inline .cs is only SelfTest or LayoutAudit", false, testCs[i]);
+            Check("test.bat inline .cs is only SelfTest, CrashForm, or LayoutAudit", false, testCs[i]);
             stray++;
         }
         if (stray == 0)
-            Check("test.bat lists no root .cs inline except SelfTest.cs and tools\\LayoutAudit.cs", true, "");
+            Check("test.bat lists no root .cs inline except SelfTest.cs, CrashForm.cs, and tools\\LayoutAudit.cs", true, "");
 
         Check("build.bat has no *.cs wildcard",
             build.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
@@ -2066,6 +2070,7 @@ ProtocolDescription=ISO 15765
     static bool AllowedTestInline(string token)
     {
         return string.Equals(token, "SelfTest.cs", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(token, "CrashForm.cs", StringComparison.OrdinalIgnoreCase)
             || string.Equals(token, @"tools\LayoutAudit.cs", StringComparison.OrdinalIgnoreCase);
     }
 
