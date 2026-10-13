@@ -10,7 +10,7 @@ using System.Web.Script.Serialization;
 using J1939Reader;
 using TechBench;
 
-partial static class SelfTest
+static partial class SelfTest
 {
     static void UpdaterTests()
     {

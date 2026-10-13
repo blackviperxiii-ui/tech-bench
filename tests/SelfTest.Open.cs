@@ -10,7 +10,7 @@ using System.Web.Script.Serialization;
 using J1939Reader;
 using TechBench;
 
-partial static class SelfTest
+static partial class SelfTest
 {
     static void SubscriptionKeyMaskTests()
     {
@@ -127,6 +127,15 @@ partial static class SelfTest
         int end = xml.IndexOf('>', i);
         if (end < 0) return "";
         string tag = xml.Substring(i, end - i);
+        const string key = "version=\"";
+        int v = tag.IndexOf(key, StringComparison.Ordinal);
+        if (v < 0) return "";
+        v += key.Length;
+        int q = tag.IndexOf('"', v);
+        if (q < 0) return "";
+        return tag.Substring(v, q - v);
+    }
+
     static void PacketSidecarSyncTests()
     {
         string prevFolder = IdSettings.FolderOverride;
