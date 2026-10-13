@@ -91,10 +91,9 @@ namespace TechBench
                 if (File.Exists(path))
                 {
                     AppSettings onDisk = LoadFrom(path);
-                    if (string.IsNullOrEmpty(Customer) && !string.IsNullOrEmpty(onDisk.Customer))
-                        Customer = onDisk.Customer;
-                    if (string.IsNullOrEmpty(LastWo) && !string.IsNullOrEmpty(onDisk.LastWo))
-                        LastWo = onDisk.LastWo;
+                    // Job-strip fields are written via SaveTo from WorkOrderControl; never overwrite from shell snapshot.
+                    Customer = onDisk.Customer ?? "";
+                    LastWo = onDisk.LastWo ?? "";
                 }
             }
             catch { }
