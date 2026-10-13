@@ -203,6 +203,10 @@ namespace TechBench
 
             if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
             if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
+            string jobCustomer = !string.IsNullOrEmpty(_settings.Customer)
+                ? _settings.Customer
+                : _orders.SavedJobCustomer;
+            if (!string.IsNullOrEmpty(jobCustomer)) _customer.Text = jobCustomer;
             ApplyWindow(_settings);
 
             useJob.Click += delegate
@@ -245,6 +249,12 @@ namespace TechBench
             _inline.AfterReport = delegate(string text) { _orders.AttachReportText(text); };
             _orders.LiveReportText = delegate { return _inline.LiveReportText(); };
             _orders.CurrentChanged = delegate(WorkOrder wo) { ApplyWo(wo); };
+            _orders.JobStripCleared = delegate
+            {
+                _filling = true;
+                _customer.Text = "";
+                _filling = false;
+            };
 
             KeyPreview = true;
             KeyDown += delegate(object s, KeyEventArgs e)
@@ -399,6 +409,9 @@ namespace TechBench
         {
             _settings.Model = _model.Text.Trim();
             _settings.Serial = _serial.Text.Trim();
+            // Job customer and last WO are owned by WorkOrderControl; window save must not clobber them.
+            _settings.Customer = "";
+            _settings.LastWo = "";
             _settings.Maximized = WindowState == FormWindowState.Maximized;
             Rectangle r = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
             _settings.X = r.X;
