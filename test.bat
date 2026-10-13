@@ -5,7 +5,7 @@ rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way s
 rem work-order packets / IntelliDealer gateway (no live DMS),
 rem and shop-laptop WinForms layout (primary buttons stay on screen).
 rem Needs no adapter. Sample KB data is built in %TEMP%. The shipped field database under kb\ is loaded as-is.
-rem Source list: sources\core.rsp (SelfTest) and sources\core.rsp plus sources\app.rsp (LayoutAudit).
+rem Source list: sources\core.rsp + sources\selftest.rsp (SelfTest) and sources\core.rsp plus sources\app.rsp (LayoutAudit).
 rem Add new source files to those response files. This script only names SelfTest.cs and tools\LayoutAudit.cs.
 rem Response files are relative to the current directory, so test from the repo root.
 cd /d "%~dp0."
@@ -27,7 +27,7 @@ if not exist "%CSC%" (
   /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
   /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
   /out:SelfTest.exe ^
-  SelfTest.cs @sources\core.rsp
+  SelfTest.cs @sources\core.rsp @sources\selftest.rsp
 if errorlevel 1 exit /b 1
 SelfTest.exe
 if errorlevel 1 exit /b 1

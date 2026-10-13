@@ -1,5 +1,5 @@
 # This is the only source list (with sources\app.rsp).
-# build.bat, test.bat SelfTest (core) and LayoutAudit (core+app) read it.
+# build.bat and LayoutAudit read this; SelfTest reads core + sources\selftest.rsp.
 # Add new files here. One file name per line, relative to the repo root.
 J1939Decode.cs
 Names.cs
@@ -26,3 +26,5 @@ WorkOrder.cs
 WorkOrderStore.cs
 IdSettings.cs
 IdGateway.cs
+AdapterPrefs.cs
+SafeOpen.cs
