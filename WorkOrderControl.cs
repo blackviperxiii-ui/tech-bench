@@ -238,13 +238,15 @@ namespace TechBench
             _list.EndUpdate();
             if (keep.Length > 0)
             {
-                if (!TrySelectKey(keep))
+                if (AppSettings.MatchWorkOrderKey(_orders, keep).Length == 0)
                 {
                     _list.SelectedIndex = -1;
                     _current = null;
                     ClearFields();
                     RaiseChanged();
                 }
+                else
+                    TrySelectKey(keep);
             }
             else if (_orders.Count > 0) _list.SelectedIndex = 0;
             else

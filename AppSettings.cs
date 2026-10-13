@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Web.Script.Serialization;
 
@@ -41,6 +42,20 @@ namespace TechBench
         public static string PathName(string folder)
         {
             return Path.Combine(folder, "settings.json");
+        }
+
+        /// <summary>Match a saved work-order key against a loaded list; empty if absent.</summary>
+        public static string MatchWorkOrderKey(IList<WorkOrder> orders, string key)
+        {
+            if (orders == null || string.IsNullOrWhiteSpace(key)) return "";
+            string want = key.Trim();
+            for (int i = 0; i < orders.Count; i++)
+            {
+                if (orders[i] == null) continue;
+                if (string.Equals(orders[i].Key(), want, StringComparison.OrdinalIgnoreCase))
+                    return orders[i].Key();
+            }
+            return "";
         }
 
         public static AppSettings Load()
