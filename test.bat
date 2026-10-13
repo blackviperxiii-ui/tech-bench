@@ -19,6 +19,7 @@ if not exist "%CSC%" (
   exit /b 1
 )
 "%CSC%" /nologo /platform:x86 /target:exe ^
+  /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Security.dll" ^
   /resource:kb\data\kb.json,TechBench.BundledKb.data.kb.json ^
@@ -27,7 +28,7 @@ if not exist "%CSC%" (
   /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
   /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
   /out:SelfTest.exe ^
-  SelfTest.cs @sources\core.rsp @sources\selftest.rsp
+  SelfTest.cs CrashForm.cs @sources\core.rsp @sources\selftest.rsp
 if errorlevel 1 exit /b 1
 SelfTest.exe
 if errorlevel 1 exit /b 1
