@@ -324,6 +324,7 @@ static partial class SelfTest
             TokenCacheTests(live, wo);
             WorkOrderMergeTests(s, kb);
             WorkOrderBakRecoveryTests(s, kb);
+            JobStripSettingsTests(s, kb, root);
         }
         finally
         {
@@ -335,6 +336,109 @@ static partial class SelfTest
             IdGateway.HttpOverride = prevHttp;
             IdGateway.ClearTokenCache();
             try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    static void JobStripSettingsTests(IdSettings s, string kb, string root)
+    {
+        string prevPath = AppSettings.PathOverride;
+        string settingsPath = Path.Combine(root, "settings.json");
+        AppSettings.PathOverride = settingsPath;
+        try
+        {
+            var prefs = new AppSettings
+            {
+                Model = "HP450",
+                Serial = "999",
+                Customer = "Strip Customer",
+                LastWo = "44551-01"
+            };
+            prefs.SaveTo(settingsPath);
+            var roundTrip = AppSettings.LoadFrom(settingsPath);
+            Eq("job settings customer", roundTrip.Customer, "Strip Customer");
+            Eq("job settings last wo", roundTrip.LastWo, "44551-01");
+
+            File.WriteAllText(settingsPath, "{\"Model\":\"HP450\",\"Serial\":\"999\"}");
+            var legacy = AppSettings.LoadFrom(settingsPath);
+            Eq("legacy job customer empty", legacy.Customer, "");
+            Eq("legacy last wo empty", legacy.LastWo, "");
+
+            File.WriteAllText(settingsPath,
+                "{\"Model\":\"HP450\",\"Serial\":\"999\",\"Customer\":\"KeepMe\",\"LastWo\":\"44551-01\"}");
+            var windowOnly = AppSettings.LoadFrom(settingsPath);
+            windowOnly.Customer = "";
+            windowOnly.LastWo = "";
+            windowOnly.Save();
+            var merged = AppSettings.LoadFrom(settingsPath);
+            Eq("shell save keeps job customer", merged.Customer, "KeepMe");
+            Eq("shell save keeps last wo", merged.LastWo, "44551-01");
+
+            AppSettings.PathOverride = settingsPath;
+            File.WriteAllText(settingsPath,
+                "{\"Model\":\"HP450\",\"Serial\":\"999\",\"Customer\":\"Acme\",\"LastWo\":\"44551-01\"}");
+
+            WorkOrderControl restored = null;
+            WorkOrderControl missing = null;
+            Exception restoreEx = null;
+            Exception missingEx = null;
+            var t = new Thread(delegate()
+            {
+                try
+                {
+                    restored = new WorkOrderControl(kb);
+                }
+                catch (Exception ex) { restoreEx = ex; }
+            });
+            t.SetApartmentState(ApartmentState.STA);
+            t.Start();
+            t.Join(30000);
+            Check("restore control constructs", restoreEx == null && restored != null,
+                restoreEx == null ? "null control" : restoreEx.Message);
+            if (restored != null)
+            {
+                Eq("restore picks saved wo", restored.Current == null ? "" : restored.Current.Key(), "44551-01");
+                Eq("saved job customer exposed", restored.SavedJobCustomer, "Acme");
+            }
+
+            File.WriteAllText(settingsPath,
+                "{\"Model\":\"HP450\",\"Serial\":\"999\",\"Customer\":\"Acme\",\"LastWo\":\"gone-99\"}");
+            var t2 = new Thread(delegate()
+            {
+                try
+                {
+                    missing = new WorkOrderControl(kb);
+                }
+                catch (Exception ex) { missingEx = ex; }
+            });
+            t2.SetApartmentState(ApartmentState.STA);
+            t2.Start();
+            t2.Join(30000);
+            Check("missing wo control constructs", missingEx == null && missing != null,
+                missingEx == null ? "null control" : missingEx.Message);
+            if (missing != null)
+                Check("missing wo leaves selection empty", missing.Current == null, "had current");
+
+            var wipe = new AppSettings { Customer = "X", LastWo = "44551-01" };
+            wipe.SaveTo(settingsPath);
+            AppSettings.PathOverride = settingsPath;
+            WorkOrderControl cleared = null;
+            var t3 = new Thread(delegate()
+            {
+                cleared = new WorkOrderControl(kb);
+                cleared.ClearSavedJob();
+            });
+            t3.SetApartmentState(ApartmentState.STA);
+            t3.Start();
+            t3.Join(30000);
+            var afterClear = AppSettings.LoadFrom(settingsPath);
+            Eq("clear job wipes customer", afterClear.Customer, "");
+            Eq("clear job wipes last wo", afterClear.LastWo, "");
+            if (cleared != null)
+                Check("clear job empties current wo", cleared.Current == null, "still selected");
+        }
+        finally
+        {
+            AppSettings.PathOverride = prevPath;
         }
     }
 
