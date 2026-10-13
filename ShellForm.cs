@@ -185,11 +185,11 @@ namespace TechBench
             _nav = UiLayout.SwitchBar(
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
                 delegate(int i) { ShowPage(i); });
-            ShowPage(0);
+            ShowPage(0, false);
             if (_inline.AdapterPrefsMatched)
             {
                 int shell = AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage);
-                if (shell != 0) ShowPage(shell);
+                if (shell != 0) ShowPage(shell, false);
             }
 
             // Last-added docks nearest the edge: menu, switches, identity, then actions.
@@ -335,7 +335,7 @@ namespace TechBench
             finally { _chromeBusy = false; }
         }
 
-        void ShowPage(int i)
+        void ShowPage(int i, bool persistShellPage = true)
         {
             if (_pages == null || i < 0 || i >= _pages.Length) return;
             _page = i;
@@ -348,7 +348,7 @@ namespace TechBench
             _host.Controls.Add(page);
             _host.ResumeLayout(true);
             PaintNav();
-            if (_inline != null)
+            if (persistShellPage && _inline != null)
                 AdapterPrefs.Merge(_inline.CurrentAdapterId(), i, null);
         }
 

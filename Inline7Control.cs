@@ -35,6 +35,7 @@ namespace J1939Reader
         Font _innerNorm, _innerBold;
         int _innerPage;
         bool _adapterPrefsMatched;
+        bool _applyingAdapterPrefs;
         TrendChart _chart;
         Button _btnKbLookup;
 
@@ -731,46 +732,51 @@ namespace J1939Reader
         void ApplyAdapterPrefsOnStartup()
         {
             if (_cboAdapter == null) return;
-            AdapterPrefsData prefs = AdapterPrefs.Load();
-            _adapterPrefsMatched = false;
-            Rp1210Api pick = null;
-            if (prefs.AdapterId.Length > 0)
+            _applyingAdapterPrefs = true;
+            try
             {
-                foreach (Rp1210Api a in _adapters)
+                AdapterPrefsData prefs = AdapterPrefs.Load();
+                _adapterPrefsMatched = false;
+                Rp1210Api pick = null;
+                if (prefs.AdapterId.Length > 0)
                 {
-                    if (string.Equals(a.Id, prefs.AdapterId, StringComparison.Ordinal))
+                    foreach (Rp1210Api a in _adapters)
                     {
-                        pick = a;
-                        _adapterPrefsMatched = true;
-                        break;
+                        if (string.Equals(a.Id, prefs.AdapterId, StringComparison.Ordinal))
+                        {
+                            pick = a;
+                            _adapterPrefsMatched = true;
+                            break;
+                        }
                     }
                 }
-            }
-            if (pick == null)
-            {
-                pick = Rp1210Api.Preferred(_adapters);
-                if (pick == null && _adapters.Count > 0) pick = _adapters[0];
-            }
-            if (pick != null)
-            {
-                for (int i = 0; i < _cboAdapter.Items.Count; i++)
+                if (pick == null)
                 {
-                    if (_cboAdapter.Items[i] as Rp1210Api == pick)
+                    pick = Rp1210Api.Preferred(_adapters);
+                    if (pick == null && _adapters.Count > 0) pick = _adapters[0];
+                }
+                if (pick != null)
+                {
+                    for (int i = 0; i < _cboAdapter.Items.Count; i++)
                     {
-                        _cboAdapter.SelectedIndex = i;
-                        break;
+                        if (_cboAdapter.Items[i] as Rp1210Api == pick)
+                        {
+                            _cboAdapter.SelectedIndex = i;
+                            break;
+                        }
                     }
                 }
-            }
-            else if (_cboAdapter.Items.Count > 0) _cboAdapter.SelectedIndex = 0;
+                else if (_cboAdapter.Items.Count > 0) _cboAdapter.SelectedIndex = 0;
 
-            if (_adapterPrefsMatched)
-                ShowInner(AdapterPrefs.ClampInner(prefs.InnerPage));
+                if (_adapterPrefsMatched)
+                    ShowInner(AdapterPrefs.ClampInner(prefs.InnerPage));
+            }
+            finally { _applyingAdapterPrefs = false; }
         }
 
         void PersistAdapterPrefs(int? innerPage)
         {
-            if (_cboAdapter == null) return;
+            if (_cboAdapter == null || _applyingAdapterPrefs) return;
             AdapterPrefs.Merge(CurrentAdapterId(), null, innerPage);
         }
 
