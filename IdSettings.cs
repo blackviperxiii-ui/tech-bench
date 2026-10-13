@@ -79,7 +79,9 @@ namespace TechBench
                 var ser = new JavaScriptSerializer();
                 var s = ser.Deserialize<IdSettings>(File.ReadAllText(path));
                 if (s == null) return new IdSettings();
-                FinishLoad(s, StoresSecrets(path));
+                bool secrets = StoresSecrets(path);
+                FinishLoad(s, secrets);
+                if (secrets) MigratePlainSubscriptionKey(s, path);
                 return s;
             }
             catch
@@ -263,6 +265,36 @@ namespace TechBench
             if (!string.IsNullOrEmpty(decKey)) s.SubscriptionKey = decKey;
         }
 
+        /// <summary>Legacy id-settings.json may still hold a plaintext subscription key; move it to DPAPI once.</summary>
+        static void MigratePlainSubscriptionKey(IdSettings s, string path)
+        {
+            if (s == null || string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+            if (!JsonHasPlainSubscriptionKey(path)) return;
+            if (string.IsNullOrWhiteSpace(s.SubscriptionKey)) return;
+            try
+            {
+                s.SaveTo(path);
+            }
+            catch { }
+        }
+
+        static bool JsonHasPlainSubscriptionKey(string path)
+        {
+            try
+            {
+                string raw = File.ReadAllText(path);
+                var ser = new JavaScriptSerializer();
+                var map = ser.Deserialize<System.Collections.Generic.Dictionary<string, object>>(raw);
+                if (map == null || !map.ContainsKey("SubscriptionKey") || map["SubscriptionKey"] == null)
+                    return false;
+                return !string.IsNullOrWhiteSpace(map["SubscriptionKey"].ToString());
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         static void CopyNonSecrets(IdSettings dest, IdSettings src)
         {
             if (dest == null || src == null) return;
@@ -313,8 +345,7 @@ namespace TechBench
         public bool GatewayConfigured()
         {
             return !string.IsNullOrWhiteSpace(GatewayUrl)
-                && (!string.IsNullOrWhiteSpace(SubscriptionKey)
-                    || (!string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret)));
+                && !string.IsNullOrWhiteSpace(SubscriptionKey);
         }
 
         public static string DefaultTechId()
