@@ -2048,6 +2048,8 @@ ProtocolDescription=ISO 15765
             string sh = File.ReadAllText(linuxCheck);
             Check("linux-compile-check uses mcs",
                 sh.IndexOf("mcs", StringComparison.Ordinal) >= 0, "mcs");
+            Check("linux-compile-check locks C# 5 like Framework csc",
+                sh.IndexOf("-langversion:5", StringComparison.Ordinal) >= 0, "langversion");
             Check("linux-compile-check compiles SelfTest sources",
                 sh.IndexOf("SelfTest.cs", StringComparison.Ordinal) >= 0
                 && sh.IndexOf("selftest.rsp", StringComparison.Ordinal) >= 0, "SelfTest");

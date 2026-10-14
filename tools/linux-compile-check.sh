@@ -4,6 +4,9 @@
 # that lack Windows .NET Framework 4 csc. Not a substitute for test.bat or the
 # Windows CI installer job (x86 PE, SelfTest run, LayoutAudit, Setup smoke).
 #
+# Uses -langversion:5 so Mono matches in-box Framework csc (C# 5). Without that,
+# mcs defaults to C# 7 and can green-light nameof / ?. / interpolation that CI rejects.
+#
 # Needs: Mono C# compiler (mcs). On Ubuntu: sudo apt-get install -y mono-devel
 # Usage (from anywhere): tools/linux-compile-check.sh
 # Exit 0 = SelfTest + TechBench both compiled; non-zero = compile failure or missing mcs.
@@ -71,8 +74,11 @@ KB_RES=(
   -resource:kb/data/rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json
 )
 
+# Match Windows .NET Framework 4 csc language level (C# 5).
+LANG=(-langversion:5)
+
 echo "== linux-compile-check: SelfTest (core + selftest) =="
-mcs -nologo -out:"$TMP/SelfTest.exe" \
+mcs -nologo "${LANG[@]}" -out:"$TMP/SelfTest.exe" \
   "${REFS[@]}" \
   "${KB_RES[@]}" \
   SelfTest.cs CrashForm.cs @"$TMP/core.rsp" @"$TMP/selftest.rsp"
@@ -83,7 +89,7 @@ APP_RES=(
   "${KB_RES[@]}"
   -resource:assets/cheatsheet.rtf,TechBench.assets.cheatsheet.rtf
 )
-mcs -nologo -target:winexe -out:"$TMP/TechBench.exe" \
+mcs -nologo "${LANG[@]}" -target:winexe -out:"$TMP/TechBench.exe" \
   "${REFS[@]}" \
   "${APP_RES[@]}" \
   @"$TMP/core.rsp" @"$TMP/app.rsp"
