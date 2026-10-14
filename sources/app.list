@@ -8,7 +8,7 @@ UiLayout.cs
 src\Features\WorkOrders\WorkOrderControl.cs
 IdSettingsForm.cs
 Inline7Control.cs
-TrendChart.cs
+src\Features\Adapters\TrendChart.cs
 src\Features\WorkOrders\JobReportPrint.cs
 src\Features\Search\CodeBook.cs
 src\Features\Search\FeatureBook.cs
