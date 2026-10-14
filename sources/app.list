@@ -3,7 +3,7 @@ ShellForm.cs
 SearchControl.cs
 CodeEditForm.cs
 NoteEditForm.cs
-SyncForm.cs
+src\Features\Sync\SyncForm.cs
 UiLayout.cs
 WorkOrderControl.cs
 IdSettingsForm.cs
