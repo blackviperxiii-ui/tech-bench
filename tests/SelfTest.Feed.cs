@@ -142,8 +142,11 @@ static partial class SelfTest
         string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
         Check("about does not claim a public latest.json",
             shell.IndexOf("public latest.json", StringComparison.OrdinalIgnoreCase) < 0, "public latest.json");
-        Check("about names an anonymous manifest url",
-            shell.IndexOf("anonymous manifest URL", StringComparison.Ordinal) >= 0, "about");
+        Check("about names an anonymous manifest",
+            shell.IndexOf("anonymous manifest", StringComparison.Ordinal) >= 0, "about");
+        Check("about names shop feed overrides",
+            shell.IndexOf("update-url.txt", StringComparison.Ordinal) >= 0
+            && shell.IndexOf("update-feed-path.txt", StringComparison.Ordinal) >= 0, "about");
         Check("about still says no token and apply after quit",
             shell.IndexOf("never stores a GitHub token", StringComparison.Ordinal) >= 0
             && shell.IndexOf("apply after you quit", StringComparison.Ordinal) >= 0
