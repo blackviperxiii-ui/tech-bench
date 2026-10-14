@@ -139,7 +139,7 @@ static partial class SelfTest
             && Updater.StatusText(newer).IndexOf("is available", StringComparison.Ordinal) >= 0,
             Updater.StatusText(newer));
 
-        string shellPath = Path.Combine(FindRepoRoot(), "ShellForm.cs");
+        string shellPath = Path.Combine(FindRepoRoot(), "src", "Shell", "ShellForm.cs");
         string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
         Check("about does not claim a public latest.json",
             shell.IndexOf("public latest.json", StringComparison.OrdinalIgnoreCase) < 0, "public latest.json");
@@ -792,7 +792,7 @@ static partial class SelfTest
 
     static void SilentBackgroundTest()
     {
-        string shellPath = Path.Combine(FindRepoRoot(), "ShellForm.cs");
+        string shellPath = Path.Combine(FindRepoRoot(), "src", "Shell", "ShellForm.cs");
         string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
         string finish = MethodSlice(shell, "void FinishCheck(", "void InstallReadyUpdate(");
         string install = MethodSlice(shell, "void InstallReadyUpdate(", "Control BuildAdaptersPanel(");

@@ -2180,7 +2180,7 @@ ProtocolDescription=ISO 15765
             try { Directory.Delete(empty, true); } catch { }
         }
 
-        string programPath = Path.Combine(FindRepoRoot(), "Program.cs");
+        string programPath = Path.Combine(FindRepoRoot(), "src", "Shell", "Program.cs");
         string program = File.Exists(programPath) ? File.ReadAllText(programPath) : "";
         int mainAt = program.IndexOf("static int Main(string[] args)", StringComparison.Ordinal);
         int wantsAt = mainAt < 0 ? -1 : program.IndexOf("static bool WantsSmoke", mainAt, StringComparison.Ordinal);

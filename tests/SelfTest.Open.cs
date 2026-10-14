@@ -14,7 +14,7 @@ static partial class SelfTest
 {
     static void SubscriptionKeyMaskTests()
     {
-        string path = Path.Combine(FindRepoRoot(), "IdSettingsForm.cs");
+        string path = Path.Combine(FindRepoRoot(), "src", "Shell", "IdSettingsForm.cs");
         string src = File.Exists(path) ? File.ReadAllText(path) : "";
         Check("IdSettingsForm.cs is readable", src.Length > 0, path);
         Check("subscription key field is masked", SourceAssignsPasswordChar(src, "_key"), "_key");
