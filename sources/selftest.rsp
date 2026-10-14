@@ -8,3 +8,4 @@ tests\SelfTest.Gateway.cs
 tests\SelfTest.Job.cs
 tests\SelfTest.Open.cs
 tests\SelfTest.Persist.cs
+tests\SelfTest.Search.cs
