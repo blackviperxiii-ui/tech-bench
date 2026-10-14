@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6g: move Adapters sources to `src/Features/Adapters/` (path-only).
 - Rearch stage 6f: move Kb sources to `src/Features/Kb/` (path-only; SelfTest.Open path updated).
 - Rearch stage 6e: move WorkOrders sources to `src/Features/WorkOrders/` (path-only; SelfTest path reads updated).
 - Rearch stage 6d: move Search feature sources to `src/Features/Search/` (path-only; SelfTest.Open path updated).
