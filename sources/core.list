@@ -17,13 +17,13 @@ src\Features\Kb\KbIndex.cs
 src\Features\Kb\UserCodes.cs
 ShopSync.cs
 AppVersion.cs
-AppSettings.cs
+src\Core\Settings\AppSettings.cs
 Updater.cs
 src\Features\WorkOrders\WorkOrder.cs
 src\Features\WorkOrders\WorkOrderStore.cs
 IdSettings.cs
 IdGateway.cs
-AdapterPrefs.cs
-SettingsWriteGate.cs
-SettingsStore.cs
+src\Core\Settings\AdapterPrefs.cs
+src\Core\Settings\SettingsWriteGate.cs
+src\Core\Settings\SettingsStore.cs
 SafeOpen.cs

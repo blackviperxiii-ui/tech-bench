@@ -159,7 +159,7 @@ static partial class SelfTest
                 && woSrc.IndexOf("SettingsStore.ClearJobStrip", StringComparison.Ordinal) >= 0,
                 "WorkOrderControl");
 
-            string appSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "AppSettings.cs"));
+            string appSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Core", "Settings", "AppSettings.cs"));
             Check("AppSettings.SaveTo uses SettingsStore.WriteText",
                 appSrc.IndexOf("SettingsStore.WriteText", StringComparison.Ordinal) >= 0, "AppSettings");
         }
