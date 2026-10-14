@@ -5,6 +5,7 @@ using TechBench;
 
 static partial class SelfTest
 {
+    [SelfTestCase("crash log (TB1d)", Order = 270)]
     static void CrashFormTests()
     {
         string dir = Path.Combine(Path.GetTempPath(), "tb-crash-log-" + Guid.NewGuid().ToString("N"));

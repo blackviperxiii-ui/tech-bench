@@ -202,6 +202,7 @@ static partial class SelfTest
     }
 
 
+    [SelfTestCase("open / launch policy", Order = 290)]
     static void OpenTests()
     {
         string err;
