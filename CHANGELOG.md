@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6j: move non-clear J1939 sources to `src/Core/J1939/` (path-only; `J1939Clear.cs` stays at root for Safety).
 - Rearch stage 6i: move `AppVersion.cs` to `src/Core/Version/` (path-only; release/installer/smoke/SelfTest paths updated).
 - Rearch stage 6h: move Settings sources to `src/Core/Settings/` (path-only; SelfTest.Persist path updated).
 - Rearch stage 6g: move Adapters sources to `src/Features/Adapters/` (path-only).
