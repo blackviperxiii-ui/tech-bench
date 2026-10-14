@@ -97,7 +97,7 @@ namespace TechBench
 
             Action show = delegate
             {
-                using (var form = new CrashForm(message, clip))
+                using (var form = new CrashForm(message, clip, path))
                     form.ShowDialog();
             };
 

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Text;
@@ -15,10 +16,17 @@ namespace TechBench
         internal static string LogDirectoryOverride;
 
         readonly string _clipboardText;
+        readonly string _logPath;
 
         public CrashForm(string message, string clipboardText)
+            : this(message, clipboardText, null)
+        {
+        }
+
+        public CrashForm(string message, string clipboardText, string logPath)
         {
             _clipboardText = clipboardText ?? "";
+            _logPath = logPath ?? "";
             Text = "Tech Bench";
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false;
@@ -27,7 +35,7 @@ namespace TechBench
             FormBorderStyle = FormBorderStyle.FixedDialog;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
-            ClientSize = new Size(480, 200);
+            ClientSize = new Size(520, 200);
 
             var label = new Label
             {
@@ -47,6 +55,9 @@ namespace TechBench
             };
             var restart = new Button { Text = "Restart", AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
             var copy = new Button { Text = "Copy details", AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+            var openLog = new Button { Text = "Open log folder", AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+            string logDir = string.IsNullOrEmpty(_logPath) ? "" : (Path.GetDirectoryName(_logPath) ?? "");
+            openLog.Enabled = logDir.Length > 0 && Directory.Exists(logDir);
             restart.Click += delegate
             {
                 try { Application.Restart(); }
@@ -66,11 +77,37 @@ namespace TechBench
                         Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             };
+            openLog.Click += delegate { OpenLogFolder(); };
             buttons.Controls.Add(restart);
             buttons.Controls.Add(copy);
+            buttons.Controls.Add(openLog);
 
             Controls.Add(label);
             Controls.Add(buttons);
+        }
+
+        void OpenLogFolder()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_logPath);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                {
+                    MessageBox.Show(this, "The crash log folder is not available.",
+                        Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not open the log folder: " + ex.Message,
+                    Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         /// <summary>Append a crash record next to the exe (local only; no network).</summary>

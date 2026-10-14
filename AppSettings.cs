@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Web.Script.Serialization;
+using J1939Reader;
 
 namespace TechBench
 {
@@ -110,7 +111,10 @@ namespace TechBench
                 var ser = new JavaScriptSerializer();
                 File.WriteAllText(path, ser.Serialize(this));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                SessionIo.LogError("AppSettings.SaveTo", ex);
+            }
         }
     }
 }

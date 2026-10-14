@@ -181,6 +181,7 @@ namespace J1939Reader
             _innerHost.Controls.Add(page);
             _innerHost.ResumeLayout(true);
             UiLayout.MarkSwitch(_innerNav, i, _innerNorm, _innerBold);
+            if (i == 2) _lastBusUi = DateTime.MinValue; // force PGN/SA fill on next tick
             if (i == 3 && _chart != null) _chart.SetData(_bus.TrendCopy());
             if (i == 4) RefreshTimeline();
             if (i == 5) RefreshHistory(false);
@@ -763,7 +764,7 @@ namespace J1939Reader
             {
                 foreach (Rp1210Api a in _adapters)
                 {
-                    if (string.Equals(a.Id, prefs.AdapterId, StringComparison.Ordinal))
+                    if (string.Equals(a.Id, prefs.AdapterId, StringComparison.OrdinalIgnoreCase))
                     {
                         pick = a;
                         _adapterPrefsMatched = true;
@@ -1003,8 +1004,14 @@ namespace J1939Reader
 
         void OnUiTick(object sender, EventArgs e)
         {
-            try { Refresh(_bus.Snapshot()); }
-            catch (Exception ex) { Log("ui error: " + ex.Message); }
+            try
+            {
+                // Bus page is index 2. PGN/SA lists only refresh there (and only every 800 ms).
+                bool needBusLists = _innerPage == 2
+                    && (DateTime.UtcNow - _lastBusUi).TotalMilliseconds > 800;
+                Refresh(_bus.Snapshot(needBusLists));
+            }
+            catch (Exception ex) { Log("ui error: " + ex); }
         }
 
         void Refresh(BusSnapshot s)
@@ -1050,7 +1057,9 @@ namespace J1939Reader
             UpdateIdBox(s);
             // The bus lists carry live ages, so they have to be rebuilt rather than diffed. Once a
             // second is fast enough to read and slow enough not to fight the scrollbar.
-            if ((DateTime.UtcNow - _lastBusUi).TotalMilliseconds > 800)
+            // Only touch these lists on the Bus page — off-page snapshots omit Pgns/Sas to save work,
+            // and repopulating then would wipe the boxes until the next Bus visit.
+            if (_innerPage == 2 && (DateTime.UtcNow - _lastBusUi).TotalMilliseconds > 800)
             {
                 _lastBusUi = DateTime.UtcNow;
                 Repopulate(_lstPgn, PgnItems(s));
