@@ -104,18 +104,8 @@ namespace TechBench
 
         public void SaveTo(string path)
         {
-            if (!SettingsWriteGate.AllowWrite()) return;
-            try
-            {
-                string dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                var ser = new JavaScriptSerializer();
-                File.WriteAllText(path, ser.Serialize(this));
-            }
-            catch (Exception ex)
-            {
-                SessionIo.LogError("AppSettings.SaveTo", ex);
-            }
+            var ser = new JavaScriptSerializer();
+            SettingsStore.WriteText(path, ser.Serialize(this));
         }
     }
 }

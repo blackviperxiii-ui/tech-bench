@@ -28,4 +28,5 @@ IdSettings.cs
 IdGateway.cs
 AdapterPrefs.cs
 SettingsWriteGate.cs
+SettingsStore.cs
 SafeOpen.cs
