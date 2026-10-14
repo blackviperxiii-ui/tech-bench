@@ -386,7 +386,7 @@ namespace TechBench
             _host.ResumeLayout(true);
             PaintNav();
             if (persistShellPage && _inline != null)
-                AdapterPrefs.Merge(_inline.CurrentAdapterId(), i, null);
+                SettingsStore.MergeAdapterPrefs(_inline.CurrentAdapterId(), i, null);
         }
 
         static Panel ShellPage(string name, Control body)
@@ -439,7 +439,7 @@ namespace TechBench
             _settings.Y = r.Y;
             _settings.Width = r.Width;
             _settings.Height = r.Height;
-            _settings.Save();
+            SettingsStore.SaveAppSettings(_settings);
         }
 
         void ShowCheatSheet()

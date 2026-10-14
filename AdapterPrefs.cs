@@ -76,18 +76,12 @@ namespace TechBench
 
         public static void SaveTo(string path, AdapterPrefsData data)
         {
-            if (!SettingsWriteGate.AllowWrite()) return;
-            try
-            {
-                string dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                var ser = new JavaScriptSerializer();
-                File.WriteAllText(path, ser.Serialize(data));
-            }
-            catch (Exception ex)
-            {
-                SessionIo.LogError("AdapterPrefs.SaveTo", ex);
-            }
+            if (data == null) data = new AdapterPrefsData();
+            data.ShellPage = ClampShell(data.ShellPage);
+            data.InnerPage = ClampInner(data.InnerPage);
+            if (data.AdapterId == null) data.AdapterId = "";
+            var ser = new JavaScriptSerializer();
+            SettingsStore.WriteText(path, ser.Serialize(data));
         }
 
         /// <summary>Merges non-null fields into the on-disk prefs file.</summary>

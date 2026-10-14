@@ -743,27 +743,18 @@ namespace TechBench
 
         void PersistJobCustomer(string customer)
         {
-            AppSettings disk = AppSettings.Load();
-            disk.Customer = (customer ?? "").Trim();
-            disk.SaveTo(AppSettings.PathOverride ?? AppSettings.PathName());
-            _appSettings.Customer = disk.Customer;
+            _appSettings.Customer = SettingsStore.SaveJobCustomer(customer);
         }
 
         void PersistJobWorkOrder()
         {
-            AppSettings disk = AppSettings.Load();
-            disk.LastWo = _current == null ? "" : _current.Key();
-            disk.SaveTo(AppSettings.PathOverride ?? AppSettings.PathName());
-            _appSettings.LastWo = disk.LastWo;
+            _appSettings.LastWo = SettingsStore.SaveJobWorkOrder(
+                _current == null ? "" : _current.Key());
         }
 
         public void ClearSavedJob()
         {
-            string path = AppSettings.PathOverride ?? AppSettings.PathName();
-            AppSettings disk = AppSettings.Load();
-            disk.Customer = "";
-            disk.LastWo = "";
-            disk.SaveTo(path);
+            SettingsStore.ClearJobStrip();
             _appSettings.Customer = "";
             _appSettings.LastWo = "";
             _jobWoRestoreDone = true;
