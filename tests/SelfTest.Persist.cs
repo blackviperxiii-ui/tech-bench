@@ -141,7 +141,7 @@ static partial class SelfTest
                 && shellSrc.IndexOf("SettingsStore.SaveAppSettings", StringComparison.Ordinal) >= 0,
                 "ShellForm");
 
-            string inlineSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "Inline7Control.cs"));
+            string inlineSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Features", "Inline7", "Inline7Control.cs"));
             Check("INLINE 7 blocks persist while applying prefs",
                 inlineSrc.IndexOf("_applyingAdapterPrefs", StringComparison.Ordinal) >= 0
                 && inlineSrc.IndexOf("SettingsWriteGate.BeginLoad()", StringComparison.Ordinal) >= 0,

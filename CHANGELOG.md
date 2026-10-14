@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6l: move `Inline7Control.cs` to `src/Features/Inline7/` (path-only; clear-code UI flagged; SelfTest.Persist path updated).
 - Rearch stage 6k: move Shell sources (`Program`, `ShellForm`, `UiLayout`, `Session`, `IdSettingsForm`) to `src/Shell/` (path-only; SelfTest path reads updated). Last non-safety stage 6 folder move.
 - Rearch stage 6j: move non-clear J1939 sources to `src/Core/J1939/` (path-only; `J1939Clear.cs` stays at root for Safety).
 - Rearch stage 6i: move `AppVersion.cs` to `src/Core/Version/` (path-only; release/installer/smoke/SelfTest paths updated).
