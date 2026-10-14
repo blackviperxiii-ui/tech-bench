@@ -150,7 +150,7 @@ static partial class SelfTest
                 inlineSrc.IndexOf("SettingsStore.MergeAdapterPrefs", StringComparison.Ordinal) >= 0,
                 "Inline7Control");
 
-            string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "WorkOrderControl.cs"));
+            string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Features", "WorkOrders", "WorkOrderControl.cs"));
             Check("WO reload does not auto-pick after job restore",
                 woSrc.IndexOf("_orders.Count > 0 && !_jobWoRestoreDone", StringComparison.Ordinal) >= 0,
                 "WorkOrderControl");

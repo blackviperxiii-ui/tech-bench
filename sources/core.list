@@ -19,8 +19,8 @@ ShopSync.cs
 AppVersion.cs
 AppSettings.cs
 Updater.cs
-WorkOrder.cs
-WorkOrderStore.cs
+src\Features\WorkOrders\WorkOrder.cs
+src\Features\WorkOrders\WorkOrderStore.cs
 IdSettings.cs
 IdGateway.cs
 AdapterPrefs.cs
