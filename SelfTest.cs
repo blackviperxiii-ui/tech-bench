@@ -1778,7 +1778,7 @@ ProtocolDescription=ISO 15765
                     dup++;
                 }
                 else seen[name] = which;
-                string baseName = Path.GetFileName(name);
+                string baseName = RspBaseName(name);
                 if (seenBase.TryGetValue(baseName, out prior))
                 {
                     Check("no duplicate source basename " + baseName, false, prior + " and " + which);
@@ -1795,7 +1795,7 @@ ProtocolDescription=ISO 15765
         var selfSeen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < selftest.Count; i++)
         {
-            string name = selftest[i];
+            string name = NormalizeRspPath(selftest[i]);
             string prior;
             if (selfSeen.TryGetValue(name, out prior))
             {
@@ -1803,7 +1803,7 @@ ProtocolDescription=ISO 15765
                 selfDup++;
             }
             else selfSeen[name] = "selftest.rsp";
-            if (seenBase.ContainsKey(Path.GetFileName(name)))
+            if (seenBase.ContainsKey(RspBaseName(name)))
                 Check("selftest file is not in core or app rsp", false, name);
         }
         if (selfDup == 0 && selftest.Count > 0)
@@ -1843,8 +1843,10 @@ ProtocolDescription=ISO 15765
                 string name = Path.GetFileName(rootCs[i]);
                 if (string.Equals(name, "SelfTest.cs", StringComparison.OrdinalIgnoreCase))
                     continue;
+                // Path-aware: root file must be listed as the bare name, not only via a
+                // same-basename src\ entry (basename-only would hide a leftover root copy).
                 string where;
-                if (!seen.TryGetValue(name, out where) && !seenBase.ContainsKey(name))
+                if (!seen.TryGetValue(name, out where))
                 {
                     Check("root source is listed (" + name + ")", false, "missing from core.rsp and app.rsp");
                     missing++;
@@ -1985,6 +1987,17 @@ ProtocolDescription=ISO 15765
     {
         if (path == null) return "";
         return path.Replace('/', '\\');
+    }
+
+    /// <summary>
+    /// File name from an rsp path. rsp lists use '\'; Path.GetFileName on Mono
+    /// treats '\' as a normal character, so split after NormalizeRspPath.
+    /// </summary>
+    static string RspBaseName(string path)
+    {
+        string norm = NormalizeRspPath(path);
+        int i = norm.LastIndexOf('\\');
+        return i < 0 ? norm : norm.Substring(i + 1);
     }
 
     static int BadRspEntry(string root, string name)
