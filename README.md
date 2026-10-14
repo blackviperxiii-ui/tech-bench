@@ -44,7 +44,7 @@ build.bat
 
 That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
 
-`build.bat` compiles from `sources\core.rsp` and `sources\app.rsp`. Those response files are the only source list. `test.bat` compiles SelfTest from `sources\core.rsp`, and LayoutAudit from both. Add a new `.cs` file there instead of pasting it into the scripts.
+`build.bat` / `test.bat` call `tools\gen-rsp.bat`, which writes `sources\*.rsp` from `sources\core.list`, `sources\app.list`, and a `tests\*.cs` glob. Edit the `.list` files (or drop a new file under `tests\`); do not hand-edit the generated `.rsp` files or paste sources into the scripts.
 
 `TechBench.exe --smoke` checks the version stamp and the bundled knowledge base, then exits without a window. `--smoke-out <path>` writes the one-line report (the exe is a Windows program, so the CI gate reads that file). The Windows installer workflow runs this after a silent per-user install, then uninstalls.
 
