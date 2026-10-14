@@ -101,8 +101,8 @@ static partial class SelfTest
             LaunchPolicy.BlockedLaunchMessage(null).IndexOf("won't open", StringComparison.Ordinal) >= 0, "null msg");
 
         string root = FindRepoRoot();
-        string search = File.Exists(Path.Combine(root, "SearchControl.cs"))
-            ? File.ReadAllText(Path.Combine(root, "SearchControl.cs")) : "";
+        string searchPath = Path.Combine(root, "src", "Features", "Search", "SearchControl.cs");
+        string search = File.Exists(searchPath) ? File.ReadAllText(searchPath) : "";
         Check("OpenSel uses SafeOpen",
             search.IndexOf("SafeOpen.TryOpen", StringComparison.Ordinal) >= 0, "SearchControl");
         string woSrc = File.Exists(Path.Combine(root, "WorkOrderControl.cs"))
