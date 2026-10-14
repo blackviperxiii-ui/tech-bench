@@ -8,7 +8,7 @@ src\Features\Sync\SyncForm.cs
 src\Shell\UiLayout.cs
 src\Features\WorkOrders\WorkOrderControl.cs
 src\Shell\IdSettingsForm.cs
-Inline7Control.cs
+src\Features\Inline7\Inline7Control.cs
 src\Features\Adapters\TrendChart.cs
 src\Features\WorkOrders\JobReportPrint.cs
 src\Features\Search\CodeBook.cs
