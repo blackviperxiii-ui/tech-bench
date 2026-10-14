@@ -17,7 +17,7 @@ SessionData.cs
 src\Features\Kb\KbIndex.cs
 src\Features\Kb\UserCodes.cs
 ShopSync.cs
-AppVersion.cs
+src\Core\Version\AppVersion.cs
 src\Core\Settings\AppSettings.cs
 Updater.cs
 src\Features\WorkOrders\WorkOrder.cs

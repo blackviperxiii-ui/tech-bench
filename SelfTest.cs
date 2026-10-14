@@ -2197,7 +2197,7 @@ ProtocolDescription=ISO 15765
             && smokeLit > wantsAt,
             "main=" + mainAt + " wants=" + wantsAt + " call=" + callSmoke
             + " run=" + callRun + " swap=" + callSwap + " lit=" + smokeLit);
-        string appVerPath = Path.Combine(FindRepoRoot(), "AppVersion.cs");
+        string appVerPath = Path.Combine(FindRepoRoot(), "src", "Core", "Version", "AppVersion.cs");
         string appVer = File.Exists(appVerPath) ? File.ReadAllText(appVerPath) : "";
         Check("smoke loads through KbIndex.FindRoot",
             appVer.IndexOf("KbIndex.FindRoot()", StringComparison.Ordinal) >= 0, "FindRoot");
