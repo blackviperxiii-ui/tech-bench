@@ -113,7 +113,7 @@ namespace TechBench
             }
             catch (Exception ex)
             {
-                SessionData.LogError("AppSettings.SaveTo", ex);
+                SessionIo.LogError("AppSettings.SaveTo", ex);
             }
         }
     }

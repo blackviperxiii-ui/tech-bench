@@ -85,7 +85,7 @@ namespace TechBench
             }
             catch (Exception ex)
             {
-                SessionData.LogError("AdapterPrefs.SaveTo", ex);
+                SessionIo.LogError("AdapterPrefs.SaveTo", ex);
             }
         }
 
