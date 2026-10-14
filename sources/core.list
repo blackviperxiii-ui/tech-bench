@@ -13,8 +13,8 @@ Timeline.cs
 History.cs
 JobReport.cs
 SessionData.cs
-KbIndex.cs
-UserCodes.cs
+src\Features\Kb\KbIndex.cs
+src\Features\Kb\UserCodes.cs
 ShopSync.cs
 AppVersion.cs
 AppSettings.cs
