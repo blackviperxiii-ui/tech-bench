@@ -10,14 +10,14 @@ if errorlevel 1 exit /b 1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\assert-pe-i386.ps1" "%~dp0TechBench.exe"
 if errorlevel 1 exit /b 1
 
-for /f "tokens=2 delims==" %%V in ('findstr /C:"public const string Number" "%~dp0AppVersion.cs"') do (
+for /f "tokens=2 delims==" %%V in ('findstr /C:"public const string Number" "%~dp0src\Core\Version\AppVersion.cs"') do (
   set VERSION=%%V
 )
 set VERSION=!VERSION:"=!
 set VERSION=!VERSION: =!
 set VERSION=!VERSION:;=!
 if "!VERSION!"=="" (
-  echo Could not read version from AppVersion.cs
+  echo Could not read version from src\Core\Version\AppVersion.cs
   exit /b 1
 )
 

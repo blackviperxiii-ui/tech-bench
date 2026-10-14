@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6i: move `AppVersion.cs` to `src/Core/Version/` (path-only; release/installer/smoke/SelfTest paths updated).
 - Rearch stage 6h: move Settings sources to `src/Core/Settings/` (path-only; SelfTest.Persist path updated).
 - Rearch stage 6g: move Adapters sources to `src/Features/Adapters/` (path-only).
 - Rearch stage 6f: move Kb sources to `src/Features/Kb/` (path-only; SelfTest.Open path updated).
