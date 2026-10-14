@@ -1735,20 +1735,32 @@ ProtocolDescription=ISO 15765
     static void SourceListTests()
     {
         string root = FindRepoRoot();
+        string coreListPath = Path.Combine(root, "sources", "core.list");
+        string appListPath = Path.Combine(root, "sources", "app.list");
         string corePath = Path.Combine(root, "sources", "core.rsp");
         string appPath = Path.Combine(root, "sources", "app.rsp");
         string selftestPath = Path.Combine(root, "sources", "selftest.rsp");
         string buildPath = Path.Combine(root, "build.bat");
         string testPath = Path.Combine(root, "test.bat");
+        string genBat = Path.Combine(root, "tools", "gen-rsp.bat");
+        string genSh = Path.Combine(root, "tools", "gen-rsp.sh");
+        Check("sources\\core.list present", File.Exists(coreListPath), coreListPath);
+        Check("sources\\app.list present", File.Exists(appListPath), appListPath);
+        Check("tools\\gen-rsp.bat present", File.Exists(genBat), genBat);
+        Check("tools\\gen-rsp.sh present", File.Exists(genSh), genSh);
         Check("sources\\core.rsp present", File.Exists(corePath), corePath);
         Check("sources\\app.rsp present", File.Exists(appPath), appPath);
         Check("sources\\selftest.rsp present", File.Exists(selftestPath), selftestPath);
         Check("build.bat present for source list", File.Exists(buildPath), buildPath);
         Check("test.bat present for source list", File.Exists(testPath), testPath);
 
+        List<string> coreList = ReadRspNames(coreListPath);
+        List<string> appList = ReadRspNames(appListPath);
         List<string> core = ReadRspNames(corePath);
         List<string> app = ReadRspNames(appPath);
         List<string> selftest = ReadRspNames(selftestPath);
+        Check("core.rsp matches core.list", SameNameList(coreList, core), "drift");
+        Check("app.rsp matches app.list", SameNameList(appList, app), "drift");
         int dup = 0;
         var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int pass = 0; pass < 2; pass++)
@@ -1836,6 +1848,10 @@ ProtocolDescription=ISO 15765
 
         string build = File.Exists(buildPath) ? File.ReadAllText(buildPath) : "";
         string test = File.Exists(testPath) ? File.ReadAllText(testPath) : "";
+        Check("build.bat calls tools\\gen-rsp.bat",
+            build.IndexOf(@"tools\gen-rsp.bat", StringComparison.OrdinalIgnoreCase) >= 0, "gen-rsp");
+        Check("test.bat calls tools\\gen-rsp.bat",
+            test.IndexOf(@"tools\gen-rsp.bat", StringComparison.OrdinalIgnoreCase) >= 0, "gen-rsp");
         Check("build.bat references sources\\core.rsp",
             build.IndexOf(@"sources\core.rsp", StringComparison.OrdinalIgnoreCase) >= 0, "core.rsp");
         Check("build.bat references sources\\app.rsp",
@@ -1903,6 +1919,8 @@ ProtocolDescription=ISO 15765
                 sh.IndexOf("mcs", StringComparison.Ordinal) >= 0, "mcs");
             Check("linux-compile-check locks C# 5 like Framework csc",
                 sh.IndexOf("-langversion:5", StringComparison.Ordinal) >= 0, "langversion");
+            Check("linux-compile-check regenerates rsp via gen-rsp.sh",
+                sh.IndexOf("gen-rsp.sh", StringComparison.Ordinal) >= 0, "gen-rsp");
             Check("linux-compile-check compiles SelfTest sources",
                 sh.IndexOf("SelfTest.cs", StringComparison.Ordinal) >= 0
                 && sh.IndexOf("selftest.rsp", StringComparison.Ordinal) >= 0, "SelfTest");
@@ -1912,6 +1930,28 @@ ProtocolDescription=ISO 15765
             Check("linux-compile-check is compile-only (no test.bat substitute claim)",
                 sh.IndexOf("Not a substitute for test.bat", StringComparison.Ordinal) >= 0, "disclaimer");
         }
+
+        if (File.Exists(genBat))
+        {
+            string gen = File.ReadAllText(genBat);
+            Check("gen-rsp.bat globs tests\\*.cs for selftest.rsp",
+                gen.IndexOf(@"tests\*.cs", StringComparison.OrdinalIgnoreCase) >= 0, "tests glob");
+            Check("gen-rsp.bat reads sources\\core.list",
+                gen.IndexOf(@"sources\core.list", StringComparison.OrdinalIgnoreCase) >= 0, "core.list");
+            Check("gen-rsp.bat reads sources\\app.list",
+                gen.IndexOf(@"sources\app.list", StringComparison.OrdinalIgnoreCase) >= 0, "app.list");
+        }
+    }
+
+    static bool SameNameList(List<string> a, List<string> b)
+    {
+        if (a == null || b == null || a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (!string.Equals(a[i], b[i], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
     }
 
     static int BadRspEntry(string root, string name)
