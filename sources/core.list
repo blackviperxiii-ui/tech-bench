@@ -27,3 +27,5 @@ src\Core\Settings\AdapterPrefs.cs
 src\Core\Settings\SettingsWriteGate.cs
 src\Core\Settings\SettingsStore.cs
 src\Safety\SafeOpen.cs
+src\Features\Search\CodeBook.cs
+src\Features\Search\FeatureBook.cs

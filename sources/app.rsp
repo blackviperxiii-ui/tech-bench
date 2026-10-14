@@ -11,8 +11,6 @@ src\Shell\IdSettingsForm.cs
 src\Features\Inline7\Inline7Control.cs
 src\Features\Adapters\TrendChart.cs
 src\Features\WorkOrders\JobReportPrint.cs
-src\Features\Search\CodeBook.cs
-src\Features\Search\FeatureBook.cs
 src\Shell\Session.cs
 src\Features\Crash\CrashForm.cs
 src\Features\CheatSheet\CheatSheetForm.cs
