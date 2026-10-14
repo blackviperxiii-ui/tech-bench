@@ -5,7 +5,7 @@ rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way s
 rem work-order packets / IntelliDealer gateway (no live DMS),
 rem and shop-laptop WinForms layout (primary buttons stay on screen).
 rem Needs no adapter. Sample KB data is built in %TEMP%. The shipped field database under kb\ is loaded as-is.
-rem Source list: tools\gen-rsp.bat writes sources\*.rsp from *.list + tests\*.cs; this script only names SelfTest.cs and tools\LayoutAudit.cs.
+rem Source list: tools\gen-rsp.bat writes sources\ response files from the .list files and the tests folder; this script only names SelfTest.cs and tools\LayoutAudit.cs.
 rem Response files are relative to the current directory, so test from the repo root.
 cd /d "%~dp0."
 if not exist "sources\core.list" (
