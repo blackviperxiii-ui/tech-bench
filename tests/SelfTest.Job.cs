@@ -12,6 +12,7 @@ using TechBench;
 
 static partial class SelfTest
 {
+    [SelfTestCase("job report", Order = 200)]
     static void ReportTests()
     {
         var d = new ReportData
@@ -56,6 +57,7 @@ static partial class SelfTest
         Check("code clear result carried onto the report", clearedText.Contains("  RESULT: cleared — no active codes came back."), clearedText);
     }
 
+    [SelfTestCase("work orders / IntelliDealer gateway", Order = 260)]
     static void WorkOrderTests()
     {
         string prevFolder = IdSettings.FolderOverride;

@@ -29,173 +29,8 @@ static partial class SelfTest
 
     static int Main()
     {
-        Console.WriteLine("== DM1 lamp decode (byte0: MIL 7-6, red 5-4, amber 3-2, protect 1-0) ==");
-        LampCase("all off", 0x00, false, false, false, false);
-        LampCase("amber only (0b00_00_01_00)", 0x04, false, true, false, false);
-        LampCase("red only (0b00_01_00_00)", 0x10, true, false, false, false);
-        LampCase("protect only (0b00_00_00_01)", 0x01, false, false, true, false);
-        LampCase("MIL only (0b01_00_00_00)", 0x40, false, false, false, true);
-        LampCase("red+amber", 0x14, true, true, false, false);
-        LampCase("all four on", 0x55, true, true, true, true);
-
-        Console.WriteLine();
-        Console.WriteLine("== DTC unpack ==");
-        // SPN 5246 FMI 0, occ 1 -> low=0x7E, mid=0x14 (5246 = 0x147E), high bits 0, fmi 0
-        var dtcs = new List<Dtc>();
-        bool r, a;
-        byte[] dm1 = { 0x10, 0xFF, 0x7E, 0x14, 0x00, 0x01, 0xFF, 0xFF };
-        J1939Decode.ParseDm(dm1, dtcs, out r, out a);
-        Eq("one DTC parsed", dtcs.Count, 1);
-        if (dtcs.Count == 1)
-        {
-            Eq("SPN", dtcs[0].Spn, 5246);
-            Eq("FMI", dtcs[0].Fmi, 0);
-            Eq("occ", dtcs[0].Occ, 1);
-            Eq("name", dtcs[0].Name, "SCR operator inducement severity");
-        }
-        Eq("red stop set", r, true);
-
-        // SPN 524287-ish high bits: SPN 1761 = 0x6E1 -> low 0xE1, mid 0x06, fmi 9
-        dtcs.Clear();
-        byte[] dm1b = { 0x04, 0xFF, 0xE1, 0x06, 0x09, 0x02, 0xE1, 0x06, 0x09, 0x03 };
-        J1939Decode.ParseDm(dm1b, dtcs, out r, out a);
-        Eq("duplicate SPN/FMI collapsed", dtcs.Count, 1);
-        if (dtcs.Count == 1) { Eq("SPN 1761", dtcs[0].Spn, 1761); Eq("FMI 9", dtcs[0].Fmi, 9); }
-        Eq("amber set", a, true);
-
-        Console.WriteLine();
-        Console.WriteLine("== scalar decodes ==");
-        // EEC1: RPM at bytes 4-5, 0.125 rpm/bit. 800 rpm -> raw 6400 -> 0x1900
-        Eq("RPM 800", J1939Decode.Rpm(new byte[] { 0, 0, 0, 0x00, 0x19, 0, 0, 0 }).ToString("0"), "800");
-        Eq("RPM not available", J1939Decode.Rpm(new byte[] { 0, 0, 0, 0xFF, 0xFF, 0, 0, 0 }), -1d);
-        Eq("RPM short frame", J1939Decode.Rpm(new byte[] { 0, 0 }), -1d);
-        Eq("coolant 90C", J1939Decode.TempC(130), "90 C");
-        Eq("coolant n/a", J1939Decode.TempC(0xFF), "n/a");
-        // battery: bytes 5-6, 0.05 V/bit. 27.60 V -> raw 552 -> 0x0228
-        Eq("battery 27.60V", J1939Decode.BatteryV(new byte[] { 0, 0, 0, 0, 0x28, 0x02, 0, 0 }), "27.60 V");
-        Eq("battery short frame", J1939Decode.BatteryV(new byte[] { 0, 0 }), "n/a");
-        // DEF tank: byte0 level 0.4%/bit, byte1 temp -40 offset. 50% -> 125, 20C -> 60
-        Eq("DEF 50% 20C", J1939Decode.DefText(new byte[] { 125, 60 }), "50.0%  temp 20 C");
-        Eq("DEF header silent", J1939Decode.DefText(new byte[] { 0xFF, 0xFF }), "n/a (not talking)");
-        AftertreatmentTests();
-        // hours: 0.05 h/bit over 4 bytes. 1234.5 h -> raw 24690 -> 0x6072
-        Eq("engine hours", J1939Decode.Hours(new byte[] { 0x72, 0x60, 0x00, 0x00 }), "1234.5 h");
-        Eq("hours not available", J1939Decode.Hours(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }), null);
-        Eq("hours short frame", J1939Decode.Hours(new byte[] { 0x01 }), null);
-
-        Console.WriteLine();
-        Console.WriteLine("== ASCII / component ID ==");
-        Eq("VIN strips star", J1939Decode.Ascii(Bytes("1ABC23456789*")), "1ABC23456789");
-        Eq("component keeps fields", J1939Decode.Ascii(Bytes("CUMMINS*QSB6.7*12345678*A1*"), true),
-            "CUMMINS  ·  QSB6.7  ·  12345678  ·  A1");
-        Eq("empty", J1939Decode.Ascii(new byte[0]), "");
-
-        Console.WriteLine();
-        Console.WriteLine("== BAM reassembly ==");
-        BamTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== KB load resilience ==");
-        KbTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== shipped field database ==");
-        BundledKbTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== INI parsing ==");
-        IniTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== RP1210 adapter discovery ==");
-        AdapterTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== name overrides ==");
-        NameTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== trend log ==");
-        TrendTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== fault timeline ==");
-        TimelineTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== bus monitor routing ==");
-        MonitorTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== disconnected snapshot ==");
-        SnapshotBlankTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== TSC1 destination ==");
-        Tsc1DestTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== J1939 DM11/DM3 code clear ==");
-        ClearCodesTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== unit history ==");
-        HistoryTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== user codes round-trip ==");
-        UserCodeTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== snapshot diff ==");
-        DiffTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== job report ==");
-        ReportTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== settings ==");
-        SettingsTests();
-
-        PersistStartupTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== updater ==");
-        UpdaterTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== windows installer ==");
-        InstallerTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== shop two-way sync ==");
-        ShopSyncTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== work orders / IntelliDealer gateway ==");
-        WorkOrderTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== crash log (TB1d) ==");
-        CrashFormTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== data safety ==");
-        DataSafetyTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== open / launch policy ==");
-        OpenTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== source list ==");
-        SourceListTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== install smoke ==");
-        SmokeTests();
-
+        // Cases register with [SelfTestCase] on this partial type (see tests/SelfTest.*.cs).
+        RunAttributedCases();
         Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
         return _fail == 0 ? 0 : 1;
@@ -226,6 +61,7 @@ ProtocolString=ISO15765
 ProtocolDescription=ISO 15765
 ";
 
+    [SelfTestCase("INI parsing", Order = 80)]
     static void IniTests()
     {
         Ini ini = Ini.Parse(VendorIni);
@@ -245,6 +81,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- adapter discovery ----------------
 
+    [SelfTestCase("trend log", Order = 110)]
     static void TrendTests()
     {
         var log = new TrendLog(4);
@@ -297,6 +134,7 @@ ProtocolDescription=ISO 15765
         return list;
     }
 
+    [SelfTestCase("fault timeline", Order = 120)]
     static void TimelineTests()
     {
         var tl = new DtcTimeline();
@@ -348,6 +186,7 @@ ProtocolDescription=ISO 15765
         return new J1939Frame { Pgn = pgn, Sa = sa, Da = 255, Data = data };
     }
 
+    [SelfTestCase("bus monitor routing", Order = 130)]
     static void MonitorTests()
     {
         DateTime t = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
@@ -459,6 +298,7 @@ ProtocolDescription=ISO 15765
         Check("null frame ignored", !bamMon.Feed(null, t), "accepted");
     }
 
+    [SelfTestCase("disconnected snapshot", Order = 140)]
     static void SnapshotBlankTests()
     {
         var s = new BusSnapshot
@@ -484,6 +324,7 @@ ProtocolDescription=ISO 15765
         Eq("disconnected snapshot clears modules", s.FaultModules.Count, 0);
     }
 
+    [SelfTestCase("TSC1 destination", Order = 150)]
     static void Tsc1DestTests()
     {
         Eq("TSC1 dest follows engine SA 17", Rp1210.Tsc1Dest(17), (byte)17);
@@ -724,6 +565,7 @@ ProtocolDescription=ISO 15765
         return text == null ? "" : text.Replace("\r\n", "\n");
     }
 
+    [SelfTestCase("J1939 DM11/DM3 code clear", Order = 160)]
     static void ClearCodesTests()
     {
         Eq("clear dests cover engine + compressor + broadcast", DestList(0), "0,48,255");
@@ -1022,6 +864,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- history ----------------
 
+    [SelfTestCase("unit history", Order = 170)]
     static void HistoryTests()
     {
         Eq("csv split handles quoted commas",
@@ -1079,6 +922,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- user codes ----------------
 
+    [SelfTestCase("user codes round-trip", Order = 180)]
     static void UserCodeTests()
     {
         string root = Path.Combine(Path.GetTempPath(), "uc_" + Guid.NewGuid().ToString("N"));
@@ -1154,6 +998,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- snapshot diff ----------------
 
+    [SelfTestCase("snapshot diff", Order = 190)]
     static void DiffTests()
     {
         Check("diff without snapshots explains itself",
@@ -1247,6 +1092,7 @@ ProtocolDescription=ISO 15765
         return new J1939Frame { Pgn = 0xEB00, Sa = sa, Da = 255, Data = d };
     }
 
+    [SelfTestCase("BAM reassembly", Order = 50)]
     static void BamTests()
     {
         // Happy path: 2-packet BAM of 12 bytes.
@@ -1296,6 +1142,7 @@ ProtocolDescription=ISO 15765
         return n;
     }
 
+    [SelfTestCase("shipped field database", Order = 70)]
     static void BundledKbTests()
     {
         string disk = Path.Combine(FindRepoRoot(), "kb");
@@ -1334,6 +1181,7 @@ ProtocolDescription=ISO 15765
         try { Directory.Delete(dest, true); } catch { }
     }
 
+    [SelfTestCase("KB load resilience", Order = 60)]
     static void KbTests()
     {
         string root = Path.Combine(Path.GetTempPath(), "kbtest_" + Guid.NewGuid().ToString("N"));
@@ -1411,6 +1259,7 @@ ProtocolDescription=ISO 15765
         return s;
     }
 
+    [SelfTestCase("settings", Order = 210)]
     static void SettingsTests()
     {
         string dir = Path.Combine(Path.GetTempPath(), "tb-settings-" + Guid.NewGuid().ToString("N"));
@@ -1437,6 +1286,7 @@ ProtocolDescription=ISO 15765
         try { Directory.Delete(dir, true); } catch { }
     }
 
+    [SelfTestCase("windows installer", Order = 240)]
     static void InstallerTests()
     {
         string root = FindRepoRoot();
@@ -1647,6 +1497,7 @@ ProtocolDescription=ISO 15765
         return new UserCode { Brand = brand, Code = code, Title = title };
     }
 
+    [SelfTestCase("shop two-way sync", Order = 250)]
     static void ShopSyncTests()
     {
         string prev = ShopSync.SettingsFolderOverride;
@@ -1871,6 +1722,7 @@ ProtocolDescription=ISO 15765
         }
     }
 
+    [SelfTestCase("data safety", Order = 280)]
     static void DataSafetyTests()
     {
         SubscriptionKeyMaskTests();
@@ -1879,6 +1731,7 @@ ProtocolDescription=ISO 15765
         PacketSidecarSyncTests();
     }
 
+    [SelfTestCase("source list", Order = 300)]
     static void SourceListTests()
     {
         string root = FindRepoRoot();
@@ -2092,7 +1945,9 @@ ProtocolDescription=ISO 15765
             Check("selftest path stays under tests\\", false, relative);
             return 1;
         }
-        if (!File.Exists(Path.Combine(root, norm)))
+        // rsp lists use Windows separators; File.Exists needs the host separator (Linux agents).
+        string onDisk = norm.Replace('\\', Path.DirectorySeparatorChar);
+        if (!File.Exists(Path.Combine(root, onDisk)))
         {
             Check("listed selftest file exists", false, relative);
             return 1;
@@ -2179,6 +2034,7 @@ ProtocolDescription=ISO 15765
         return found;
     }
 
+    [SelfTestCase("install smoke", Order = 310)]
     static void SmokeTests()
     {
         string kb = Path.Combine(FindRepoRoot(), "kb");
