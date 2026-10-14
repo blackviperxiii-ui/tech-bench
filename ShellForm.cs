@@ -442,6 +442,7 @@ namespace TechBench
         {
             string kb = (_kb == null || string.IsNullOrEmpty(_kb.Root)) ? "(none)" : _kb.Root;
             string bits = Rp1210.HostIs32Bit ? "32-bit (correct for RP1210)" : "64-bit — rebuild with build.bat";
+            string feed = Updater.DescribeManifestSource(_settings);
             UiLayout.ShowReadable(this, "About Tech Bench",
                 "Tech Bench " + AppVersion.Number + "\r\n\r\n"
                 + "Shop tool: knowledge-base search and Cummins INLINE 7 / J1939.\r\n\r\n"
@@ -449,7 +450,8 @@ namespace TechBench
                 + "Process: " + bits + "\r\n"
                 + "Knowledge base: " + kb + "\r\n"
                 + (_kb != null && !string.IsNullOrEmpty(_kb.Status) ? ("Index: " + _kb.Status + "\r\n") : "")
-                + "\r\nUpdates read an anonymous manifest URL (the built-in default, or a shop override) and a hashed TechBench.exe into this folder.\r\n"
+                + feed + "\r\n"
+                + "\r\nUpdates read an anonymous manifest (built-in URL, update-url.txt, or update-feed-path.txt shop share) and a hashed TechBench.exe into this folder.\r\n"
                 + "The app never stores a GitHub token. Updates apply after you quit, never mid-session.");
         }
 
@@ -496,7 +498,11 @@ namespace TechBench
                 MessageBoxIcon icon = Updater.IsCurrent(result)
                     ? MessageBoxIcon.Information
                     : MessageBoxIcon.Warning;
-                MessageBox.Show(this, Updater.StatusText(result), "Updates", MessageBoxButtons.OK, icon);
+                string status = Updater.StatusText(result);
+                string feed = Updater.DescribeManifestSource(_settings);
+                if (!string.IsNullOrEmpty(feed) && status.IndexOf(feed, StringComparison.Ordinal) < 0)
+                    status = status + "\n\n" + feed;
+                MessageBox.Show(this, status, "Updates", MessageBoxButtons.OK, icon);
                 return;
             }
 

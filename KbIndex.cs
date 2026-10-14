@@ -563,25 +563,48 @@ namespace TechBench
         /// </summary>
         public List<Hit> SpnHits(int spn, int fmi, int max)
         {
-            var seen = new Dictionary<string, bool>();
-            var hits = new List<Hit>();
+            if (max < 1) return new List<Hit>();
             string spnName = J1939Reader.Names.Spn(spn);
-            string[] queries = spnName.Length > 0
-                ? new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture), spnName }
-                : new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture) };
-            foreach (string q in queries)
+            string qSpn = ("spn " + spn).ToLowerInvariant();
+            string qNum = spn.ToString(CultureInfo.InvariantCulture).ToLowerInvariant();
+            string qName = spnName.Length > 0 ? spnName.ToLowerInvariant() : "";
+            string[] toksSpn = qSpn.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] toksNum = new[] { qNum };
+            string[] toksName = qName.Length == 0
+                ? null
+                : qName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            var matches = new List<Hit>();
+            foreach (Hit h in All)
             {
-                int total;
-                foreach (Hit h in Search(q, "ALL", max, out total))
-                {
-                    string key = h.Kind + "\u0001" + h.Title;
-                    if (seen.ContainsKey(key)) continue;
-                    seen[key] = true;
-                    hits.Add(h);
-                    if (hits.Count >= max) return hits;
-                }
+                string hay = h.Hay ?? "";
+                int best = 0;
+                if (HayHasAll(hay, toksSpn))
+                    best = Math.Max(best, Score(h, qSpn, toksSpn));
+                if (hay.IndexOf(qNum, StringComparison.Ordinal) >= 0)
+                    best = Math.Max(best, Score(h, qNum, toksNum));
+                if (toksName != null && HayHasAll(hay, toksName))
+                    best = Math.Max(best, Score(h, qName, toksName));
+                if (best <= 0) continue;
+                h.Score = best;
+                matches.Add(h);
             }
+            matches.Sort(delegate(Hit a, Hit b)
+            {
+                int c = b.Score.CompareTo(a.Score);
+                return c != 0 ? c : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+            });
+            var hits = new List<Hit>();
+            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
             return hits;
+        }
+
+        static bool HayHasAll(string hay, string[] toks)
+        {
+            if (toks == null || toks.Length == 0) return false;
+            foreach (string t in toks)
+                if (hay.IndexOf(t, StringComparison.Ordinal) < 0) return false;
+            return true;
         }
 
         public string SpnText(int spn, int fmi)

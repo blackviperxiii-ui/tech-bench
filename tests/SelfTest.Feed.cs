@@ -244,6 +244,24 @@ static partial class SelfTest
                 Updater.StatusText(missing).IndexOf("Couldn't check", StringComparison.Ordinal) >= 0
                 && Updater.StatusText(missing).IndexOf("is current", StringComparison.Ordinal) < 0,
                 Updater.StatusText(missing));
+
+            File.WriteAllText(Path.Combine(cfgDir, "update-feed-path.txt"), "# comment only\n\n");
+            string cfgErr = Updater.ShopShareConfigError();
+            Check("comment-only feed path reports config error",
+                cfgErr.IndexOf("usable", StringComparison.OrdinalIgnoreCase) >= 0
+                || cfgErr.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0,
+                cfgErr);
+            Eq("comment-only feed path falls through to default manifest",
+                Updater.ManifestUrl(null), Updater.DefaultManifestUrl);
+            UpdateCheck badPath = Updater.Check(Updater.DefaultManifestUrl);
+            string badText = Updater.StatusText(badPath);
+            Check("bad feed path is not treated as private GitHub feed",
+                badText.IndexOf("Couldn't check", StringComparison.Ordinal) >= 0
+                && badText.IndexOf("private", StringComparison.OrdinalIgnoreCase) < 0,
+                badText);
+            Check("DescribeManifestSource names feed",
+                Updater.DescribeManifestSource(null).IndexOf("feed", StringComparison.OrdinalIgnoreCase) >= 0,
+                Updater.DescribeManifestSource(null));
         }
         finally
         {

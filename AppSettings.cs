@@ -110,7 +110,10 @@ namespace TechBench
                 var ser = new JavaScriptSerializer();
                 File.WriteAllText(path, ser.Serialize(this));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                SessionData.LogError("AppSettings.SaveTo", ex);
+            }
         }
     }
 }

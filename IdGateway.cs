@@ -53,12 +53,20 @@ namespace TechBench
         static string _token;
         static DateTime _tokenExpiryUtc;
         static string _tokenStamp;
+        static string _lastTokenError = "";
+
+        /// <summary>Last OAuth token failure reason (empty when the last Token() call succeeded or was skipped).</summary>
+        public static string LastTokenError
+        {
+            get { return _lastTokenError ?? ""; }
+        }
 
         public static void ClearTokenCache()
         {
             _token = null;
             _tokenExpiryUtc = DateTime.MinValue;
             _tokenStamp = null;
+            _lastTokenError = "";
         }
 
         public static string Expand(string template, IdSettings s, WorkOrder wo)
@@ -82,7 +90,20 @@ namespace TechBench
             if (g.Length == 0) return "";
             if (p.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                 || p.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                // Absolute op paths may only stay on the configured gateway host.
+                // Off-host absolute URLs used to send the subscription key / Bearer elsewhere.
+                Uri gateUri, pathUri;
+                if (!Uri.TryCreate(g, UriKind.Absolute, out gateUri)
+                    || !Uri.TryCreate(p, UriKind.Absolute, out pathUri))
+                    return "";
+                if (!string.Equals(gateUri.Host ?? "", pathUri.Host ?? "", StringComparison.OrdinalIgnoreCase))
+                    return "";
+                if (string.Equals(gateUri.Scheme, "https", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(pathUri.Scheme, "http", StringComparison.OrdinalIgnoreCase))
+                    return "";
                 return p;
+            }
             if (!p.StartsWith("/")) p = "/" + p;
             return g + p;
         }
@@ -275,12 +296,18 @@ namespace TechBench
                 || string.IsNullOrWhiteSpace(settings.TokenUrl)
                 || string.IsNullOrWhiteSpace(settings.ClientId)
                 || string.IsNullOrWhiteSpace(settings.ClientSecret))
+            {
+                _lastTokenError = "";
                 return "";
+            }
             string stamp = settings.TokenUrl + "\n" + settings.ClientId + "\n" + settings.ClientSecret;
             if (!string.IsNullOrEmpty(_token)
                 && stamp == _tokenStamp
                 && DateTime.UtcNow.AddSeconds(60) < _tokenExpiryUtc)
+            {
+                _lastTokenError = "";
                 return _token;
+            }
 
             var req = new IdHttpRequest
             {
@@ -291,15 +318,30 @@ namespace TechBench
                     + "&client_secret=" + Uri.EscapeDataString(settings.ClientSecret)
             };
             IdHttpResponse resp = HttpOverride != null ? HttpOverride(req) : RealSend(req);
-            if (resp == null || !resp.Ok || string.IsNullOrEmpty(resp.Body)) return "";
+            if (resp == null || !resp.Ok || string.IsNullOrEmpty(resp.Body))
+            {
+                if (resp == null) _lastTokenError = "OAuth token request returned no response.";
+                else if (!string.IsNullOrEmpty(resp.Error))
+                    _lastTokenError = "OAuth token request failed: " + resp.Error;
+                else
+                    _lastTokenError = "OAuth token request failed (HTTP " + resp.Status + ").";
+                return "";
+            }
             try
             {
                 var ser = new JavaScriptSerializer();
                 var map = ser.Deserialize<Dictionary<string, object>>(resp.Body);
                 if (map == null || !map.ContainsKey("access_token") || map["access_token"] == null)
+                {
+                    _lastTokenError = "OAuth token response had no access_token.";
                     return "";
+                }
                 string access = map["access_token"].ToString();
-                if (string.IsNullOrEmpty(access)) return "";
+                if (string.IsNullOrEmpty(access))
+                {
+                    _lastTokenError = "OAuth token response had an empty access_token.";
+                    return "";
+                }
                 int seconds = 3600;
                 if (map.ContainsKey("expires_in") && map["expires_in"] != null)
                 {
@@ -310,49 +352,94 @@ namespace TechBench
                 _token = access;
                 _tokenStamp = stamp;
                 _tokenExpiryUtc = DateTime.UtcNow.AddSeconds(seconds);
+                _lastTokenError = "";
                 return _token;
             }
-            catch { }
-            return "";
+            catch (Exception ex)
+            {
+                _lastTokenError = "OAuth token response was not usable: " + ex.Message;
+                return "";
+            }
         }
+
+        const int MaxGatewayRedirects = 5;
 
         static IdHttpResponse RealSend(IdHttpRequest req)
         {
             var result = new IdHttpResponse();
             try
             {
-                try { ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; }
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; }
                 catch { }
-                var http = (HttpWebRequest)WebRequest.Create(req.Url);
-                http.Method = req.Method;
-                http.Timeout = 20000;
-                foreach (KeyValuePair<string, string> h in req.Headers)
-                    http.Headers[h.Key] = h.Value;
-                if (!string.IsNullOrEmpty(req.FilePath) && File.Exists(req.FilePath))
-                    WriteMultipart(http, req);
-                else if (!string.Equals(req.Method, "GET", StringComparison.OrdinalIgnoreCase)
-                    && !string.IsNullOrEmpty(req.Body))
+                Uri current;
+                if (req == null || !Uri.TryCreate(req.Url, UriKind.Absolute, out current))
                 {
-                    http.ContentType = string.IsNullOrEmpty(req.ContentType) ? "application/json" : req.ContentType;
-                    byte[] bytes = Encoding.UTF8.GetBytes(req.Body);
-                    http.ContentLength = bytes.Length;
-                    using (Stream s = http.GetRequestStream())
-                        s.Write(bytes, 0, bytes.Length);
+                    result.Error = "Gateway URL is empty or relative.";
+                    return result;
                 }
-                using (var resp = (HttpWebResponse)http.GetResponse())
+                var headers = new Dictionary<string, string>(req.Headers);
+                string method = req.Method ?? "GET";
+                string body = req.Body ?? "";
+                string contentType = req.ContentType;
+                string filePath = req.FilePath ?? "";
+                int followed = 0;
+                while (true)
                 {
-                    result.Status = (int)resp.StatusCode;
-                    using (var r = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
-                        result.Body = r.ReadToEnd();
-                }
-            }
-            catch (WebException ex)
-            {
-                result.Error = ex.Message;
-                HttpWebResponse resp = ex.Response as HttpWebResponse;
-                if (resp != null)
-                {
-                    result.Status = (int)resp.StatusCode;
+                    var http = (HttpWebRequest)WebRequest.Create(current);
+                    http.Method = method;
+                    http.Timeout = 20000;
+                    http.AllowAutoRedirect = false;
+                    http.UseDefaultCredentials = false;
+                    http.Credentials = null;
+                    http.PreAuthenticate = false;
+                    foreach (KeyValuePair<string, string> h in headers)
+                        http.Headers[h.Key] = h.Value;
+                    if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                    {
+                        var multi = new IdHttpRequest { FilePath = filePath, Method = method };
+                        WriteMultipart(http, multi);
+                    }
+                    else if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrEmpty(body))
+                    {
+                        http.ContentType = string.IsNullOrEmpty(contentType) ? "application/json" : contentType;
+                        byte[] bytes = Encoding.UTF8.GetBytes(body);
+                        http.ContentLength = bytes.Length;
+                        using (Stream s = http.GetRequestStream())
+                            s.Write(bytes, 0, bytes.Length);
+                    }
+                    HttpWebResponse resp = null;
+                    try
+                    {
+                        resp = (HttpWebResponse)http.GetResponse();
+                        result.Error = "";
+                    }
+                    catch (WebException ex)
+                    {
+                        result.Error = ex.Message;
+                        resp = ex.Response as HttpWebResponse;
+                        if (resp == null) return result;
+                    }
+                    int status = (int)resp.StatusCode;
+                    if (IsRedirectStatus(status))
+                    {
+                        Uri next;
+                        string why = ConsumeRedirect(resp, current, followed, out next);
+                        try { resp.Close(); } catch { }
+                        if (why != null)
+                        {
+                            result.Error = why;
+                            result.Status = status;
+                            return result;
+                        }
+                        current = next;
+                        followed++;
+                        method = "GET";
+                        body = "";
+                        filePath = "";
+                        continue;
+                    }
+                    result.Status = status;
                     result.RetryAfterSeconds = ParseRetryAfterHeader(resp.Headers["Retry-After"]);
                     try
                     {
@@ -360,6 +447,8 @@ namespace TechBench
                             result.Body = r.ReadToEnd();
                     }
                     catch { }
+                    try { resp.Close(); } catch { }
+                    return result;
                 }
             }
             catch (Exception ex)
@@ -367,6 +456,69 @@ namespace TechBench
                 result.Error = ex.Message;
             }
             return result;
+        }
+
+        static bool IsRedirectStatus(int status)
+        {
+            return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+        }
+
+        static string ConsumeRedirect(HttpWebResponse resp, Uri from, int followed, out Uri next)
+        {
+            next = null;
+            if (followed >= MaxGatewayRedirects)
+                return "Gateway redirect limit (" + MaxGatewayRedirects + ") was exceeded.";
+            string location = resp == null ? null : resp.Headers["Location"];
+            if (string.IsNullOrWhiteSpace(location))
+                return "Gateway redirect had no Location header.";
+            if (!Uri.TryCreate(from, location, out next))
+                return "Gateway redirect Location could not be read.";
+            string reason;
+            if (!RedirectAllowed(from, next, out reason))
+                return reason;
+            return null;
+        }
+
+        /// <summary>
+        /// Same host and port. http may upgrade to https on default ports.
+        /// https to http is refused.
+        /// </summary>
+        public static bool RedirectAllowed(Uri from, Uri to, out string reason)
+        {
+            reason = "";
+            if (from == null || to == null)
+            {
+                reason = "Gateway redirect target was missing.";
+                return false;
+            }
+            if (!string.Equals(from.Scheme, to.Scheme, StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(from.Scheme, "https", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(to.Scheme, "http", StringComparison.OrdinalIgnoreCase))
+                {
+                    reason = "Gateway redirect from https to http was refused.";
+                    return false;
+                }
+                bool upgrade = string.Equals(from.Scheme, "http", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(to.Scheme, "https", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(from.Host ?? "", to.Host ?? "", StringComparison.OrdinalIgnoreCase)
+                    && from.IsDefaultPort
+                    && to.IsDefaultPort;
+                if (upgrade) return true;
+                reason = "Gateway redirect to another scheme was refused.";
+                return false;
+            }
+            if (!string.Equals(from.Host ?? "", to.Host ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = "Gateway redirect to another host was refused.";
+                return false;
+            }
+            if (from.Port != to.Port)
+            {
+                reason = "Gateway redirect to another port was refused.";
+                return false;
+            }
+            return true;
         }
 
         static void WriteMultipart(HttpWebRequest http, IdHttpRequest req)
@@ -420,6 +572,8 @@ namespace TechBench
             else extra = "HTTP " + resp.Status;
             if (resp != null && !string.IsNullOrEmpty(resp.Body) && resp.Body.Length < 240)
                 extra += "  " + resp.Body.Trim();
+            if (!string.IsNullOrEmpty(_lastTokenError))
+                extra += "  " + _lastTokenError;
             return "IntelliDealer did not accept " + what + " (" + extra
                 + "). Tech Bench did not record this as a DMS success.";
         }

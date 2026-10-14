@@ -535,6 +535,14 @@ namespace J1939Reader
 
         public BusSnapshot Snapshot()
         {
+            return Snapshot(true);
+        }
+
+        /// <param name="includeBusLists">
+        /// When false, skip allocating/sorting PGN and SA traffic rows (used on non-Bus pages).
+        /// </param>
+        public BusSnapshot Snapshot(bool includeBusLists)
+        {
             var s = new BusSnapshot();
             DateTime now = DateTime.UtcNow;
             s.Connected = _rp.IsConnected;
@@ -574,8 +582,11 @@ namespace J1939Reader
                 s.HasSpn5246 = _mon.HasSpn(5246);
                 s.HasTankFmi9 = _mon.HasTankFmi9();
                 s.Has1569 = _mon.HasSpn(1569);
-                s.Pgns = _mon.PgnRows();
-                s.Sas = _mon.SaRows();
+                if (includeBusLists)
+                {
+                    s.Pgns = _mon.PgnRows();
+                    s.Sas = _mon.SaRows();
+                }
                 s.LastResetReport = _lastResetReport;
                 s.ResetSeq = _resetSeq;
                 s.DefSa = _mon.DefSa;

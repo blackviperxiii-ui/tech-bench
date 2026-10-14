@@ -763,7 +763,7 @@ namespace J1939Reader
             {
                 foreach (Rp1210Api a in _adapters)
                 {
-                    if (string.Equals(a.Id, prefs.AdapterId, StringComparison.Ordinal))
+                    if (string.Equals(a.Id, prefs.AdapterId, StringComparison.OrdinalIgnoreCase))
                     {
                         pick = a;
                         _adapterPrefsMatched = true;
@@ -1003,8 +1003,14 @@ namespace J1939Reader
 
         void OnUiTick(object sender, EventArgs e)
         {
-            try { Refresh(_bus.Snapshot()); }
-            catch (Exception ex) { Log("ui error: " + ex.Message); }
+            try
+            {
+                // Bus page is index 2. PGN/SA lists only refresh there (and only every 800 ms).
+                bool needBusLists = _innerPage == 2
+                    && (DateTime.UtcNow - _lastBusUi).TotalMilliseconds > 800;
+                Refresh(_bus.Snapshot(needBusLists));
+            }
+            catch (Exception ex) { Log("ui error: " + ex); }
         }
 
         void Refresh(BusSnapshot s)

@@ -73,7 +73,7 @@ static partial class SelfTest
             Eq("merge inner", merged.InnerPage, 1);
 
             Check("exact adapter match", AdapterPrefs.SavedAdapterMatches("CMNSI7", "CMNSI7"), "no");
-            Check("case-sensitive adapter match", !AdapterPrefs.SavedAdapterMatches("cmnsi7", "CMNSI7"), "matched");
+            Check("case-insensitive adapter match", AdapterPrefs.SavedAdapterMatches("cmnsi7", "CMNSI7"), "no");
             Check("empty saved id does not match", !AdapterPrefs.SavedAdapterMatches("", "CMNSI7"), "matched");
 
             File.WriteAllText(path, "{not json");

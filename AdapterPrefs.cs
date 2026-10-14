@@ -82,7 +82,10 @@ namespace TechBench
                 var ser = new JavaScriptSerializer();
                 File.WriteAllText(path, ser.Serialize(data));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                SessionData.LogError("AdapterPrefs.SaveTo", ex);
+            }
         }
 
         /// <summary>Merges non-null fields into the on-disk prefs file.</summary>
@@ -109,12 +112,12 @@ namespace TechBench
             return page;
         }
 
-        /// <summary>True when <paramref name="adapterId"/> matches a saved id exactly (case-sensitive).</summary>
+        /// <summary>True when <paramref name="adapterId"/> matches a saved id (case-insensitive).</summary>
         public static bool SavedAdapterMatches(string savedAdapterId, string adapterId)
         {
             return savedAdapterId != null && adapterId != null
                 && savedAdapterId.Length > 0
-                && string.Equals(savedAdapterId, adapterId, StringComparison.Ordinal);
+                && string.Equals(savedAdapterId, adapterId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
