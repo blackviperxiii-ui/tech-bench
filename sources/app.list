@@ -14,4 +14,4 @@ CodeBook.cs
 FeatureBook.cs
 Session.cs
 CrashForm.cs
-CheatSheetForm.cs
+src\Features\CheatSheet\CheatSheetForm.cs

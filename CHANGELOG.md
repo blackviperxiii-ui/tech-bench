@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6: begin `src/` feature folders — move `CheatSheetForm.cs` to `src/Features/CheatSheet/` (path-only; list + SourceListTests accept `src\` entries).
 - Rearch stage 5: `tools/gen-rsp.bat` / `gen-rsp.sh` build `sources/*.rsp` from `*.list` + `tests/*.cs` globs; `build.bat` / `test.bat` / linux-compile-check call the generator before csc/mcs (x86 and resource flags unchanged).
 - Rearch stage 4: `[SelfTestCase]` attribute runner — `SelfTest.Main` discovers cases by Order; decode cases move to `tests/SelfTest.Decode.cs`; feature entry points annotated.
 - Rearch stage 3: `SettingsStore` owns the load guard and atomic settings/adapter-prefs/job-strip writes (temp→replace→.bak); Shell / INLINE 7 / WorkOrderControl route through it.
