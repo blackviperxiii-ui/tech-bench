@@ -810,7 +810,7 @@ namespace J1939Reader
         void PersistAdapterPrefs(int? innerPage)
         {
             if (_cboAdapter == null || _applyingAdapterPrefs) return;
-            AdapterPrefs.Merge(CurrentAdapterId(), null, innerPage);
+            SettingsStore.MergeAdapterPrefs(CurrentAdapterId(), null, innerPage);
         }
 
         /// <summary>

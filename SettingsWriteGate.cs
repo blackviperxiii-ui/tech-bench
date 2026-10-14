@@ -1,41 +1,34 @@
-using System;
-
 namespace TechBench
 {
     /// <summary>
-    /// Blocks settings.json / adapter-prefs.json writes while startup (or any load) is still
-    /// filling controls. TextChanged / SelectedIndexChanged fire during that fill and used to
-    /// overwrite the technician's saved job, adapter, or page with empty defaults.
+    /// Compatibility facade over <see cref="SettingsStore"/> load guard.
+    /// Prefer SettingsStore in new code; ShellForm / INLINE 7 still call this name.
     /// </summary>
     internal static class SettingsWriteGate
     {
-        static int _loadDepth;
-
-        /// <summary>Tests reset depth between cases so a leaked BeginLoad cannot poison later checks.</summary>
         internal static void ResetForTests()
         {
-            _loadDepth = 0;
+            SettingsStore.ResetForTests();
         }
 
         public static void BeginLoad()
         {
-            _loadDepth++;
+            SettingsStore.BeginLoad();
         }
 
         public static void EndLoad()
         {
-            if (_loadDepth > 0) _loadDepth--;
+            SettingsStore.EndLoad();
         }
 
         public static bool IsLoading
         {
-            get { return _loadDepth > 0; }
+            get { return SettingsStore.IsLoading; }
         }
 
-        /// <summary>True when a write is allowed. Callers skip the file write when false.</summary>
         public static bool AllowWrite()
         {
-            return _loadDepth <= 0;
+            return SettingsStore.AllowWrite();
         }
     }
 }

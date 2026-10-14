@@ -104,6 +104,28 @@ static partial class SelfTest
             realJob.Customer = "Beta Co";
             realJob.SaveTo(settingsPath);
             Eq("post-load job save writes", AppSettings.Load().Customer, "Beta Co");
+            Check("settings write keeps .bak", File.Exists(settingsPath + ".bak"), settingsPath + ".bak");
+
+            // SettingsStore owns job-strip + adapter merge routing.
+            Eq("SettingsStore.SaveJobCustomer", SettingsStore.SaveJobCustomer("Gamma LLC"), "Gamma LLC");
+            Eq("job customer on disk via store", AppSettings.Load().Customer, "Gamma LLC");
+            Eq("SettingsStore.SaveJobWorkOrder", SettingsStore.SaveJobWorkOrder("99-01"), "99-01");
+            Eq("last wo on disk via store", AppSettings.Load().LastWo, "99-01");
+            SettingsStore.ClearJobStrip();
+            Eq("ClearJobStrip wipes customer", AppSettings.Load().Customer, "");
+            Eq("ClearJobStrip wipes last wo", AppSettings.Load().LastWo, "");
+            SettingsStore.MergeAdapterPrefs("CMNSI7", 2, 4);
+            AdapterPrefsData viaStore = AdapterPrefs.Load();
+            Eq("MergeAdapterPrefs id", viaStore.AdapterId, "CMNSI7");
+            Eq("MergeAdapterPrefs shell", viaStore.ShellPage, 2);
+            Check("adapter-prefs write keeps .bak", File.Exists(prefsPath + ".bak"), prefsPath + ".bak");
+
+            SettingsStore.BeginLoad();
+            Check("SettingsStore gate closed", SettingsStore.IsLoading, "open");
+            SettingsStore.SaveJobCustomer("DuringLoad");
+            Eq("job write refused during SettingsStore load", AppSettings.Load().Customer, "");
+            SettingsStore.EndLoad();
+            Check("SettingsWriteGate shares SettingsStore depth", !SettingsWriteGate.IsLoading, "still loading");
 
             // Source-level guards: startup must opt out of persist and wrap fills.
             string shellSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "ShellForm.cs"));
@@ -115,21 +137,36 @@ static partial class SelfTest
                 shellSrc.IndexOf("SettingsWriteGate.BeginLoad()", StringComparison.Ordinal) >= 0
                 && shellSrc.IndexOf("_filling = true", StringComparison.Ordinal) >= 0,
                 "ShellForm");
+            Check("shell routes page persist through SettingsStore",
+                shellSrc.IndexOf("SettingsStore.MergeAdapterPrefs", StringComparison.Ordinal) >= 0
+                && shellSrc.IndexOf("SettingsStore.SaveAppSettings", StringComparison.Ordinal) >= 0,
+                "ShellForm");
 
             string inlineSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "Inline7Control.cs"));
             Check("INLINE 7 blocks persist while applying prefs",
                 inlineSrc.IndexOf("_applyingAdapterPrefs", StringComparison.Ordinal) >= 0
                 && inlineSrc.IndexOf("SettingsWriteGate.BeginLoad()", StringComparison.Ordinal) >= 0,
                 "Inline7Control");
+            Check("INLINE 7 routes prefs through SettingsStore",
+                inlineSrc.IndexOf("SettingsStore.MergeAdapterPrefs", StringComparison.Ordinal) >= 0,
+                "Inline7Control");
 
             string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "WorkOrderControl.cs"));
             Check("WO reload does not auto-pick after job restore",
                 woSrc.IndexOf("_orders.Count > 0 && !_jobWoRestoreDone", StringComparison.Ordinal) >= 0,
                 "WorkOrderControl");
+            Check("job strip routes through SettingsStore",
+                woSrc.IndexOf("SettingsStore.SaveJobCustomer", StringComparison.Ordinal) >= 0
+                && woSrc.IndexOf("SettingsStore.ClearJobStrip", StringComparison.Ordinal) >= 0,
+                "WorkOrderControl");
+
+            string appSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "AppSettings.cs"));
+            Check("AppSettings.SaveTo uses SettingsStore.WriteText",
+                appSrc.IndexOf("SettingsStore.WriteText", StringComparison.Ordinal) >= 0, "AppSettings");
         }
         finally
         {
-            SettingsWriteGate.ResetForTests();
+            SettingsStore.ResetForTests();
             AppSettings.PathOverride = prevSettings;
             AdapterPrefs.FolderOverride = prevPrefs;
             try { Directory.Delete(dir, true); }
