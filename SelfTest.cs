@@ -1763,13 +1763,14 @@ ProtocolDescription=ISO 15765
         Check("app.rsp matches app.list", SameNameList(appList, app), "drift");
         int dup = 0;
         var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var seenBase = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int pass = 0; pass < 2; pass++)
         {
             List<string> list = pass == 0 ? core : app;
             string which = pass == 0 ? "core.rsp" : "app.rsp";
             for (int i = 0; i < list.Count; i++)
             {
-                string name = list[i];
+                string name = NormalizeRspPath(list[i]);
                 string prior;
                 if (seen.TryGetValue(name, out prior))
                 {
@@ -1777,17 +1778,24 @@ ProtocolDescription=ISO 15765
                     dup++;
                 }
                 else seen[name] = which;
+                string baseName = RspBaseName(name);
+                if (seenBase.TryGetValue(baseName, out prior))
+                {
+                    Check("no duplicate source basename " + baseName, false, prior + " and " + which);
+                    dup++;
+                }
+                else seenBase[baseName] = which;
             }
         }
         if (dup == 0)
             Check("response files have no duplicate sources", true, "");
-        Check("SelfTest.cs is not in a response file", !seen.ContainsKey("SelfTest.cs"), "listed");
+        Check("SelfTest.cs is not in a response file", !seenBase.ContainsKey("SelfTest.cs"), "listed");
 
         int selfDup = 0;
         var selfSeen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < selftest.Count; i++)
         {
-            string name = selftest[i];
+            string name = NormalizeRspPath(selftest[i]);
             string prior;
             if (selfSeen.TryGetValue(name, out prior))
             {
@@ -1795,7 +1803,7 @@ ProtocolDescription=ISO 15765
                 selfDup++;
             }
             else selfSeen[name] = "selftest.rsp";
-            if (seen.ContainsKey(name) || seen.ContainsKey(Path.GetFileName(name)))
+            if (seenBase.ContainsKey(RspBaseName(name)))
                 Check("selftest file is not in core or app rsp", false, name);
         }
         if (selfDup == 0 && selftest.Count > 0)
@@ -1835,6 +1843,8 @@ ProtocolDescription=ISO 15765
                 string name = Path.GetFileName(rootCs[i]);
                 if (string.Equals(name, "SelfTest.cs", StringComparison.OrdinalIgnoreCase))
                     continue;
+                // Path-aware: root file must be listed as the bare name, not only via a
+                // same-basename src\ entry (basename-only would hide a leftover root copy).
                 string where;
                 if (!seen.TryGetValue(name, out where))
                 {
@@ -1845,6 +1855,25 @@ ProtocolDescription=ISO 15765
         }
         if (missing == 0 && dup == 0)
             Check("every root .cs except SelfTest.cs is listed once", true, "");
+
+        int missingSrc = 0;
+        string srcRoot = Path.Combine(root, "src");
+        if (Directory.Exists(srcRoot))
+        {
+            string[] srcCs = Directory.GetFiles(srcRoot, "*.cs", SearchOption.AllDirectories);
+            for (int i = 0; i < srcCs.Length; i++)
+            {
+                string rel = srcCs[i].Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                rel = NormalizeRspPath(rel);
+                if (!seen.ContainsKey(rel))
+                {
+                    Check("src source is listed (" + rel + ")", false, "missing from core.rsp and app.rsp");
+                    missingSrc++;
+                }
+            }
+        }
+        if (missingSrc == 0 && Directory.Exists(srcRoot))
+            Check("every src\\**\\*.cs is listed once", true, "");
 
         string build = File.Exists(buildPath) ? File.ReadAllText(buildPath) : "";
         string test = File.Exists(testPath) ? File.ReadAllText(testPath) : "";
@@ -1948,22 +1977,53 @@ ProtocolDescription=ISO 15765
         if (a == null || b == null || a.Count != b.Count) return false;
         for (int i = 0; i < a.Count; i++)
         {
-            if (!string.Equals(a[i], b[i], StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(NormalizeRspPath(a[i]), NormalizeRspPath(b[i]), StringComparison.OrdinalIgnoreCase))
                 return false;
         }
         return true;
     }
 
+    static string NormalizeRspPath(string path)
+    {
+        if (path == null) return "";
+        return path.Replace('/', '\\');
+    }
+
+    /// <summary>
+    /// File name from an rsp path. rsp lists use '\'; Path.GetFileName on Mono
+    /// treats '\' as a normal character, so split after NormalizeRspPath.
+    /// </summary>
+    static string RspBaseName(string path)
+    {
+        string norm = NormalizeRspPath(path);
+        int i = norm.LastIndexOf('\\');
+        return i < 0 ? norm : norm.Substring(i + 1);
+    }
+
     static int BadRspEntry(string root, string name)
     {
         if (string.IsNullOrEmpty(name)
-            || name.IndexOf('\\') >= 0 || name.IndexOf('/') >= 0
             || name.IndexOf(' ') >= 0 || name.IndexOf('\t') >= 0)
         {
-            Check("listed source is one root file name", false, name ?? "(null)");
+            Check("listed source path is non-empty", false, name ?? "(null)");
             return 1;
         }
-        if (!File.Exists(Path.Combine(root, name)))
+        string norm = NormalizeRspPath(name);
+        if (norm.IndexOf("..", StringComparison.Ordinal) >= 0)
+        {
+            Check("listed source has no parent segments", false, name);
+            return 1;
+        }
+        if (norm.IndexOf('\\') >= 0)
+        {
+            if (!norm.StartsWith("src\\", StringComparison.OrdinalIgnoreCase))
+            {
+                Check("listed path source stays under src\\", false, name);
+                return 1;
+            }
+        }
+        string onDisk = norm.Replace('\\', Path.DirectorySeparatorChar);
+        if (!File.Exists(Path.Combine(root, onDisk)))
         {
             Check("listed source exists", false, name);
             return 1;

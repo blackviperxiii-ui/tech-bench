@@ -39,7 +39,7 @@ git switch -c cursor/<topic> origin/main
   3. `SelfTest.cs`: `Eq("stamped version", AppVersion.Number, "X.Y.Z")`.
   4. `README.md`: the `Current stamp: **X.Y.Z**` line.
   On Viper's box, `/workspace/tech-bench-tools/lockstep-version-bump.sh <repo> X.Y.Z` applies and verifies all 4; `--check` only reports them.
-- New root `.cs` files go in `sources/core.list` or `sources/app.list` (membership). `tools/gen-rsp.bat` (and `tools/gen-rsp.sh` on Linux) write `sources/*.rsp`; `tests/*.cs` are picked up by glob into `selftest.rsp`. SelfTest fails on drift. Do not hand-edit generated `.rsp` files.
+- New `.cs` files go in `sources/core.list` or `sources/app.list` (membership: root name or `src\...` path). `tools/gen-rsp.bat` (and `tools/gen-rsp.sh` on Linux) write `sources/*.rsp`; `tests/*.cs` are picked up by glob into `selftest.rsp`. SelfTest fails on drift. Do not hand-edit generated `.rsp` files. Stage 6 moves feature code into `src/` one folder per PR; safety files last and separately.
 - No `.github/` changes (workflow, settings) without Viper's OK.
 
 ## 6. Tests and CI
