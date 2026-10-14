@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6d: move Search feature sources to `src/Features/Search/` (path-only; SelfTest.Open path updated).
 - Rearch stage 6c: move `SyncForm.cs` to `src/Features/Sync/` (path-only).
 - Rearch stage 6b: move `CrashForm.cs` to `src/Features/Crash/` (path-only; SelfTest/linux-compile-check inline path updated).
 - Rearch stage 6a: begin `src/` feature folders — move `CheatSheetForm.cs` to `src/Features/CheatSheet/` (path-only; list + SourceListTests accept `src\` entries).
