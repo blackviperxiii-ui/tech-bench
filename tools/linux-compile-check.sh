@@ -15,8 +15,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+if [[ ! -f sources/core.list ]]; then
+  echo "linux-compile-check: could not find sources/core.list (repo root?)" >&2
+  exit 1
+fi
+
+# Regenerate sources/*.rsp from *.list + tests/*.cs (same as build.bat / test.bat).
+bash tools/gen-rsp.sh
 if [[ ! -f sources/core.rsp ]]; then
-  echo "linux-compile-check: could not find sources/core.rsp (repo root?)" >&2
+  echo "linux-compile-check: gen-rsp did not write sources/core.rsp" >&2
   exit 1
 fi
 
@@ -75,10 +82,11 @@ KB_RES=(
 )
 
 # Match Windows .NET Framework 4 csc language level (C# 5).
-LANG=(-langversion:5)
+# Do not name this LANG — that overwrites the shell locale variable.
+CS_LANG=(-langversion:5)
 
 echo "== linux-compile-check: SelfTest (core + selftest) =="
-mcs -nologo "${LANG[@]}" -out:"$TMP/SelfTest.exe" \
+mcs -nologo "${CS_LANG[@]}" -out:"$TMP/SelfTest.exe" \
   "${REFS[@]}" \
   "${KB_RES[@]}" \
   SelfTest.cs CrashForm.cs @"$TMP/core.rsp" @"$TMP/selftest.rsp"
@@ -89,7 +97,7 @@ APP_RES=(
   "${KB_RES[@]}"
   -resource:assets/cheatsheet.rtf,TechBench.assets.cheatsheet.rtf
 )
-mcs -nologo "${LANG[@]}" -target:winexe -out:"$TMP/TechBench.exe" \
+mcs -nologo "${CS_LANG[@]}" -target:winexe -out:"$TMP/TechBench.exe" \
   "${REFS[@]}" \
   "${APP_RES[@]}" \
   @"$TMP/core.rsp" @"$TMP/app.rsp"
