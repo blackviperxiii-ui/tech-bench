@@ -14,5 +14,5 @@ JobReportPrint.cs
 CodeBook.cs
 FeatureBook.cs
 Session.cs
-CrashForm.cs
+src\Features\Crash\CrashForm.cs
 src\Features\CheatSheet\CheatSheetForm.cs
