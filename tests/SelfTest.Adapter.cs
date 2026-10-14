@@ -12,6 +12,7 @@ using TechBench;
 
 static partial class SelfTest
 {
+    [SelfTestCase("RP1210 adapter discovery", Order = 90)]
     static void AdapterTests()
     {
         Rp1210Api api = Rp1210Api.FromIni("CMNSI7", Ini.Parse(VendorIni), @"C:\Windows\SysWOW64\CMNSI7.DLL");
@@ -95,6 +96,7 @@ static partial class SelfTest
 
     // ---------------- names ----------------
 
+    [SelfTestCase("name overrides", Order = 100)]
     static void NameTests()
     {
         Names.Reset();

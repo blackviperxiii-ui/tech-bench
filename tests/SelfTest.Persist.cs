@@ -8,10 +8,9 @@ using TechBench;
 
 static partial class SelfTest
 {
+    [SelfTestCase("persist startup (no wipe)", Order = 220)]
     static void PersistStartupTests()
     {
-        Console.WriteLine();
-        Console.WriteLine("== persist startup (no wipe) ==");
         SettingsWriteGate.ResetForTests();
 
         string dir = Path.Combine(Path.GetTempPath(), "tb-persist-startup-" + Guid.NewGuid().ToString("N"));

@@ -12,6 +12,7 @@ using TechBench;
 
 static partial class SelfTest
 {
+    [SelfTestCase("updater", Order = 230)]
     static void UpdaterTests()
     {
         Eq("stamped version", AppVersion.Number, "1.2.10");

@@ -1,5 +1,7 @@
 # SelfTest partials (TB0). test.bat compiles SelfTest.cs + this list + sources\core.rsp.
 # Add new per-card test files here, not in core.rsp or app.rsp.
+tests\SelfTest.Case.cs
+tests\SelfTest.Decode.cs
 tests\SelfTest.Feed.cs
 tests\SelfTest.Adapter.cs
 tests\SelfTest.Job.cs
