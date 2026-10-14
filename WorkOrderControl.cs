@@ -248,7 +248,7 @@ namespace TechBench
                 else
                     TrySelectKey(keep);
             }
-            else if (_orders.Count > 0) _list.SelectedIndex = 0;
+            else if (_orders.Count > 0 && !_jobWoRestoreDone) _list.SelectedIndex = 0;
             else
             {
                 _current = null;

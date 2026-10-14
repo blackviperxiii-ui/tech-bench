@@ -76,6 +76,7 @@ namespace TechBench
 
         public static void SaveTo(string path, AdapterPrefsData data)
         {
+            if (!SettingsWriteGate.AllowWrite()) return;
             try
             {
                 string dir = Path.GetDirectoryName(path);
