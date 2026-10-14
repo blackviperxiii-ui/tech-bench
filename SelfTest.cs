@@ -2040,6 +2040,25 @@ ProtocolDescription=ISO 15765
             test.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
         Check("test.bat has no /recurse: wildcard",
             test.IndexOf("/recurse:", StringComparison.OrdinalIgnoreCase) < 0, "/recurse:");
+
+        string linuxCheck = Path.Combine(root, "tools", "linux-compile-check.sh");
+        Check("tools\\linux-compile-check.sh present", File.Exists(linuxCheck), linuxCheck);
+        if (File.Exists(linuxCheck))
+        {
+            string sh = File.ReadAllText(linuxCheck);
+            Check("linux-compile-check uses mcs",
+                sh.IndexOf("mcs", StringComparison.Ordinal) >= 0, "mcs");
+            Check("linux-compile-check locks C# 5 like Framework csc",
+                sh.IndexOf("-langversion:5", StringComparison.Ordinal) >= 0, "langversion");
+            Check("linux-compile-check compiles SelfTest sources",
+                sh.IndexOf("SelfTest.cs", StringComparison.Ordinal) >= 0
+                && sh.IndexOf("selftest.rsp", StringComparison.Ordinal) >= 0, "SelfTest");
+            Check("linux-compile-check compiles app sources",
+                sh.IndexOf("app.rsp", StringComparison.Ordinal) >= 0
+                && sh.IndexOf("TechBench.exe", StringComparison.Ordinal) >= 0, "TechBench");
+            Check("linux-compile-check is compile-only (no test.bat substitute claim)",
+                sh.IndexOf("Not a substitute for test.bat", StringComparison.Ordinal) >= 0, "disclaimer");
+        }
     }
 
     static int BadRspEntry(string root, string name)
