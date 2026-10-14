@@ -127,7 +127,7 @@ static partial class SelfTest
             Check("SettingsWriteGate shares SettingsStore depth", !SettingsWriteGate.IsLoading, "still loading");
 
             // Source-level guards: startup must opt out of persist and wrap fills.
-            string shellSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "ShellForm.cs"));
+            string shellSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Shell", "ShellForm.cs"));
             Check("shell ShowPage startup skips persist",
                 shellSrc.IndexOf("ShowPage(0, false)", StringComparison.Ordinal) >= 0
                 && shellSrc.IndexOf("ShowPage(shell, false)", StringComparison.Ordinal) >= 0,
