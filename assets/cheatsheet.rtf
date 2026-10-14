@@ -16,7 +16,7 @@ INLINE 7\tab Cummins INLINE 7 / J1939: connect, live data, codes, trend, timelin
 Adapters\tab RP1210 adapter list and whether this process is 32-bit (required for INLINE 7)\par
 \par
 \b Job strip (top)\b0\par
-WO picker\tab Load customer, model, and serial from a work order\par
+WO picker\tab Load customer, model, and serial from a work order; last customer and WO are remembered across launches\par
 Search this job\tab Search using model and serial from the strip\par
 Add code to KB / Add note\tab Same as Ctrl+N and Shop - Add note\par
 Sync line\tab Click for Shop sync status and settings\par
@@ -25,23 +25,23 @@ Sync line\tab Click for Shop sync status and settings\par
 Sync now / Sync...\tab Two-way share of shop notes, user codes, and files through the KB or a folder you pick\par
 Add note / Add file...\tab Drop a text note or copy a file into the knowledge-base shop folder\par
 IntelliDealer settings\tab Azure API Gateway credentials (DPAPI-protected, not in the repo)\par
-Refresh work orders\tab Reload the assigned work-order list\par
+Refresh work orders\tab Reload the assigned work-order list (file-backed, or ServiceToday when gateway + subscription key are set)\par
 \par
 \b Help menu\b0\par
-Check for updates\tab Read latest.json and a hashed TechBench.exe (applies after you quit, never mid-session)\par
+Check for updates\tab Read latest.json and a hashed TechBench.exe (applies after you quit, never mid-session). Shop override: update-url.txt or update-feed-path.txt beside the exe\par
 Install update\tab Enabled when a verified update is staged\par
-About Tech Bench\tab Version, install path, knowledge-base location, process bitness\par
+About Tech Bench\tab Version, install path, knowledge-base location, process bitness, and which update feed is active\par
 \par
 \b Search filters (kind box)\b0\par
 ALL, CODE, PASSWORD, MANUAL, FILTER, EQUIP, NOTE, FILE\tab Narrow what the index searches\par
 \par
 \b INLINE 7 (high level)\b0\par
-Connect\tab Close USB-Link 3 Explorer and Guidanz first so the adapter is not locked\par
+Connect\tab Close USB-Link 3 Explorer and Guidanz first so the adapter is not locked. Last adapter is remembered when still installed\par
 Module box\tab Whose DM1/DM2 the code lists show (engine vs compressor controller, etc.)\par
-Reset / clear codes\tab J1939 DM11/DM3 requests with per-module report; no DEF/SCR disable or calibration writes\par
+Clear codes menu\tab J1939 DM11/DM3 requests with per-module report; no DEF/SCR disable or calibration writes\par
 Trend / Timeline / Unit history\tab Session charts and fleet history from saved _dtcs.csv files\par
 Report\tab Printable one-page summary for the current work order\par
-Sessions\tab Saved under Desktop\\TechBench-sessions (or Documents / LocalAppData fallback)\par
+Sessions\tab Saved under Desktop\\TechBench-sessions (or Documents / LocalAppData fallback). Fatal crashes also write techbench-crash.log beside the exe\par
 \par
 \b Knowledge base\b0\par
 Shipped data is embedded in TechBench.exe and copied beside the exe on install. Override with TECHBENCH_KB, kb-path.txt, or sync-path.txt next to the exe.\par

@@ -1507,6 +1507,18 @@ ProtocolDescription=ISO 15765
             && readme.IndexOf("Upload TechBench.exe and latest.json", StringComparison.Ordinal) < 0
             && readme.IndexOf("publish-dist.ps1", StringComparison.OrdinalIgnoreCase) < 0,
             "upload instruction");
+        Check("README documents update-feed-path.txt",
+            readme.IndexOf("update-feed-path.txt", StringComparison.Ordinal) >= 0, "missing feed path");
+        Check("README documents F1 cheat sheet",
+            readme.IndexOf("| F1 |", StringComparison.Ordinal) >= 0
+            || readme.IndexOf("F1 | shop cheat sheet", StringComparison.OrdinalIgnoreCase) >= 0,
+            "missing F1");
+        string rolloutPath = Path.Combine(root, "docs", "shop-rollout.md");
+        string rollout = File.Exists(rolloutPath) ? File.ReadAllText(rolloutPath) : "";
+        Check("shop-rollout documents update-feed-path.txt",
+            rollout.IndexOf("update-feed-path.txt", StringComparison.Ordinal) >= 0, "missing feed path");
+        Check("shop-rollout documents adapter-prefs.json",
+            rollout.IndexOf("adapter-prefs.json", StringComparison.Ordinal) >= 0, "missing adapter prefs");
 
         string peAssert = Path.Combine(root, "tools", "assert-pe-i386.ps1");
         Check("PE i386 assert script present", File.Exists(peAssert), peAssert);

@@ -103,6 +103,62 @@ namespace TechBench
             }
         }
 
+        /// <summary>
+        /// When update-feed-path.txt exists beside the exe but does not resolve to a usable
+        /// file: URI, returns a tech-facing reason. Empty when the file is absent or valid.
+        /// </summary>
+        public static string ShopShareConfigError()
+        {
+            string cfg = Path.Combine(ExeDir(), "update-feed-path.txt");
+            try
+            {
+                if (!File.Exists(cfg)) return "";
+            }
+            catch (Exception ex)
+            {
+                return "update-feed-path.txt could not be read: " + ex.Message;
+            }
+            string folder = ShopShareFolder();
+            if (string.IsNullOrWhiteSpace(folder))
+                return "update-feed-path.txt has no usable folder path.";
+            try
+            {
+                string manifest = Path.Combine(folder.Trim(), ShopManifestName);
+                string uri = new Uri(manifest).AbsoluteUri;
+                if (string.IsNullOrEmpty(uri))
+                    return "shop update share path is invalid: " + folder.Trim();
+                return "";
+            }
+            catch (Exception ex)
+            {
+                return "shop update share path is invalid: " + folder.Trim() + " (" + ex.Message + ")";
+            }
+        }
+
+        /// <summary>One-line label for About / update dialogs: which feed source is active.</summary>
+        public static string DescribeManifestSource(AppSettings settings)
+        {
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.ManifestUrl))
+                return "Update feed: settings URL — " + TruncateFeed(settings.ManifestUrl.Trim());
+            string fromFile = ReadBesideExeUrl("update-url.txt");
+            if (!string.IsNullOrEmpty(fromFile))
+                return "Update feed: update-url.txt — " + TruncateFeed(fromFile);
+            string shopErr = ShopShareConfigError();
+            if (!string.IsNullOrEmpty(shopErr))
+                return "Update feed: " + shopErr;
+            string folder = ShopShareFolder();
+            if (!string.IsNullOrWhiteSpace(folder))
+                return "Update feed: shop share — " + TruncateFeed(folder.Trim());
+            return "Update feed: built-in private URL (unpublished; use shop Setup or update-url.txt / update-feed-path.txt)";
+        }
+
+        static string TruncateFeed(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            if (text.Length <= 96) return text;
+            return text.Substring(0, 93) + "...";
+        }
+
         public static bool TryParseVersion(string text, out Version version)
         {
             version = null;
@@ -499,6 +555,17 @@ namespace TechBench
 
         public static UpdateCheck Check(string manifestUrl)
         {
+            if (string.Equals(manifestUrl ?? "", DefaultManifestUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                string feedErr = ShopShareConfigError();
+                if (!string.IsNullOrEmpty(feedErr))
+                {
+                    return new UpdateCheck
+                    {
+                        Error = CouldNotCheckMessage(feedErr, "")
+                    };
+                }
+            }
             var result = new UpdateCheck();
             try
             {

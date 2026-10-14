@@ -228,6 +228,9 @@ static partial class SelfTest
             return new IdHttpResponse { Status = 400, Body = "{\"error\":\"denied\"}" };
         };
         Eq("token 400 is empty", IdGateway.Token(oauth), "");
+        Check("token 400 sets LastTokenError",
+            IdGateway.LastTokenError.IndexOf("OAuth", StringComparison.OrdinalIgnoreCase) >= 0,
+            IdGateway.LastTokenError);
 
         IdGateway.HttpOverride = delegate(IdHttpRequest req)
         {
@@ -236,6 +239,36 @@ static partial class SelfTest
         IdCallResult denied = IdGateway.SignOff(live, wo);
         Check("gateway 401 is not success", !denied.Posted, denied.Message);
         Check("2xx still required", denied.Status == 401 || !denied.Posted, "status=" + denied.Status);
+
+        Eq("combine keeps relative on gateway",
+            IdGateway.CombineUrl("https://dealer.azure-api.net", "/svc/x"),
+            "https://dealer.azure-api.net/svc/x");
+        Eq("combine same-host absolute allowed",
+            IdGateway.CombineUrl("https://dealer.azure-api.net", "https://dealer.azure-api.net/svc/y"),
+            "https://dealer.azure-api.net/svc/y");
+        Eq("combine refuses off-host absolute",
+            IdGateway.CombineUrl("https://dealer.azure-api.net", "https://evil.example/steal"),
+            "");
+        Eq("combine refuses https-to-http absolute",
+            IdGateway.CombineUrl("https://dealer.azure-api.net", "http://dealer.azure-api.net/svc"),
+            "");
+
+        string why;
+        Check("gateway redirect same host allowed",
+            IdGateway.RedirectAllowed(
+                new Uri("https://dealer.azure-api.net/a"),
+                new Uri("https://dealer.azure-api.net/b"),
+                out why), why);
+        Check("gateway redirect other host refused",
+            !IdGateway.RedirectAllowed(
+                new Uri("https://dealer.azure-api.net/a"),
+                new Uri("https://evil.example/b"),
+                out why), why);
+        Check("gateway redirect https to http refused",
+            !IdGateway.RedirectAllowed(
+                new Uri("https://dealer.azure-api.net/a"),
+                new Uri("http://dealer.azure-api.net/b"),
+                out why), why);
     }
 
     static void WorkOrderMergeTests(IdSettings s, string kb)
