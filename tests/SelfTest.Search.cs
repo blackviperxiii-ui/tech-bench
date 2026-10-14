@@ -31,7 +31,7 @@ static partial class SelfTest
         string[] ul = SearchLines(u);
         Eq("unknown SPN title", ul[0], "SPN 99999");
         Eq("unknown SPN header", ul[1], "SPN 99999   FMI 7 " + Dash + " not responding");
-        Eq("unknown SPN body names the SPN", u.Contains("see Cummins troubleshooting for SPN 99999."), true);
+        Eq("unknown SPN body names the SPN", u.Contains("see Cummins troubleshooting for SPN 99999'."), true);
         Eq("unknown FMI falls back to FmiName + period", System.Array.IndexOf(ul, "not responding.") > 0, true);
         Eq("unknown SPN impact", System.Array.IndexOf(ul, "Usually not by itself. Watch whether Red Stop / 5246 is also active.") > 0, true);
         Eq("unknown SPN checks", System.Array.IndexOf(ul, "- Confirm whether the SPN is n/a (not talking) vs a real out-of-range number") > 0, true);
