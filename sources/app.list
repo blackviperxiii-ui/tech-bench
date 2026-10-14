@@ -5,11 +5,11 @@ src\Features\Search\CodeEditForm.cs
 src\Features\Search\NoteEditForm.cs
 src\Features\Sync\SyncForm.cs
 UiLayout.cs
-WorkOrderControl.cs
+src\Features\WorkOrders\WorkOrderControl.cs
 IdSettingsForm.cs
 Inline7Control.cs
 TrendChart.cs
-JobReportPrint.cs
+src\Features\WorkOrders\JobReportPrint.cs
 src\Features\Search\CodeBook.cs
 src\Features\Search\FeatureBook.cs
 Session.cs

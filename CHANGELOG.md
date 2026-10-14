@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rearch stage 6e: move WorkOrders sources to `src/Features/WorkOrders/` (path-only; SelfTest path reads updated).
 - Rearch stage 6d: move Search feature sources to `src/Features/Search/` (path-only; SelfTest.Open path updated).
 - Rearch stage 6c: move `SyncForm.cs` to `src/Features/Sync/` (path-only).
 - Rearch stage 6b: move `CrashForm.cs` to `src/Features/Crash/` (path-only; SelfTest/linux-compile-check inline path updated).
