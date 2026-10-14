@@ -105,8 +105,8 @@ static partial class SelfTest
         string search = File.Exists(searchPath) ? File.ReadAllText(searchPath) : "";
         Check("OpenSel uses SafeOpen",
             search.IndexOf("SafeOpen.TryOpen", StringComparison.Ordinal) >= 0, "SearchControl");
-        string woSrc = File.Exists(Path.Combine(root, "WorkOrderControl.cs"))
-            ? File.ReadAllText(Path.Combine(root, "WorkOrderControl.cs")) : "";
+        string woPath = Path.Combine(root, "src", "Features", "WorkOrders", "WorkOrderControl.cs");
+        string woSrc = File.Exists(woPath) ? File.ReadAllText(woPath) : "";
         Check("OpenMedia uses SafeOpen",
             woSrc.IndexOf("SafeOpen.TryOpen", StringComparison.Ordinal) >= 0, "WorkOrderControl");
         string kbSrc = File.Exists(Path.Combine(root, "KbIndex.cs"))

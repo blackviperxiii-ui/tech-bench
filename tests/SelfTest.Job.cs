@@ -390,7 +390,7 @@ static partial class SelfTest
             Eq("clear job wipes customer", afterClear.Customer, "");
             Eq("clear job wipes last wo", afterClear.LastWo, "");
 
-            string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "WorkOrderControl.cs"));
+            string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Features", "WorkOrders", "WorkOrderControl.cs"));
             Check("clear job button present",
                 woSrc.IndexOf("Clear job", StringComparison.Ordinal) >= 0, "WorkOrderControl");
             Check("restore waits for list load",
