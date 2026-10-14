@@ -152,7 +152,7 @@ static partial class SelfTest
             shell.IndexOf("never stores a GitHub token", StringComparison.Ordinal) >= 0
             && shell.IndexOf("apply after you quit", StringComparison.Ordinal) >= 0
             && shell.IndexOf("never mid-session", StringComparison.Ordinal) >= 0, "about");
-        string updaterSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "Updater.cs"));
+        string updaterSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Safety", "Updater.cs"));
         Check("updater does not tell the tech to host a public feed",
             updaterSrc.IndexOf("Host latest.json on a public HTTPS URL", StringComparison.Ordinal) < 0
             && updaterSrc.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0, "old copy");
