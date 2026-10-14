@@ -1,20 +1,20 @@
 @echo off
 setlocal EnableDelayedExpansion
 rem Compile TechBench-Setup-<version>.exe with Inno Setup (ISCC).
-rem Version always comes from AppVersion.cs — same stamp as the app and latest.json.
+rem Version always comes from src\Core\Version\AppVersion.cs — same stamp as the app and latest.json.
 rem Does not embed a GitHub token. Techs only need the finished setup exe.
 
 set ROOT=%~dp0..
 for %%I in ("%ROOT%") do set ROOT=%%~fI
 
-for /f "tokens=2 delims==" %%V in ('findstr /C:"public const string Number" "%ROOT%\AppVersion.cs"') do (
+for /f "tokens=2 delims==" %%V in ('findstr /C:"public const string Number" "%ROOT%\src\Core\Version\AppVersion.cs"') do (
   set VERSION=%%V
 )
 set VERSION=!VERSION:"=!
 set VERSION=!VERSION: =!
 set VERSION=!VERSION:;=!
 if "!VERSION!"=="" (
-  echo Could not read version from AppVersion.cs
+  echo Could not read version from src\Core\Version\AppVersion.cs
   exit /b 1
 )
 

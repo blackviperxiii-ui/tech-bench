@@ -27,8 +27,8 @@ function Test-VersionPrefix([string]$Actual, [string]$Want) {
 
 function Read-AppVersion {
     $candidates = @(
-        (Join-Path $PSScriptRoot "..\AppVersion.cs"),
-        (Join-Path (Get-Location) "AppVersion.cs")
+        (Join-Path $PSScriptRoot "..\src\Core\Version\AppVersion.cs"),
+        (Join-Path (Get-Location) "src\Core\Version\AppVersion.cs")
     )
     foreach ($path in $candidates) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
@@ -37,7 +37,7 @@ function Read-AppVersion {
         if (-not $m.Success) { Fail "Could not parse AppVersion.Number in $path" }
         return $m.Groups[1].Value
     }
-    Fail "AppVersion.cs not found (looked next to tools\ and in the current directory)"
+    Fail "AppVersion.cs not found (looked under src\Core\Version\ from tools\ and the current directory)"
 }
 
 function Assert-SkipIfSilent {
