@@ -186,12 +186,18 @@ namespace TechBench
             _nav = UiLayout.SwitchBar(
                 new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
                 delegate(int i) { ShowPage(i); });
-            ShowPage(0);
-            if (_inline.AdapterPrefsMatched)
+            // Startup page restore must not persist: ShowPage(0) would wipe a saved shell page.
+            SettingsWriteGate.BeginLoad();
+            try
             {
-                int shell = AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage);
-                if (shell != 0) ShowPage(shell);
+                ShowPage(0, false);
+                if (_inline.AdapterPrefsMatched)
+                {
+                    int shell = AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage);
+                    if (shell != 0) ShowPage(shell, false);
+                }
             }
+            finally { SettingsWriteGate.EndLoad(); }
 
             // Last-added docks nearest the edge: menu, switches, identity, then actions.
             Controls.Add(_host);
@@ -201,12 +207,22 @@ namespace TechBench
             Controls.Add(menu);
             Controls.Add(_syncStatus);
 
-            if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
-            if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
-            string jobCustomer = !string.IsNullOrEmpty(_settings.Customer)
-                ? _settings.Customer
-                : _orders.SavedJobCustomer;
-            if (!string.IsNullOrEmpty(jobCustomer)) _customer.Text = jobCustomer;
+            SettingsWriteGate.BeginLoad();
+            _filling = true;
+            try
+            {
+                if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
+                if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
+                string jobCustomer = !string.IsNullOrEmpty(_settings.Customer)
+                    ? _settings.Customer
+                    : _orders.SavedJobCustomer;
+                if (!string.IsNullOrEmpty(jobCustomer)) _customer.Text = jobCustomer;
+            }
+            finally
+            {
+                _filling = false;
+                SettingsWriteGate.EndLoad();
+            }
             ApplyWindow(_settings);
 
             useJob.Click += delegate
@@ -353,6 +369,11 @@ namespace TechBench
 
         void ShowPage(int i)
         {
+            ShowPage(i, true);
+        }
+
+        void ShowPage(int i, bool persistShellPage)
+        {
             if (_pages == null || i < 0 || i >= _pages.Length) return;
             _page = i;
             // One Dock.Fill child only. Sibling fill pages stay on Search at 192 DPI.
@@ -364,7 +385,7 @@ namespace TechBench
             _host.Controls.Add(page);
             _host.ResumeLayout(true);
             PaintNav();
-            if (_inline != null)
+            if (persistShellPage && _inline != null)
                 AdapterPrefs.Merge(_inline.CurrentAdapterId(), i, null);
         }
 

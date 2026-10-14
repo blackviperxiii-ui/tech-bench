@@ -27,4 +27,5 @@ WorkOrderStore.cs
 IdSettings.cs
 IdGateway.cs
 AdapterPrefs.cs
+SettingsWriteGate.cs
 SafeOpen.cs

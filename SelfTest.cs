@@ -158,6 +158,8 @@ static partial class SelfTest
         Console.WriteLine("== settings ==");
         SettingsTests();
 
+        PersistStartupTests();
+
         Console.WriteLine();
         Console.WriteLine("== updater ==");
         UpdaterTests();

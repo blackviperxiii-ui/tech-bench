@@ -104,6 +104,7 @@ namespace TechBench
 
         public void SaveTo(string path)
         {
+            if (!SettingsWriteGate.AllowWrite()) return;
             try
             {
                 string dir = Path.GetDirectoryName(path);
