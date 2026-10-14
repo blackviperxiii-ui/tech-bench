@@ -44,7 +44,7 @@ git switch -c cursor/<topic> origin/main
 
 ## 6. Tests and CI
 - CI (`.github/workflows/windows-installer.yml`, job `installer`, windows-latest, on every push): `test.bat`, then `release.bat`, then `tools\assert-pe-i386.ps1` on `TechBench.exe` and `-Native` on the Setup exe, then `tools\install-smoke.ps1 -Setup dist\TechBench-Setup-<ver>.exe`.
-- Locally from the repo root: `test.bat` (SelfTest plus LayoutAudit; both must end clean). Build only: `build.bat`. Needs Windows and the .NET Framework 4 `csc.exe`. Linux/Mono runs are only a hint; Windows CI green on the PR head is required.
+- Locally from the repo root: `test.bat` (SelfTest plus LayoutAudit; both must end clean). Build only: `build.bat`. Needs Windows and the .NET Framework 4 `csc.exe`. On Linux agent boxes, run `tools/linux-compile-check.sh` (Mono `mcs`; `sudo apt-get install -y mono-devel` once) before opening a PR to catch CS errors early — it is not a substitute for `test.bat`. Windows CI green on the PR head is still required.
 - New tests call the code the way the app does and assert a literal expected value. Before keeping one, ask: would it still pass if the code under test returned `default`/`null` or a stub? If yes, rewrite it. Don't add tests that only restate a constant, check that a mock was called, or assert their own fixture. No test beats a bad test, and no single-test PRs.
 - Never delete, skip or loosen an existing test. If one looks tautological or wrong, report it in the findings log. Disclose any test change in the PR.
 - Before a refactor, the touched behavior must be covered by passing tests. If it isn't, add behavior tests first, in the same PR.

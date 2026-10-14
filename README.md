@@ -80,6 +80,15 @@ test.bat
 
 Offline checks: J1939 decoding, BAM reassembly, DM11/DM3 code clear against simulated ECMs (ACK, refusal, silent controller, codes that come back, DEF from a separate module), RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
 
+On Linux agent boxes (no Windows csc), catch compile breaks with Mono before opening a PR:
+
+```bash
+# once: sudo apt-get install -y mono-devel
+tools/linux-compile-check.sh
+```
+
+That compiles SelfTest and TechBench with `mcs` from the same `sources\*.rsp` lists. It does **not** replace `test.bat` or the Windows CI `installer` job.
+
 ## Knowledge base
 
 A normal install already has the database. The Setup exe copies `air-compressor-kb` next to `TechBench.exe`, and the same JSON is embedded in the exe. Search reads that copy. No Google Drive or OneDrive folder is required.
