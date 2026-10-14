@@ -1928,7 +1928,10 @@ ProtocolDescription=ISO 15765
             stray++;
         }
         if (stray == 0)
-            Check("test.bat lists no root .cs inline except SelfTest.cs, CrashForm.cs, and tools\\LayoutAudit.cs", true, "");
+            Check("test.bat lists no root .cs inline except SelfTest.cs, CrashForm path, and tools\\LayoutAudit.cs", true, "");
+        Check("test.bat SelfTest compile references moved CrashForm path",
+            test.IndexOf(@"src\Features\Crash\CrashForm.cs", StringComparison.OrdinalIgnoreCase) >= 0,
+            "src\\Features\\Crash\\CrashForm.cs");
 
         Check("build.bat has no *.cs wildcard",
             build.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
@@ -1953,6 +1956,9 @@ ProtocolDescription=ISO 15765
             Check("linux-compile-check compiles SelfTest sources",
                 sh.IndexOf("SelfTest.cs", StringComparison.Ordinal) >= 0
                 && sh.IndexOf("selftest.rsp", StringComparison.Ordinal) >= 0, "SelfTest");
+            Check("linux-compile-check references moved CrashForm path",
+                sh.IndexOf("src/Features/Crash/CrashForm.cs", StringComparison.Ordinal) >= 0,
+                "CrashForm path");
             Check("linux-compile-check compiles app sources",
                 sh.IndexOf("app.rsp", StringComparison.Ordinal) >= 0
                 && sh.IndexOf("TechBench.exe", StringComparison.Ordinal) >= 0, "TechBench");

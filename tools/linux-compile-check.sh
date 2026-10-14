@@ -89,7 +89,7 @@ echo "== linux-compile-check: SelfTest (core + selftest) =="
 mcs -nologo "${CS_LANG[@]}" -out:"$TMP/SelfTest.exe" \
   "${REFS[@]}" \
   "${KB_RES[@]}" \
-  SelfTest.cs CrashForm.cs @"$TMP/core.rsp" @"$TMP/selftest.rsp"
+  SelfTest.cs src/Features/Crash/CrashForm.cs @"$TMP/core.rsp" @"$TMP/selftest.rsp"
 echo "  OK  $TMP/SelfTest.exe"
 
 echo "== linux-compile-check: TechBench (core + app) =="

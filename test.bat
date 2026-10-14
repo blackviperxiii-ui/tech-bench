@@ -33,7 +33,7 @@ if not exist "%CSC%" (
   /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
   /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
   /out:SelfTest.exe ^
-  SelfTest.cs CrashForm.cs @sources\core.rsp @sources\selftest.rsp
+  SelfTest.cs src\Features\Crash\CrashForm.cs @sources\core.rsp @sources\selftest.rsp
 if errorlevel 1 exit /b 1
 SelfTest.exe
 if errorlevel 1 exit /b 1
