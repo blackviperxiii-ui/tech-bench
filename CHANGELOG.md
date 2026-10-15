@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.27: switch agent tooling back to pstack: vendored `.cursor/skills/` now pstack 0.15.23 (`837067b`), `.cursor/rules/vstack.mdc` -> `pstack.mdc`, AGENTS.md/CLAUDE.md/tech-bench.mdc say always pstack, never vstack. v1.2.26 is reserved for the IntelliDealer card (PR #74), so this takes the next free patch. Lockstep version bump.
+
 - v1.2.25: SelfTest for job persistence: customer and last WO survive a restart (trimmed, null-safe), missing or corrupt settings.json falls back to defaults and recovers on the next save. No production change. Lockstep version bump.
 
 - v1.2.24: SelfTest.Feed pins the exact about wording (`an anonymous manifest (built-in URL`) and diffs linux-compile-check `-resource:` against build.bat `/resource:`. Lockstep version bump.
