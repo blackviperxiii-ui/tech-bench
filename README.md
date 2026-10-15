@@ -44,7 +44,7 @@ build.bat
 
 That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
 
-`build.bat` / `test.bat` call `tools\gen-rsp.bat`, which writes `sources\*.rsp` from `sources\core.list`, `sources\app.list`, and a `tests\*.cs` glob. Edit the `.list` files (root names or `src\...` paths) or drop a new file under `tests\`; do not hand-edit the generated `.rsp` files or paste sources into the scripts. Feature code is moving into `src\Features\`, `src\Core\`, and `src\Shell\` (one folder per PR).
+`build.bat` / `test.bat` call `tools\gen-rsp.bat`, which writes `sources\*.rsp` from `sources\core.list`, `sources\app.list`, and a `tests\*.cs` glob (gitignored; always regenerated). Edit the `.list` files (root names or `src\...` paths) or drop a new file under `tests\`; do not commit or hand-edit the generated `.rsp` files. `gen-rsp.sh` sorts the same way for Linux agents. Feature code is moving into `src\Features\`, `src\Core\`, and `src\Shell\` (one folder per PR).
 
 `TechBench.exe --smoke` checks the version stamp and the bundled knowledge base, then exits without a window. `--smoke-out <path>` writes the one-line report (the exe is a Windows program, so the CI gate reads that file). The Windows installer workflow runs this after a silent per-user install, then uninstalls.
 
