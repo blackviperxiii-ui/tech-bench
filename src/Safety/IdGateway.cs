@@ -466,11 +466,25 @@ namespace TechBench
                             result.Status = status;
                             return result;
                         }
+                        // 307/308 must keep method+body; wiping to GET dropped POST payloads
+                        // (log-on / sign-off / multimedia) while still returning a later 200.
+                        string followWhy = RedirectFollowError(status, method);
+                        if (followWhy != null)
+                        {
+                            result.Error = followWhy;
+                            result.Status = status;
+                            return result;
+                        }
                         current = next;
                         followed++;
-                        method = "GET";
-                        body = "";
-                        filePath = "";
+                        // 301/302/303: browsers switch to GET without a body. 307/308 keep method
+                        // (only GET/HEAD reach here after RedirectFollowError).
+                        if (status == 301 || status == 302 || status == 303)
+                        {
+                            method = "GET";
+                            body = "";
+                            filePath = "";
+                        }
                         continue;
                     }
                     result.Status = status;
@@ -494,6 +508,29 @@ namespace TechBench
         static bool IsRedirectStatus(int status)
         {
             return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+        }
+
+        /// <summary>
+        /// Whether RealSend may follow a redirect for this method.
+        /// 307/308 on non-GET/HEAD are refused — replaying POST bodies needs an explicit
+        /// same-host policy, and silently converting to GET drops the payload.
+        /// Returns null when follow is allowed; otherwise a clear error string.
+        /// </summary>
+        public static string RedirectFollowError(int status, string method)
+        {
+            if (status != 307 && status != 308) return null;
+            string m = string.IsNullOrEmpty(method) ? "GET" : method.Trim().ToUpperInvariant();
+            if (m == "GET" || m == "HEAD") return null;
+            return "Gateway " + status + " redirect after " + m
+                + " was refused (payload would not be resent).";
+        }
+
+        /// <summary>
+        /// SelfTest hook: real HTTP stack (does not use <see cref="HttpOverride"/>).
+        /// </summary>
+        public static IdHttpResponse SendRaw(IdHttpRequest req)
+        {
+            return RealSend(req);
         }
 
         static string ConsumeRedirect(HttpWebResponse resp, Uri from, int followed, out Uri next)
