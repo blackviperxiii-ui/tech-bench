@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.30: Rearch stage 9: shop folder watching moves out of `ShellForm` into `ShopWatcher` (`src/Features/Sync/`), with the folder list from pure `ShopWatch.Dirs`. New SelfTest case `shop watch folders`. No behaviour change. Lockstep version bump.
+
 - v1.2.29: Rearch stage 8: the Adapters page moves out of `ShellForm` into `AdaptersPage` (`src/Features/Adapters/`), with its text built by pure `AdapterSummary.Text`. New SelfTest case `adapters page summary`. No behaviour change. Lockstep version bump.
 
 - v1.2.28: Rearch stage 7: `ShellPages` registry (`src/Core/Shell/`) is the one list of shell pages; `ShellForm` switch bar, panels and `AdapterPrefs` clamp read it. New SelfTest case `shell page registry`. No behaviour change. Lockstep version bump.

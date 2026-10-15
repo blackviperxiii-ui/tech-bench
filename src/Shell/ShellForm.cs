@@ -34,8 +34,7 @@ namespace TechBench
         readonly AppSettings _settings;
         readonly TextBox _syncStatus;
         readonly Label _jobSync;
-        readonly System.Windows.Forms.Timer _watchDebounce = new System.Windows.Forms.Timer();
-        readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
+        readonly ShopWatcher _shopWatcher;
         KbIndex _kb;
         UpdateManifest _ready;
         bool _checking;
@@ -297,20 +296,9 @@ namespace TechBench
                 }
             };
 
-            _watchDebounce.Interval = 900;
-            _watchDebounce.Tick += delegate { _watchDebounce.Stop(); RunSync(false); };
+            _shopWatcher = new ShopWatcher(this, delegate { RunSync(false); });
             FormClosing += delegate { PersistSettings(); };
-            FormClosed += delegate
-            {
-                _watchDebounce.Stop();
-                _watchDebounce.Dispose();
-                foreach (FileSystemWatcher w in _watchers)
-                {
-                    try { w.Dispose(); }
-                    catch { }
-                }
-                _watchers.Clear();
-            };
+            FormClosed += delegate { _shopWatcher.Dispose(); };
             SizeChanged += delegate { ApplyChromeBudget(); };
             Shown += delegate
             {
@@ -319,7 +307,7 @@ namespace TechBench
                 ApplyWo(_orders.Current);
                 SyncJob();
                 RunSync(false);
-                StartWatchers();
+                _shopWatcher.Start(_kb == null ? "" : _kb.Root);
                 if (Updater.HasVerifiedPending(AppDomain.CurrentDomain.BaseDirectory))
                     MarkReadyFromPending();
                 ThreadPool.QueueUserWorkItem(delegate { CheckUpdates(false); });
@@ -701,7 +689,7 @@ namespace TechBench
                 _sync = dlg.LastResult;
                 if (_kb != null && !string.IsNullOrEmpty(_kb.Root)) ReloadKb();
                 ApplySyncStatus(_sync);
-                RestartWatchers();
+                _shopWatcher.Restart(_kb == null ? "" : _kb.Root);
             }
         }
 
@@ -751,70 +739,6 @@ namespace TechBench
                 : ("Sync · " + tech + " · click");
             Control bar = _jobSync.Parent;
             if (bar != null) bar.PerformLayout();
-        }
-
-        void RestartWatchers()
-        {
-            foreach (FileSystemWatcher w in _watchers)
-            {
-                try { w.Dispose(); }
-                catch { }
-            }
-            _watchers.Clear();
-            StartWatchers();
-        }
-
-        void StartWatchers()
-        {
-            if (_kb == null || string.IsNullOrEmpty(_kb.Root)) return;
-            WatchDir(Path.Combine(_kb.Root, ShopSync.ShopRel));
-            WatchDir(Path.Combine(_kb.Root, ShopSync.NotesRel));
-            WatchDir(Path.Combine(_kb.Root, ShopSync.FilesRel));
-            ShopSyncSettings s = ShopSync.LoadSettings();
-            if (!ShopSync.IsSharedTree(_kb.Root, s) && Directory.Exists(s.SyncFolder))
-                WatchDir(s.SyncFolder);
-        }
-
-        void WatchDir(string dir)
-        {
-            try
-            {
-                Directory.CreateDirectory(dir);
-                var w = new FileSystemWatcher(dir);
-                w.IncludeSubdirectories = true;
-                w.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
-                    | NotifyFilters.LastWrite | NotifyFilters.Size;
-                FileSystemEventHandler ping = delegate
-                {
-                    try
-                    {
-                        if (IsHandleCreated && !IsDisposed)
-                            BeginInvoke(new Action(OnShopChanged));
-                    }
-                    catch { }
-                };
-                w.Changed += ping;
-                w.Created += ping;
-                w.Deleted += ping;
-                w.Renamed += delegate
-                {
-                    try
-                    {
-                        if (IsHandleCreated && !IsDisposed)
-                            BeginInvoke(new Action(OnShopChanged));
-                    }
-                    catch { }
-                };
-                w.EnableRaisingEvents = true;
-                _watchers.Add(w);
-            }
-            catch { }
-        }
-
-        void OnShopChanged()
-        {
-            _watchDebounce.Stop();
-            _watchDebounce.Start();
         }
 
         void ReloadKb()
