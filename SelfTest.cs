@@ -10,7 +10,7 @@ using System.Web.Script.Serialization;
 using J1939Reader;
 using TechBench;
 
-static class SelfTest
+static partial class SelfTest
 {
     static int _fail;
 
@@ -29,163 +29,8 @@ static class SelfTest
 
     static int Main()
     {
-        Console.WriteLine("== DM1 lamp decode (byte0: MIL 7-6, red 5-4, amber 3-2, protect 1-0) ==");
-        LampCase("all off", 0x00, false, false, false, false);
-        LampCase("amber only (0b00_00_01_00)", 0x04, false, true, false, false);
-        LampCase("red only (0b00_01_00_00)", 0x10, true, false, false, false);
-        LampCase("protect only (0b00_00_00_01)", 0x01, false, false, true, false);
-        LampCase("MIL only (0b01_00_00_00)", 0x40, false, false, false, true);
-        LampCase("red+amber", 0x14, true, true, false, false);
-        LampCase("all four on", 0x55, true, true, true, true);
-
-        Console.WriteLine();
-        Console.WriteLine("== DTC unpack ==");
-        // SPN 5246 FMI 0, occ 1 -> low=0x7E, mid=0x14 (5246 = 0x147E), high bits 0, fmi 0
-        var dtcs = new List<Dtc>();
-        bool r, a;
-        byte[] dm1 = { 0x10, 0xFF, 0x7E, 0x14, 0x00, 0x01, 0xFF, 0xFF };
-        J1939Decode.ParseDm(dm1, dtcs, out r, out a);
-        Eq("one DTC parsed", dtcs.Count, 1);
-        if (dtcs.Count == 1)
-        {
-            Eq("SPN", dtcs[0].Spn, 5246);
-            Eq("FMI", dtcs[0].Fmi, 0);
-            Eq("occ", dtcs[0].Occ, 1);
-            Eq("name", dtcs[0].Name, "SCR operator inducement severity");
-        }
-        Eq("red stop set", r, true);
-
-        // SPN 524287-ish high bits: SPN 1761 = 0x6E1 -> low 0xE1, mid 0x06, fmi 9
-        dtcs.Clear();
-        byte[] dm1b = { 0x04, 0xFF, 0xE1, 0x06, 0x09, 0x02, 0xE1, 0x06, 0x09, 0x03 };
-        J1939Decode.ParseDm(dm1b, dtcs, out r, out a);
-        Eq("duplicate SPN/FMI collapsed", dtcs.Count, 1);
-        if (dtcs.Count == 1) { Eq("SPN 1761", dtcs[0].Spn, 1761); Eq("FMI 9", dtcs[0].Fmi, 9); }
-        Eq("amber set", a, true);
-
-        Console.WriteLine();
-        Console.WriteLine("== scalar decodes ==");
-        // EEC1: RPM at bytes 4-5, 0.125 rpm/bit. 800 rpm -> raw 6400 -> 0x1900
-        Eq("RPM 800", J1939Decode.Rpm(new byte[] { 0, 0, 0, 0x00, 0x19, 0, 0, 0 }).ToString("0"), "800");
-        Eq("RPM not available", J1939Decode.Rpm(new byte[] { 0, 0, 0, 0xFF, 0xFF, 0, 0, 0 }), -1d);
-        Eq("RPM short frame", J1939Decode.Rpm(new byte[] { 0, 0 }), -1d);
-        Eq("coolant 90C", J1939Decode.TempC(130), "90 C");
-        Eq("coolant n/a", J1939Decode.TempC(0xFF), "n/a");
-        // battery: bytes 5-6, 0.05 V/bit. 27.60 V -> raw 552 -> 0x0228
-        Eq("battery 27.60V", J1939Decode.BatteryV(new byte[] { 0, 0, 0, 0, 0x28, 0x02, 0, 0 }), "27.60 V");
-        Eq("battery short frame", J1939Decode.BatteryV(new byte[] { 0, 0 }), "n/a");
-        // DEF tank: byte0 level 0.4%/bit, byte1 temp -40 offset. 50% -> 125, 20C -> 60
-        Eq("DEF 50% 20C", J1939Decode.DefText(new byte[] { 125, 60 }), "50.0%  temp 20 C");
-        Eq("DEF header silent", J1939Decode.DefText(new byte[] { 0xFF, 0xFF }), "n/a (not talking)");
-        AftertreatmentTests();
-        // hours: 0.05 h/bit over 4 bytes. 1234.5 h -> raw 24690 -> 0x6072
-        Eq("engine hours", J1939Decode.Hours(new byte[] { 0x72, 0x60, 0x00, 0x00 }), "1234.5 h");
-        Eq("hours not available", J1939Decode.Hours(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }), null);
-        Eq("hours short frame", J1939Decode.Hours(new byte[] { 0x01 }), null);
-
-        Console.WriteLine();
-        Console.WriteLine("== ASCII / component ID ==");
-        Eq("VIN strips star", J1939Decode.Ascii(Bytes("1ABC23456789*")), "1ABC23456789");
-        Eq("component keeps fields", J1939Decode.Ascii(Bytes("CUMMINS*QSB6.7*12345678*A1*"), true),
-            "CUMMINS  ·  QSB6.7  ·  12345678  ·  A1");
-        Eq("empty", J1939Decode.Ascii(new byte[0]), "");
-
-        Console.WriteLine();
-        Console.WriteLine("== BAM reassembly ==");
-        BamTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== KB load resilience ==");
-        KbTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== shipped field database ==");
-        BundledKbTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== INI parsing ==");
-        IniTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== RP1210 adapter discovery ==");
-        AdapterTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== name overrides ==");
-        NameTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== trend log ==");
-        TrendTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== fault timeline ==");
-        TimelineTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== bus monitor routing ==");
-        MonitorTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== disconnected snapshot ==");
-        SnapshotBlankTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== TSC1 destination ==");
-        Tsc1DestTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== J1939 DM11/DM3 code clear ==");
-        ClearCodesTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== unit history ==");
-        HistoryTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== user codes round-trip ==");
-        UserCodeTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== snapshot diff ==");
-        DiffTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== job report ==");
-        ReportTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== settings ==");
-        SettingsTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== updater ==");
-        UpdaterTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== windows installer ==");
-        InstallerTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== shop two-way sync ==");
-        ShopSyncTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== work orders / IntelliDealer gateway ==");
-        WorkOrderTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== data safety ==");
-        DataSafetyTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== source list ==");
-        SourceListTests();
-
-        Console.WriteLine();
-        Console.WriteLine("== install smoke ==");
-        SmokeTests();
-
+        // Cases register with [SelfTestCase] on this partial type (see tests/SelfTest.*.cs).
+        RunAttributedCases();
         Console.WriteLine();
         Console.WriteLine(_fail == 0 ? "ALL PASS" : (_fail + " FAILURES"));
         return _fail == 0 ? 0 : 1;
@@ -216,6 +61,7 @@ ProtocolString=ISO15765
 ProtocolDescription=ISO 15765
 ";
 
+    [SelfTestCase("INI parsing", Order = 80)]
     static void IniTests()
     {
         Ini ini = Ini.Parse(VendorIni);
@@ -235,71 +81,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- adapter discovery ----------------
 
-    static void AdapterTests()
-    {
-        Rp1210Api api = Rp1210Api.FromIni("CMNSI7", Ini.Parse(VendorIni), @"C:\Windows\SysWOW64\CMNSI7.DLL");
-        Check("api parsed", api != null, "null");
-        Eq("vendor name", api.Name, "Cummins Inc. INLINE 7");
-        Eq("device count", api.Devices.Count, 2);
-        Eq("device ids from INI, not hardcoded", string.Join("|", api.DeviceIds().ConvertAll(i => i.ToString()).ToArray()), "1|2");
-        Eq("device label", api.Devices[0].ToString(), "1 — INLINE 7 over USB");
-        Check("250 baud offered first", api.J1939Protocols[0] == "J1939:Baud=250",
-            "first was " + api.J1939Protocols[0]);
-        Check("500 baud also offered", api.J1939Protocols.Contains("J1939:Baud=500"),
-            string.Join(",", api.J1939Protocols.ToArray()));
-        Check("ISO15765 detected", api.SupportsIso15765, "not detected");
-        Check("recognised as INLINE 7", api.LooksLikeInline7(), "not recognised");
-
-        // A vendor INI with no protocol section still has to produce something usable.
-        Rp1210Api bare = Rp1210Api.FromIni("OTHER", Ini.Parse("[VendorInformation]\nName=Some Adapter\n"), "");
-        Eq("bare vendor falls back to J1939:Baud=250", bare.J1939Protocols[0], "J1939:Baud=250");
-        Eq("bare vendor falls back to known device ids",
-            string.Join("|", bare.DeviceIds().ConvertAll(i => i.ToString()).ToArray()), "1|2|111");
-        Check("bare vendor not mistaken for INLINE 7", !bare.LooksLikeInline7(), "misidentified");
-        Check("no ISO15765 claimed when not advertised", !bare.SupportsIso15765, "claimed");
-
-        var apis = new List<Rp1210Api> { bare, api };
-        Check("INLINE 7 preferred over another adapter", Rp1210Api.Preferred(apis) == api, "picked the wrong one");
-        Check("Describe mentions the DLL", api.Describe().Contains("CMNSI7.DLL"), api.Describe());
-        Check("Preferred on empty list is null", Rp1210Api.Preferred(new List<Rp1210Api>()) == null, "not null");
-        Check("Installed() does not throw off Windows", Rp1210Api.Installed() != null, "threw or null");
-    }
-
-    // ---------------- names ----------------
-
-    static void NameTests()
-    {
-        Names.Reset();
-        Eq("built-in SPN", Names.Spn(1761), "DEF tank level");
-        Eq("built-in SA", Names.Sa(48), "Compressor controller");
-        Eq("built-in PGN", Names.Pgn(0xFECA), "DM1 active DTCs");
-        Eq("unknown SPN is blank", Names.Spn(999999), "");
-        Eq("unknown SA falls back to number", Names.Sa(77), "SA 77");
-
-        var spn = new Dictionary<int, string> { { 1761, "DEF level (shop wording)" }, { 4001, "Shop-added SPN" } };
-        var sa = new Dictionary<int, string> { { 77, "Doosan aux module" } };
-        Names.Load(spn, null, sa);
-        Eq("override replaces built-in", Names.Spn(1761), "DEF level (shop wording)");
-        Eq("override adds a new SPN without a rebuild", Names.Spn(4001), "Shop-added SPN");
-        Eq("override adds a new SA", Names.Sa(77), "Doosan aux module");
-        Eq("un-overridden built-in still works", Names.Spn(5246), "SCR operator inducement severity");
-        Eq("SpnName delegates to Names", J1939Decode.SpnName(4001), "Shop-added SPN");
-        Names.Reset();
-        Eq("reset restores built-in", Names.Spn(1761), "DEF tank level");
-        Eq("reset drops added SPN", Names.Spn(4001), "");
-    }
-
-    // ---------------- trend ----------------
-
-    static TrendSample Sample(DateTime t, double rpm)
-    {
-        return new TrendSample
-        {
-            Time = t, Rpm = rpm, CoolantC = double.NaN, OilKpa = double.NaN,
-            BatteryV = double.NaN, FuelLph = double.NaN
-        };
-    }
-
+    [SelfTestCase("trend log", Order = 110)]
     static void TrendTests()
     {
         var log = new TrendLog(4);
@@ -352,6 +134,7 @@ ProtocolDescription=ISO 15765
         return list;
     }
 
+    [SelfTestCase("fault timeline", Order = 120)]
     static void TimelineTests()
     {
         var tl = new DtcTimeline();
@@ -403,6 +186,7 @@ ProtocolDescription=ISO 15765
         return new J1939Frame { Pgn = pgn, Sa = sa, Da = 255, Data = data };
     }
 
+    [SelfTestCase("bus monitor routing", Order = 130)]
     static void MonitorTests()
     {
         DateTime t = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
@@ -514,6 +298,7 @@ ProtocolDescription=ISO 15765
         Check("null frame ignored", !bamMon.Feed(null, t), "accepted");
     }
 
+    [SelfTestCase("disconnected snapshot", Order = 140)]
     static void SnapshotBlankTests()
     {
         var s = new BusSnapshot
@@ -539,6 +324,7 @@ ProtocolDescription=ISO 15765
         Eq("disconnected snapshot clears modules", s.FaultModules.Count, 0);
     }
 
+    [SelfTestCase("TSC1 destination", Order = 150)]
     static void Tsc1DestTests()
     {
         Eq("TSC1 dest follows engine SA 17", Rp1210.Tsc1Dest(17), (byte)17);
@@ -779,6 +565,7 @@ ProtocolDescription=ISO 15765
         return text == null ? "" : text.Replace("\r\n", "\n");
     }
 
+    [SelfTestCase("J1939 DM11/DM3 code clear", Order = 160)]
     static void ClearCodesTests()
     {
         Eq("clear dests cover engine + compressor + broadcast", DestList(0), "0,48,255");
@@ -1077,6 +864,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- history ----------------
 
+    [SelfTestCase("unit history", Order = 170)]
     static void HistoryTests()
     {
         Eq("csv split handles quoted commas",
@@ -1134,6 +922,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- user codes ----------------
 
+    [SelfTestCase("user codes round-trip", Order = 180)]
     static void UserCodeTests()
     {
         string root = Path.Combine(Path.GetTempPath(), "uc_" + Guid.NewGuid().ToString("N"));
@@ -1209,6 +998,7 @@ ProtocolDescription=ISO 15765
 
     // ---------------- snapshot diff ----------------
 
+    [SelfTestCase("snapshot diff", Order = 190)]
     static void DiffTests()
     {
         Check("diff without snapshots explains itself",
@@ -1266,591 +1056,6 @@ ProtocolDescription=ISO 15765
 
     // ---------------- report ----------------
 
-    static void ReportTests()
-    {
-        var d = new ReportData
-        {
-            When = new DateTime(2026, 5, 1, 14, 30, 0),
-            JobTag = "HP450 12345",
-            Adapter = "Cummins Inc. INLINE 7  (CMNSI7)",
-            Vin = "1ABC", Sw = "SW9", CompId = "CUMMINS", Hours = "1234.5 h",
-            Rpm = 800, Red = true, Amber = true,
-            Def = "n/a (not talking)", Coolant = "90 C", Oil = "400 kPa", Batt = "27.6 V", Fuel = "3.5 L/h",
-            HistoryNote = "This unit has been here before"
-        };
-        d.Active.AddRange(Dtcs(5246, 0));
-        d.Prev.AddRange(Dtcs(1761, 9));
-        d.Markers.Add("09:00:01  CRANK  RPM=180");
-
-        List<string> lines = JobReport.Lines(d);
-        string text = string.Join("\n", lines.ToArray());
-        Check("has a title", lines[0].Contains("DIAGNOSTIC REPORT"), lines[0]);
-        Check("job on the report", text.Contains("HP450 12345"), "job missing");
-        Check("hours on the report", text.Contains("1234.5 h"), "hours missing");
-        Check("active fault listed", text.Contains("SPN 5246"), "active fault missing");
-        Check("previous fault listed", text.Contains("SPN 1761"), "previous fault missing");
-        Check("lamp states spelled out", text.Contains("Red Stop ON"), "lamps missing");
-        Check("marker carried through", text.Contains("CRANK"), "marker missing");
-        Check("history note carried through", text.Contains("been here before"), "history missing");
-        Check("signature line present", text.Contains("Signature"), "no signature line");
-        Check("states no emissions function was disabled", text.Contains("disabled to produce this report"), "missing disclaimer");
-        Check("unset snapshot diff omitted", !text.Contains("Need Snapshot"), "leaked placeholder text");
-
-        var empty = new ReportData();
-        string emptyText = JobReport.Text(empty);
-        Check("empty report still renders", emptyText.Contains("DIAGNOSTIC REPORT"), "no title");
-        Check("empty report says no job", emptyText.Contains("(not entered)"), "no job placeholder");
-        Check("empty report marks faults as none", emptyText.Contains("(none)"), "no none marker");
-        Check("empty report shows em dash for rpm", emptyText.Contains("RPM:      —"), emptyText);
-        Check("no clear run, no code clear section", !emptyText.Contains("LAST CODE CLEAR"), emptyText);
-
-        var cleared = new ReportData { CodeClear = "CODE CLEAR — reset all codes\r\nRESULT: cleared — no active codes came back.\r\n" };
-        string clearedText = JobReport.Text(cleared);
-        Check("code clear section printed", clearedText.Contains("LAST CODE CLEAR"), clearedText);
-        Check("code clear result carried onto the report", clearedText.Contains("  RESULT: cleared — no active codes came back."), clearedText);
-    }
-
-    static void WorkOrderTests()
-    {
-        string prevFolder = IdSettings.FolderOverride;
-        string prevExeDir = IdSettings.ExeDirOverride;
-        string prevWo = WorkOrderStore.FolderOverride;
-        string prevExe = WorkOrderStore.ExeDirOverride;
-        var prevHttp = IdGateway.HttpOverride;
-        string root = Path.Combine(Path.GetTempPath(), "tb-wo-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        string kb = Path.Combine(root, "kb");
-        Directory.CreateDirectory(Path.Combine(kb, "data"));
-        string share = Path.Combine(root, "share");
-        Directory.CreateDirectory(share);
-        IdSettings.FolderOverride = Path.Combine(root, "cfg");
-        WorkOrderStore.FolderOverride = Path.Combine(root, "local-wo");
-        WorkOrderStore.ExeDirOverride = Path.Combine(root, "exe");
-        IdSettings.ExeDirOverride = WorkOrderStore.ExeDirOverride;
-        Directory.CreateDirectory(WorkOrderStore.ExeDirOverride);
-        try
-        {
-            Eq("sanitize key", WorkOrderStore.SafeKey("WO 12/34"), "WO-12-34");
-            Eq("empty key", WorkOrderStore.SafeKey("***"), "");
-
-            var wo = new WorkOrder
-            {
-                Number = "44551",
-                Segment = "01",
-                Customer = "Acme Quarry",
-                Model = "HP450",
-                Serial = "12345",
-                Notes = "No start. Check 4-pin.",
-                Description = "Won't crank"
-            };
-            Eq("key", wo.Key(), "44551-01");
-            Check("job tag has WO", wo.JobTag().Contains("WO 44551-01"), wo.JobTag());
-
-            var s = new IdSettings { TechId = "jeremy", ShareFolder = share };
-            WorkOrderStore.Save(wo, s, kb);
-            string packet = Path.Combine(WorkOrderStore.LocalRoot(), "44551-01");
-            Check("wo.json written", File.Exists(Path.Combine(packet, "wo.json")), packet);
-            Check("notes.txt written", File.ReadAllText(Path.Combine(packet, "notes.txt")).Contains("4-pin"), "notes");
-            Check("shop shard packet",
-                File.Exists(Path.Combine(WorkOrderStore.ShopTechDir(kb, "jeremy"), "44551-01", "wo.json")),
-                "missing data\\shop\\jeremy\\work-orders");
-
-            WorkOrder loaded = WorkOrderStore.Load(packet);
-            Check("reload packet", loaded != null, packet);
-            if (loaded != null)
-            {
-                Eq("reload customer", loaded.Customer, "Acme Quarry");
-                Check("reload notes", loaded.Notes.Contains("4-pin"), loaded.Notes);
-            }
-
-            string jsonPath = Path.Combine(packet, "wo.json");
-            string notesPath = Path.Combine(packet, "notes.txt");
-            byte[] noteBytes = File.ReadAllBytes(notesPath);
-            Check("notes.txt is UTF-8 with BOM",
-                noteBytes.Length >= 3 && noteBytes[0] == 0xEF && noteBytes[1] == 0xBB && noteBytes[2] == 0xBF,
-                "bom");
-            byte[] jsonBytes = File.ReadAllBytes(jsonPath);
-            Check("wo.json is UTF-8 without BOM",
-                jsonBytes.Length > 0 && !(jsonBytes.Length >= 3 && jsonBytes[0] == 0xEF && jsonBytes[1] == 0xBB && jsonBytes[2] == 0xBF)
-                && jsonBytes[0] == (byte)'{',
-                "bom");
-            string firstJson = File.ReadAllText(jsonPath);
-            wo.Notes = "Second visit notes.";
-            WorkOrderStore.Save(wo, s, kb);
-            string secondJson = File.ReadAllText(jsonPath);
-            string bakJson = File.ReadAllText(jsonPath + ".bak");
-            Eq("wo.json.bak is previous content", bakJson, firstJson);
-            Check("wo.json is new content",
-                secondJson.IndexOf("Second visit notes.", StringComparison.Ordinal) >= 0 && secondJson != firstJson,
-                secondJson);
-            Check("notes.txt.bak is previous notes",
-                File.ReadAllText(notesPath + ".bak").IndexOf("4-pin", StringComparison.Ordinal) >= 0, "notes bak");
-            Check("notes.txt is new notes",
-                File.ReadAllText(notesPath).IndexOf("Second visit notes.", StringComparison.Ordinal) >= 0, "notes");
-            Check("no leftover tmp after second save", !HasPacketTemp(packet), packet);
-            WorkOrder bakWo = new JavaScriptSerializer().Deserialize<WorkOrder>(bakJson);
-            Check("bak still parses",
-                bakWo != null && bakWo.Number == "44551" && (bakWo.Notes ?? "").IndexOf("4-pin", StringComparison.Ordinal) >= 0,
-                bakWo == null ? "null" : (bakWo.Notes ?? ""));
-            string shopPacket = Path.Combine(WorkOrderStore.ShopTechDir(kb, "jeremy"), "44551-01");
-            Check("shop copy ignores wo.json.bak", !File.Exists(Path.Combine(shopPacket, "wo.json.bak")), "json bak copied");
-            Check("shop copy ignores notes.txt.bak", !File.Exists(Path.Combine(shopPacket, "notes.txt.bak")), "notes bak copied");
-            Check("shop copy has no tmp sidecar", !HasPacketTemp(shopPacket), shopPacket);
-            Check("shop shard wo.json matches local with no tmp",
-                File.ReadAllText(Path.Combine(shopPacket, "wo.json")) == File.ReadAllText(jsonPath)
-                    && !HasPacketTemp(shopPacket),
-                HasPacketTemp(shopPacket) ? "tmp left" : "json differs");
-
-            string stray = WorkOrderStore.WriteAtomicTemp(jsonPath, "{ truncated", new UTF8Encoding(false));
-            Check("crash temp sits beside wo.json",
-                stray.IndexOf(jsonPath + ".tmp-", StringComparison.Ordinal) == 0, stray);
-            Eq("crash leaves wo.json intact", File.ReadAllText(jsonPath), secondJson);
-            WorkOrder afterCrash = WorkOrderStore.Load(packet);
-            Check("crash leaves wo.json parseable",
-                afterCrash != null && afterCrash.Number == "44551"
-                && afterCrash.Notes.IndexOf("Second visit notes.", StringComparison.Ordinal) >= 0,
-                afterCrash == null ? "null" : afterCrash.Notes);
-            File.Delete(stray);
-            Check("stray temp removed", !HasPacketTemp(packet), stray);
-
-            wo.ReportText = "report v1";
-            WorkOrderStore.Save(wo, s, kb);
-            wo.ReportText = "report v2";
-            WorkOrderStore.Save(wo, s, kb);
-            Eq("report.txt is new report", File.ReadAllText(Path.Combine(packet, "report.txt")), "report v2");
-            Eq("report.txt.bak is previous report", File.ReadAllText(Path.Combine(packet, "report.txt.bak")), "report v1");
-            Check("no leftover tmp after report saves", !HasPacketTemp(packet), packet);
-
-            string beforeFallback = File.ReadAllText(jsonPath);
-            WorkOrderStore.ForceCopyFallbackForTest = true;
-            try
-            {
-                wo.Notes = "fallback notes";
-                WorkOrderStore.Save(wo, s, kb);
-                Check("fallback wo.json is new content",
-                    File.ReadAllText(jsonPath).IndexOf("fallback notes", StringComparison.Ordinal) >= 0, "new");
-                Eq("fallback wo.json.bak is previous content", File.ReadAllText(jsonPath + ".bak"), beforeFallback);
-                Check("fallback leaves no tmp", !HasPacketTemp(packet), packet);
-            }
-            finally
-            {
-                WorkOrderStore.ForceCopyFallbackForTest = false;
-            }
-
-            string pic = Path.Combine(root, "shot.png");
-            File.WriteAllText(pic, "png-bytes");
-            WorkOrderStore.AttachFile(wo, pic, s, kb);
-            Check("media listed", wo.Media.Count >= 1, "count=" + wo.Media.Count);
-
-            string mediaDir = Path.Combine(packet, "media");
-            File.WriteAllText(Path.Combine(mediaDir, "shot.png.bak"), "old-png");
-            File.WriteAllText(Path.Combine(mediaDir, "shot.png.tmp-dead"), "partial-png");
-            WorkOrder mediaLoaded = WorkOrderStore.Load(packet);
-            bool sawPng = false, sawMediaBak = false, sawMediaTmp = false;
-            if (mediaLoaded != null && mediaLoaded.Media != null)
-            {
-                foreach (string mediaName in mediaLoaded.Media)
-                {
-                    if (string.Equals(mediaName, "shot.png", StringComparison.OrdinalIgnoreCase)) sawPng = true;
-                    if (string.Equals(mediaName, "shot.png.bak", StringComparison.OrdinalIgnoreCase)) sawMediaBak = true;
-                    if (mediaName.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0) sawMediaTmp = true;
-                }
-            }
-            Check("media photo still listed", sawPng, "missing png");
-            Check("media ignores bak", !sawMediaBak, "bak listed");
-            Check("media ignores tmp", !sawMediaTmp, "tmp listed");
-            WorkOrderStore.Save(wo, s, kb);
-            Check("copied packet ignores media bak",
-                !File.Exists(Path.Combine(shopPacket, "media", "shot.png.bak")), "bak copied");
-            Check("copied packet ignores media tmp",
-                !File.Exists(Path.Combine(shopPacket, "media", "shot.png.tmp-dead")), "tmp copied");
-            List<WorkOrder> listed = WorkOrderStore.ListAll(s, kb);
-            int n44551 = 0;
-            foreach (WorkOrder listedWo in listed)
-                if (listedWo.Number == "44551") n44551++;
-            Eq("bak sidecar is not a second work order", n44551, 1);
-            string conflictDetail = "";
-            if (WorkOrderStore.Conflicts.Count > 0) conflictDetail = WorkOrderStore.Conflicts[0].ToString();
-            Check("sidecar files are not a work-order conflict", WorkOrderStore.Conflicts.Count == 0, conflictDetail);
-
-            wo.ReportText = "TECH BENCH — DIAGNOSTIC REPORT";
-            string dest = WorkOrderStore.Share(wo, s, kb);
-            Check("share dest exists", Directory.Exists(dest), dest);
-            Check("shared in kb _shared",
-                File.Exists(Path.Combine(WorkOrderStore.ShopSharedDir(kb), "44551-01", "wo.json")),
-                "kb shared missing");
-            Check("shared in share\\work-orders",
-                File.Exists(Path.Combine(share, "work-orders", "44551-01", "wo.json")),
-                "share folder missing");
-            Check("shared in share data\\shop\\_shared",
-                File.Exists(Path.Combine(share, "data", "shop", "_shared", "work-orders", "44551-01", "wo.json")),
-                "sync-compatible path missing");
-
-            List<WorkOrder> fromJson = WorkOrderStore.ParseAssignedJson(
-                "[{\"Number\":\"99\",\"Customer\":\"Bob\",\"Model\":\"XHP750\",\"Serial\":\"S1\"}]");
-            Eq("json count", fromJson.Count, 1);
-            Eq("json number", fromJson[0].Number, "99");
-            List<WorkOrder> wrapped = WorkOrderStore.ParseAssignedJson(
-                "{\"value\":[{\"WorkOrder\":\"77\",\"Segment\":\"02\",\"CustomerName\":\"Cat\"}]}");
-            Eq("odata wrap", wrapped.Count, 1);
-            Eq("odata wo", wrapped[0].Number, "77");
-            List<WorkOrder> csv = WorkOrderStore.ParseAssignedCsv("Number,Customer,Model\n88,Delta,HP1600\n");
-            Eq("csv count", csv.Count, 1);
-            Eq("csv model", csv[0].Model, "HP1600");
-
-            File.WriteAllText(Path.Combine(WorkOrderStore.ExeDirOverride, "id-work-orders.json"),
-                "[{\"Number\":\"SIDECAR\",\"Customer\":\"From file\"}]");
-            List<WorkOrder> all = WorkOrderStore.ListAll(s, kb);
-            bool sawLocal = false, sawFile = false;
-            foreach (WorkOrder x in all)
-            {
-                if (x.Number == "44551") sawLocal = true;
-                if (x.Number == "SIDECAR") sawFile = true;
-            }
-            Check("list includes saved WO", sawLocal, "missing 44551");
-            Check("list includes sidecar file", sawFile, "missing SIDECAR");
-
-            string sync = Path.Combine(IdSettings.Folder(), "sync.json");
-            File.WriteAllText(sync, "{\"TechId\":\"alice\",\"SyncFolder\":\"Z:\\\\usb\"}");
-            Eq("reads other-agent sync folder", IdSettings.ReadSiblingShare(WorkOrderStore.ExeDirOverride), "Z:\\usb");
-            string after = File.ReadAllText(sync);
-            Check("does not smash sync.json", after.Contains("alice") && after.Contains("Z:"), after);
-
-            var blank = new IdSettings();
-            IdCallResult missing = IdGateway.FetchAssigned(blank);
-            Check("no creds is not a live fetch", !missing.Posted, missing.Message);
-            IdCallResult noSign = IdGateway.SignOff(blank, wo);
-            Check("sign-off refused without gateway", !noSign.Posted, noSign.Message);
-            Check("sign-off names payroll/DMS", noSign.Message.Contains("payroll") || noSign.Message.Contains("API Gateway"), noSign.Message);
-
-            var live = new IdSettings
-            {
-                GatewayUrl = "https://dealer.azure-api.net",
-                SubscriptionKey = "test-key",
-                TechNumber = "T12",
-                AssignedPath = "/service/technicians/{tech}/workorders",
-                SignOffPath = "/service/workorders/{wo}/signoff"
-            };
-            Eq("expand assigned", IdGateway.Expand(live.AssignedPath, live, null),
-                "/service/technicians/T12/workorders");
-            Eq("combine url", IdGateway.CombineUrl(live.GatewayUrl, "/x"),
-                "https://dealer.azure-api.net/x");
-
-            IdGateway.HttpOverride = delegate(IdHttpRequest req)
-            {
-                if (req.Url.Contains("workorders") && req.Method == "GET")
-                    return new IdHttpResponse { Status = 200, Body = "[{\"Number\":\"G1\",\"Customer\":\"Gateway\"}]" };
-                return new IdHttpResponse { Status = 404, Error = "not found" };
-            };
-            IdCallResult fetched = IdGateway.FetchAssigned(live);
-            Check("gateway fetch posts on 200", fetched.Posted, fetched.Message);
-            Eq("gateway fetch count", fetched.WorkOrders.Count, 1);
-            Eq("gateway source", fetched.WorkOrders[0].Source, "gateway");
-
-            IdCallResult denied = IdGateway.SignOff(live, wo);
-            Check("sign-off 404 is not success", !denied.Posted, denied.Message);
-            Check("did not fake sign-off", wo.ApiSignOff == false, "ApiSignOff was set");
-
-            IdGateway.HttpOverride = delegate(IdHttpRequest req)
-            {
-                Check("sign-off sends subscription key",
-                    req.Headers.ContainsKey("Ocp-Apim-Subscription-Key")
-                    && req.Headers["Ocp-Apim-Subscription-Key"] == "test-key",
-                    "missing header");
-                return new IdHttpResponse { Status = 200, Body = "{\"ok\":true}" };
-            };
-            IdCallResult signed = IdGateway.SignOff(live, wo);
-            Check("sign-off 200 is posted", signed.Posted, signed.Message);
-
-            IdGateway.HttpOverride = delegate(IdHttpRequest req)
-            {
-                return new IdHttpResponse { Status = 200, Body = "{\"ok\":true}" };
-            };
-            string media = Path.Combine(packet, "media", "shot.png");
-            IdCallResult mm = IdGateway.PostMultimedia(live, wo, media);
-            Check("multimedia 200 posts", mm.Posted, mm.Message);
-            IdCallResult mmBlank = IdGateway.PostMultimedia(blank, wo, media);
-            Check("multimedia without creds is local only", !mmBlank.Posted, mmBlank.Message);
-
-            Eq("list still has packets after gateway tests", all.Count >= 1, true);
-
-            CredProtectTests();
-            TokenCacheTests(live, wo);
-            WorkOrderMergeTests(s, kb);
-            WorkOrderBakRecoveryTests(s, kb);
-        }
-        finally
-        {
-            WorkOrderStore.ForceCopyFallbackForTest = false;
-            IdSettings.FolderOverride = prevFolder;
-            IdSettings.ExeDirOverride = prevExeDir;
-            WorkOrderStore.FolderOverride = prevWo;
-            WorkOrderStore.ExeDirOverride = prevExe;
-            IdGateway.HttpOverride = prevHttp;
-            IdGateway.ClearTokenCache();
-            try { Directory.Delete(root, true); } catch { }
-        }
-    }
-
-    static void CredProtectTests()
-    {
-        var creds = new IdSettings
-        {
-            GatewayUrl = "https://dealer.azure-api.net",
-            ClientId = "cid",
-            ClientSecret = "oauth-secret",
-            SubscriptionKey = "sub-key",
-            TechId = "jeremy"
-        };
-        creds.Save();
-        string stored = File.ReadAllText(IdSettings.PathName());
-        Check("LocalAppData json has no plaintext secret", stored.IndexOf("oauth-secret") < 0, stored);
-        Check("LocalAppData json has no plaintext subscription key", stored.IndexOf("sub-key") < 0, stored);
-        Check("LocalAppData json keeps ciphertext",
-            stored.IndexOf("ClientSecretProtected") >= 0 && stored.IndexOf("SubscriptionKeyProtected") >= 0, stored);
-
-        string cipher = IdSettings.ProtectSecret("shop-secret");
-        Check("protect is not plaintext", cipher.Length > 0 && cipher != "shop-secret", cipher);
-        Eq("DPAPI/protector round-trip", IdSettings.UnprotectSecret(cipher), "shop-secret");
-        Eq("corrupt ciphertext is empty", IdSettings.UnprotectSecret("%%%not-valid%%%"), "");
-        Eq("missing ciphertext is empty", IdSettings.UnprotectSecret(""), "");
-        Eq("null ciphertext is empty", IdSettings.UnprotectSecret(null), "");
-
-        var loaded = IdSettings.LoadFrom(IdSettings.PathName());
-        Eq("load decrypts secret", loaded.ClientSecret, "oauth-secret");
-        Eq("load decrypts subscription key", loaded.SubscriptionKey, "sub-key");
-        Eq("in-memory gateway url", loaded.GatewayUrl, "https://dealer.azure-api.net");
-
-        File.WriteAllText(IdSettings.PathName(),
-            "{\"GatewayUrl\":\"https://dealer.azure-api.net\",\"ClientSecretProtected\":\"%%%\",\"SubscriptionKeyProtected\":\"not-base64\"}");
-        var corrupt = IdSettings.LoadFrom(IdSettings.PathName());
-        Eq("corrupt secret becomes empty", corrupt.ClientSecret, "");
-        Eq("corrupt key becomes empty", corrupt.SubscriptionKey, "");
-        Eq("corrupt file still loads url", corrupt.GatewayUrl, "https://dealer.azure-api.net");
-
-        string beside = Path.Combine(WorkOrderStore.ExeDirOverride, "id-settings.json");
-        creds.ClientSecret = "oauth-secret";
-        creds.SubscriptionKey = "sub-key";
-        creds.SaveTo(beside);
-        string besideJson = File.ReadAllText(beside);
-        Check("Save beside exe writes no plaintext secret", besideJson.IndexOf("oauth-secret") < 0, besideJson);
-        Check("Save beside exe writes no plaintext key", besideJson.IndexOf("sub-key") < 0, besideJson);
-        Check("Save beside exe writes no ciphertext blob",
-            besideJson.IndexOf("ClientSecretProtected\":\"") < 0
-            || besideJson.IndexOf("\"ClientSecretProtected\":\"\"") >= 0, besideJson);
-
-        creds.GatewayUrl = "";
-        creds.Save();
-        File.WriteAllText(beside,
-            "{\"GatewayUrl\":\"https://overlay.azure-api.net\",\"SubscriptionKey\":\"should-not-load\",\"ClientSecret\":\"also-no\"}");
-        var merged = IdSettings.Load();
-        Eq("beside overlays blank gateway url", merged.GatewayUrl, "https://overlay.azure-api.net");
-        Eq("beside secret is not loaded", merged.ClientSecret, "oauth-secret");
-        Eq("beside subscription key is not loaded", merged.SubscriptionKey, "sub-key");
-
-        File.Delete(IdSettings.PathName());
-        File.WriteAllText(beside,
-            "{\"GatewayUrl\":\"https://exe.azure-api.net\",\"ClientSecret\":\"leaked\",\"SubscriptionKey\":\"leaked-key\"}");
-        var onlyBeside = IdSettings.Load();
-        Eq("beside-only url used", onlyBeside.GatewayUrl, "https://exe.azure-api.net");
-        Eq("beside-only secret ignored", onlyBeside.ClientSecret, "");
-        Eq("beside-only key ignored", onlyBeside.SubscriptionKey, "");
-    }
-
-    static void TokenCacheTests(IdSettings live, WorkOrder wo)
-    {
-        IdGateway.ClearTokenCache();
-        int hits = 0;
-        var oauth = new IdSettings
-        {
-            GatewayUrl = live.GatewayUrl,
-            TokenUrl = "https://idp.example/token",
-            ClientId = "cid",
-            ClientSecret = "csec",
-            SignOffPath = live.SignOffPath,
-            TechNumber = live.TechNumber
-        };
-        IdGateway.HttpOverride = delegate(IdHttpRequest req)
-        {
-            hits++;
-            if (req.Url.IndexOf("/token") >= 0)
-                return new IdHttpResponse { Status = 200, Body = "{\"access_token\":\"tok-1\",\"expires_in\":3600}" };
-            return new IdHttpResponse { Status = 500, Body = "no" };
-        };
-        Eq("token first fetch", IdGateway.Token(oauth), "tok-1");
-        Eq("token reused until near expiry", IdGateway.Token(oauth), "tok-1");
-        Eq("token endpoint hit once", hits, 1);
-
-        oauth.ClientSecret = "rotated";
-        IdGateway.HttpOverride = delegate(IdHttpRequest req)
-        {
-            hits++;
-            return new IdHttpResponse { Status = 200, Body = "{\"access_token\":\"tok-2\",\"expires_in\":3600}" };
-        };
-        Eq("token cleared when credentials change", IdGateway.Token(oauth), "tok-2");
-        Eq("token endpoint hit after cred change", hits, 2);
-
-        IdGateway.ClearTokenCache();
-        hits = 0;
-        oauth.ClientSecret = "csec";
-        IdGateway.HttpOverride = delegate(IdHttpRequest req)
-        {
-            hits++;
-            return new IdHttpResponse { Status = 200, Body = "{\"access_token\":\"short\",\"expires_in\":30}" };
-        };
-        IdGateway.Token(oauth);
-        IdGateway.Token(oauth);
-        Eq("token not reused inside 60s skew", hits, 2);
-
-        IdGateway.ClearTokenCache();
-        IdGateway.HttpOverride = delegate(IdHttpRequest req)
-        {
-            return new IdHttpResponse { Status = 400, Body = "{\"error\":\"denied\"}" };
-        };
-        Eq("token 400 is empty", IdGateway.Token(oauth), "");
-
-        IdGateway.HttpOverride = delegate(IdHttpRequest req)
-        {
-            return new IdHttpResponse { Status = 401, Body = "nope" };
-        };
-        IdCallResult denied = IdGateway.SignOff(live, wo);
-        Check("gateway 401 is not success", !denied.Posted, denied.Message);
-        Check("2xx still required", denied.Status == 401 || !denied.Posted, "status=" + denied.Status);
-    }
-
-    static void WorkOrderMergeTests(IdSettings s, string kb)
-    {
-        var clash = new WorkOrder
-        {
-            Number = "9001",
-            Segment = "01",
-            Customer = "Clash Co",
-            Notes = "Local notes A"
-        };
-        WorkOrderStore.Save(clash, s, kb);
-        string localDir = Path.Combine(WorkOrderStore.LocalRoot(), "9001-01");
-        string shopDir = Path.Combine(WorkOrderStore.ShopTechDir(kb, "jeremy"), "9001-01");
-        WorkOrder shopWo = WorkOrderStore.Load(shopDir);
-        Check("shop shard exists for merge", shopWo != null, shopDir);
-        shopWo.Notes = "Remote notes B";
-        shopWo.UpdatedUtc = DateTime.UtcNow.AddHours(2).ToString("o");
-        File.WriteAllText(Path.Combine(shopDir, "notes.txt"), shopWo.Notes, Encoding.UTF8);
-        var ser = new JavaScriptSerializer();
-        File.WriteAllText(Path.Combine(shopDir, "wo.json"), ser.Serialize(shopWo));
-
-        var result = new ShopSyncResult();
-        WorkOrderStore.CollectConflicts(s, kb, result);
-        WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "9001");
-        Check("newer remote packet listed", listed != null && listed.Notes.IndexOf("Remote notes B") >= 0,
-            listed == null ? "missing 9001" : listed.Notes);
-        Check("local notes still on disk",
-            File.ReadAllText(Path.Combine(localDir, "notes.txt")).IndexOf("Local notes A") >= 0, "local dropped");
-        ShopConflict woClash = null;
-        foreach (ShopConflict c in WorkOrderStore.Conflicts)
-        {
-            if (c.Kind == "work-order" && (c.Key ?? "").IndexOf("9001") >= 0) woClash = c;
-        }
-        Check("same WO key disagreement is a conflict", woClash != null, "conflicts=" + WorkOrderStore.Conflicts.Count);
-        Check("CollectConflicts reuses ShopConflict list", result.Conflicts >= 1, "n=" + result.Conflicts);
-
-        if (woClash != null)
-        {
-            ShopSync.Resolve(kb, woClash, "remote");
-            WorkOrder after = FindWo(WorkOrderStore.ListAll(s, kb), "9001");
-            int still = 0;
-            foreach (ShopConflict c in WorkOrderStore.Conflicts)
-                if (c.Kind == "work-order" && (c.Key ?? "").IndexOf("9001") >= 0) still++;
-            Check("resolve remote clears WO conflict", still == 0, "still=" + still);
-            Check("resolve copied remote notes to local",
-                File.ReadAllText(Path.Combine(localDir, "notes.txt")).IndexOf("Remote notes B") >= 0, "not copied");
-            Check("listed notes after resolve", after != null && after.Notes.IndexOf("Remote notes B") >= 0,
-                after == null ? "missing" : after.Notes);
-        }
-
-        var same = new WorkOrder { Number = "9002", Segment = "01", Notes = "Same notes" };
-        WorkOrderStore.Save(same, s, kb);
-        string shop2 = Path.Combine(WorkOrderStore.ShopTechDir(kb, "jeremy"), "9002-01");
-        WorkOrder shopSame = WorkOrderStore.Load(shop2);
-        string newer = DateTime.UtcNow.AddHours(3).ToString("o");
-        shopSame.UpdatedUtc = newer;
-        File.WriteAllText(Path.Combine(shop2, "wo.json"), ser.Serialize(shopSame));
-        WorkOrder listedSame = FindWo(WorkOrderStore.ListAll(s, kb), "9002");
-        bool clash9002 = false;
-        foreach (ShopConflict c in WorkOrderStore.Conflicts)
-            if (c.Kind == "work-order" && (c.Key ?? "").IndexOf("9002") >= 0) clash9002 = true;
-        Check("same content hash is not a conflict", !clash9002, "9002 conflicted");
-        Check("newer timestamp kept when notes match",
-            listedSame != null && listedSame.UpdatedUtc == newer, listedSame == null ? "missing" : listedSame.UpdatedUtc);
-    }
-
-    static WorkOrder FindWo(List<WorkOrder> list, string number)
-    {
-        if (list == null) return null;
-        foreach (WorkOrder x in list)
-            if (x != null && x.Number == number) return x;
-        return null;
-    }
-
-    static void WorkOrderBakRecoveryTests(IdSettings s, string kb)
-    {
-        string packet = null;
-        string shopPacket = null;
-        string onlyBak = null;
-        try
-        {
-            var wo = new WorkOrder
-            {
-                Number = "77701",
-                Segment = "01",
-                Customer = "Prev Co",
-                Notes = "prev note"
-            };
-            WorkOrderStore.Save(wo, s, kb);
-            packet = WorkOrderStore.PacketDir(WorkOrderStore.LocalRoot(), wo.Key());
-            shopPacket = WorkOrderStore.PacketDir(WorkOrderStore.ShopTechDir(kb, s.TechId), wo.Key());
-            string jsonPath = Path.Combine(packet, "wo.json");
-            string firstJson = File.ReadAllText(jsonPath);
-            wo.Customer = "Curr Co";
-            wo.Notes = "curr note";
-            WorkOrderStore.Save(wo, s, kb);
-
-            WorkOrder preferred = WorkOrderStore.Load(packet);
-            Check("valid wo.json is preferred over bak",
-                preferred != null && preferred.Customer == "Curr Co",
-                preferred == null ? "null" : preferred.Customer);
-
-            string bakText = File.ReadAllText(jsonPath + ".bak");
-            WorkOrder recovered = new JavaScriptSerializer().Deserialize<WorkOrder>(bakText);
-            string bakDetail = recovered == null ? "null" : (recovered.Number + "/" + recovered.Customer);
-            if (bakText != firstJson) bakDetail = "bak text differs; " + bakDetail;
-            Check("wo.json.bak holds the previous version",
-                bakText == firstJson
-                    && recovered != null
-                    && recovered.Number == "77701"
-                    && recovered.Customer == "Prev Co",
-                bakDetail);
-
-            onlyBak = Path.Combine(WorkOrderStore.LocalRoot(), "77702");
-            Directory.CreateDirectory(onlyBak);
-            File.WriteAllText(Path.Combine(onlyBak, "wo.json.bak"),
-                "{\"Number\":\"77702\",\"Customer\":\"Bak Only\"}");
-            WorkOrder loadedBak = WorkOrderStore.Load(onlyBak);
-            WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "77702");
-            Check("bak-only folder is not loaded",
-                loadedBak == null,
-                loadedBak == null ? "null" : (loadedBak.Number + "/" + loadedBak.Customer));
-            Check("bak-only packet folder is not listed",
-                listed == null,
-                listed == null ? "absent" : (listed.Number + "/" + listed.Customer));
-        }
-        finally
-        {
-            try { if (!string.IsNullOrEmpty(packet)) Directory.Delete(packet, true); } catch { }
-            try { if (!string.IsNullOrEmpty(shopPacket)) Directory.Delete(shopPacket, true); } catch { }
-            try { if (!string.IsNullOrEmpty(onlyBak)) Directory.Delete(onlyBak, true); } catch { }
-        }
-    }
-
     static void LampCase(string what, byte b0, bool red, bool amber, bool protect, bool mil)
     {
         var list = new List<Dtc>();
@@ -1887,6 +1092,7 @@ ProtocolDescription=ISO 15765
         return new J1939Frame { Pgn = 0xEB00, Sa = sa, Da = 255, Data = d };
     }
 
+    [SelfTestCase("BAM reassembly", Order = 50)]
     static void BamTests()
     {
         // Happy path: 2-packet BAM of 12 bytes.
@@ -1936,6 +1142,7 @@ ProtocolDescription=ISO 15765
         return n;
     }
 
+    [SelfTestCase("shipped field database", Order = 70)]
     static void BundledKbTests()
     {
         string disk = Path.Combine(FindRepoRoot(), "kb");
@@ -1974,6 +1181,7 @@ ProtocolDescription=ISO 15765
         try { Directory.Delete(dest, true); } catch { }
     }
 
+    [SelfTestCase("KB load resilience", Order = 60)]
     static void KbTests()
     {
         string root = Path.Combine(Path.GetTempPath(), "kbtest_" + Guid.NewGuid().ToString("N"));
@@ -2051,6 +1259,7 @@ ProtocolDescription=ISO 15765
         return s;
     }
 
+    [SelfTestCase("settings", Order = 210)]
     static void SettingsTests()
     {
         string dir = Path.Combine(Path.GetTempPath(), "tb-settings-" + Guid.NewGuid().ToString("N"));
@@ -2077,924 +1286,7 @@ ProtocolDescription=ISO 15765
         try { Directory.Delete(dir, true); } catch { }
     }
 
-    static void UpdaterTests()
-    {
-        Eq("stamped version", AppVersion.Number, "1.2.10");
-        Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
-        Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
-        Version parsed;
-        Check("current version parses", Updater.TryParseVersion(AppVersion.Number, out parsed), "parse failed");
-        Check("1.3.0 is newer", Updater.IsNewer("1.3.0", "1.2.0"), "1.3.0 vs 1.2.0");
-        Check("v1.2.1 is newer", Updater.IsNewer("v1.2.1", "1.2.0"), "v prefix");
-        Check("same version is not newer", !Updater.IsNewer("1.2.0", "1.2.0"), "same");
-        Check("older is not newer", !Updater.IsNewer("1.1.9", "1.2.0"), "older");
-        Check("garbage version is not newer", !Updater.IsNewer("nope", "1.2.0"), "garbage");
-
-        var m = Updater.ParseManifest(
-            @"{""version"":""1.2.0"",""sha256"":""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"",""url"":""https://example.com/TechBench.exe"",""notes"":""fix""}");
-        Check("manifest parses", m != null, "null");
-        if (m != null)
-        {
-            Eq("manifest version", m.Version, "1.2.0");
-            Eq("manifest url", m.Url, "https://example.com/TechBench.exe");
-            Eq("manifest notes", m.Notes, "fix");
-            Eq("manifest hash length", m.Sha256.Length, 64);
-        }
-        Check("spaced hash normalizes",
-            Updater.NormalizeHash("AB CD") == "abcd", Updater.NormalizeHash("AB CD"));
-        Check("short hash rejected",
-            Updater.ParseManifest(@"{""version"":""1"",""sha256"":""abc"",""url"":""http://x""}") == null, "accepted short hash");
-        Check("missing url rejected",
-            Updater.ParseManifest(@"{""version"":""1.2.0"",""sha256"":""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef""}") == null,
-            "accepted");
-
-        byte[] payload = Encoding.UTF8.GetBytes("tech-bench-update-bytes");
-        string hash = Updater.Sha256Bytes(payload);
-        Eq("sha256 hex length", hash.Length, 64);
-        string dir = Path.Combine(Path.GetTempPath(), "tb-upd-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        string file = Path.Combine(dir, "blob.bin");
-        File.WriteAllBytes(file, payload);
-        Check("file hash matches bytes", Updater.HashMatches(file, hash), Updater.Sha256File(file));
-        Check("wrong hash fails", !Updater.HashMatches(file, "ff" + hash.Substring(2)), "matched");
-
-        Updater.Stage(dir, payload, hash);
-        Check("staged pending verifies", Updater.HasVerifiedPending(dir), "missing sidecar or mismatch");
-        File.WriteAllText(Path.Combine(dir, Updater.HashSidecar), "0");
-        Check("tampered sidecar fails", !Updater.HasVerifiedPending(dir), "still verified");
-        Check("cannot apply mid-session", !Updater.CanApplyNow(true), "allowed");
-        Check("can apply when idle", Updater.CanApplyNow(false), "blocked");
-        string script = Updater.ApplyScript();
-        Check("cmd waits for process", script.Contains("TechBench.exe") && script.Contains(":wait"), "no wait");
-        Check("cmd swaps hashed exe", script.Contains("TechBench.exe.new") && script.Contains("move /Y"), "no swap");
-        Check("swap stays in the exe folder", script.Contains("cd /d \"%~dp0\""), "no %~dp0");
-        Check("cmd never mentions a token",
-            script.IndexOf("ghp_", StringComparison.OrdinalIgnoreCase) < 0
-            && script.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) < 0, "token");
-        Check("default feed is public HTTPS",
-            Updater.DefaultManifestUrl.StartsWith("https://"), Updater.DefaultManifestUrl);
-        Check("default feed is public dist latest.json",
-            Updater.DefaultManifestUrl == "https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json",
-            Updater.DefaultManifestUrl);
-        Check("default feed is not the private source repo",
-            Updater.DefaultManifestUrl.IndexOf("tech-bench/releases", StringComparison.OrdinalIgnoreCase) < 0,
-            Updater.DefaultManifestUrl);
-
-        // Newer defaults to false. That used to be the "is current" branch.
-        var unset = new UpdateCheck();
-        Check("unset check is not current", !Updater.IsCurrent(unset), Updater.StatusText(unset));
-        Check("unset check reads as failed",
-            Updater.StatusText(unset).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
-            && Updater.StatusText(unset).IndexOf("is current", StringComparison.Ordinal) < 0,
-            Updater.StatusText(unset));
-        var http404 = new UpdateCheck { Error = "HTTP 404 Not Found" };
-        Check("404 is not current", !Updater.IsCurrent(http404) && !Updater.IsAvailable(http404), Updater.StatusText(http404));
-        Check("404 reads as failed",
-            Updater.StatusText(http404).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
-            && Updater.StatusText(http404).IndexOf("404", StringComparison.Ordinal) >= 0
-            && Updater.StatusText(http404).IndexOf("is current", StringComparison.Ordinal) < 0,
-            Updater.StatusText(http404));
-
-        string missingUrl = new Uri(Path.Combine(dir, "missing-latest.json")).AbsoluteUri;
-        Check("file url stays allowed", missingUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase), missingUrl);
-        UpdateCheck missing = Updater.Check(missingUrl);
-        Check("missing manifest is not current", !Updater.IsCurrent(missing), Updater.StatusText(missing));
-        Check("missing manifest reads as failed",
-            Updater.StatusText(missing).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
-            && Updater.StatusText(missing).IndexOf("is current", StringComparison.Ordinal) < 0,
-            Updater.StatusText(missing));
-
-        string badPath = Path.Combine(dir, "bad-latest.json");
-        File.WriteAllText(badPath, "{ this is not json");
-        UpdateCheck bad = Updater.Check(new Uri(badPath).AbsoluteUri);
-        Check("unreadable latest.json is not current", !Updater.IsCurrent(bad), Updater.StatusText(bad));
-        Check("unreadable latest.json reads as failed",
-            Updater.StatusText(bad).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
-            && Updater.StatusText(bad).IndexOf("is current", StringComparison.Ordinal) < 0,
-            Updater.StatusText(bad));
-
-        string junkVer = Path.Combine(dir, "junk-ver.json");
-        File.WriteAllText(junkVer, ManifestJson("nope", "http://127.0.0.1/TechBench.exe"));
-        UpdateCheck junk = Updater.Check(new Uri(junkVer).AbsoluteUri);
-        Check("unreadable version is not current", !Updater.IsCurrent(junk), Updater.StatusText(junk));
-
-        string samePath = Path.Combine(dir, "same-latest.json");
-        File.WriteAllText(samePath, ManifestJson(AppVersion.Number, "file:///C:/TechBench.exe"));
-        string sameUrl = new Uri(samePath).AbsoluteUri;
-        UpdateCheck same = Updater.Check(sameUrl);
-        Check("same version file feed is current", Updater.IsCurrent(same), Updater.StatusText(same));
-        Check("file feed records the manifest url",
-            same.Manifest != null && same.Manifest.SourceUrl == sameUrl,
-            same.Manifest == null ? Updater.StatusText(same) : (same.Manifest.SourceUrl ?? "(null source)"));
-        Check("same version says current",
-            Updater.StatusText(same).IndexOf("is current", StringComparison.Ordinal) >= 0, Updater.StatusText(same));
-
-        string newerPath = Path.Combine(dir, "newer-latest.json");
-        File.WriteAllText(newerPath, ManifestJson("9.9.9", "http://127.0.0.1/TechBench.exe"));
-        UpdateCheck newer = Updater.Check(new Uri(newerPath).AbsoluteUri);
-        Check("newer file feed is available", Updater.IsAvailable(newer) && !Updater.IsCurrent(newer), Updater.StatusText(newer));
-        Check("newer file feed is not worded as current",
-            Updater.StatusText(newer).IndexOf("is current", StringComparison.Ordinal) < 0, Updater.StatusText(newer));
-        Check("same-version success path still says current",
-            Updater.IsCurrent(same) && Updater.StatusText(same).IndexOf("is current", StringComparison.Ordinal) >= 0,
-            Updater.StatusText(same));
-        Check("newer success path still says available",
-            Updater.IsAvailable(newer)
-            && Updater.StatusText(newer).IndexOf("is available", StringComparison.Ordinal) >= 0,
-            Updater.StatusText(newer));
-
-        string shellPath = Path.Combine(FindRepoRoot(), "ShellForm.cs");
-        string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
-        Check("about does not claim a public latest.json",
-            shell.IndexOf("public latest.json", StringComparison.OrdinalIgnoreCase) < 0, "public latest.json");
-        Check("about names an anonymous manifest url",
-            shell.IndexOf("anonymous manifest URL", StringComparison.Ordinal) >= 0, "about");
-        Check("about still says no token and apply after quit",
-            shell.IndexOf("never stores a GitHub token", StringComparison.Ordinal) >= 0
-            && shell.IndexOf("apply after you quit", StringComparison.Ordinal) >= 0
-            && shell.IndexOf("never mid-session", StringComparison.Ordinal) >= 0, "about");
-        string updaterSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "Updater.cs"));
-        Check("updater does not tell the tech to host a public feed",
-            updaterSrc.IndexOf("Host latest.json on a public HTTPS URL", StringComparison.Ordinal) < 0
-            && updaterSrc.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0, "old copy");
-
-        HttpFeedTests();
-        UpdaterHardeningTests();
-        try { Directory.Delete(dir, true); } catch { }
-    }
-
-    static void CheckPrivateFeedFailure(string label, UpdateCheck result)
-    {
-        string text = Updater.StatusText(result);
-        Check(label + " is not a success", !Updater.IsCurrent(result) && !Updater.IsAvailable(result), text);
-        Check(label + " does not say up to date",
-            text.IndexOf("up to date", StringComparison.OrdinalIgnoreCase) < 0
-            && text.IndexOf("is current", StringComparison.OrdinalIgnoreCase) < 0,
-            text);
-        Check(label + " does not ask for a public feed",
-            text.IndexOf("public HTTPS", StringComparison.OrdinalIgnoreCase) < 0
-            && text.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0
-            && text.IndexOf("Host latest.json", StringComparison.OrdinalIgnoreCase) < 0,
-            text);
-        Check(label + " names a private shop setup",
-            text.IndexOf("Update feed unavailable", StringComparison.Ordinal) >= 0
-            && text.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0
-            && text.IndexOf("shop Setup", StringComparison.Ordinal) >= 0,
-            text);
-    }
-
-    static string ManifestJson(string version, string url)
-    {
-        return "{\"version\":\"" + version
-            + "\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"url\":\""
-            + url + "\"}";
-    }
-
-    static void HttpFeedTests()
-    {
-        HttpListener listener = null;
-        int port = 0;
-        var rng = new Random();
-        for (int i = 0; i < 8 && listener == null; i++)
-        {
-            port = 18000 + rng.Next(2000);
-            var attempt = new HttpListener();
-            try
-            {
-                attempt.Prefixes.Add("http://127.0.0.1:" + port + "/");
-                attempt.Start();
-                listener = attempt;
-            }
-            catch
-            {
-                try { attempt.Close(); } catch { }
-            }
-        }
-        Check("local http feed", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        try
-        {
-            string root = "http://127.0.0.1:" + port + "/";
-            UpdateCheck denied = CheckHttp(listener, 404, "missing", root + "latest.json");
-            Check("http 404 is not current", !Updater.IsCurrent(denied), Updater.StatusText(denied));
-            Check("http 404 reads as failed",
-                Updater.StatusText(denied).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
-                && Updater.StatusText(denied).IndexOf("404", StringComparison.Ordinal) >= 0
-                && Updater.StatusText(denied).IndexOf("is current", StringComparison.Ordinal) < 0,
-                Updater.StatusText(denied));
-            CheckPrivateFeedFailure("http 404", denied);
-
-            UpdateCheck unauthorized = CheckHttp(listener, 401, "no", root + "unauth.json");
-            CheckPrivateFeedFailure("http 401", unauthorized);
-            UpdateCheck forbidden = CheckHttp(listener, 403, "no", root + "forbid.json");
-            CheckPrivateFeedFailure("http 403", forbidden);
-
-            UpdateCheck broken = CheckHttp(listener, 200, "{ not json", root + "bad.json");
-            Check("http 200 unreadable json is not current", !Updater.IsCurrent(broken), Updater.StatusText(broken));
-
-            UpdateCheck err = CheckHttp(listener, 500, "nope", root + "err.json");
-            Check("http 500 is not current", !Updater.IsCurrent(err), Updater.StatusText(err));
-            Check("http 500 reads as failed",
-                Updater.StatusText(err).IndexOf("Update check failed", StringComparison.Ordinal) >= 0
-                && Updater.StatusText(err).IndexOf("is current", StringComparison.Ordinal) < 0,
-                Updater.StatusText(err));
-
-            UpdateCheck offer = CheckHttp(listener, 200, ManifestJson("9.9.9", root + "TechBench.exe"), root + "ok.json");
-            Check("http feed can report a newer build", Updater.IsAvailable(offer), Updater.StatusText(offer));
-            Check("http feed records source url",
-                offer.Manifest != null && offer.Manifest.SourceUrl == root + "ok.json",
-                offer.Manifest == null ? Updater.StatusText(offer) : (offer.Manifest.SourceUrl ?? "(null source)"));
-            Check("http is not forced to https", root.StartsWith("http://", StringComparison.OrdinalIgnoreCase), root);
-        }
-        finally
-        {
-            try { listener.Close(); } catch { }
-        }
-    }
-
-    static UpdateCheck CheckHttp(HttpListener listener, int status, string body, string url)
-    {
-        Exception boom = null;
-        var worker = new Thread(delegate()
-        {
-            try
-            {
-                HttpListenerContext ctx = listener.GetContext();
-                byte[] bytes = Encoding.UTF8.GetBytes(body ?? "");
-                ctx.Response.StatusCode = status;
-                ctx.Response.ContentType = "application/json";
-                ctx.Response.ContentLength64 = bytes.Length;
-                ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
-                ctx.Response.OutputStream.Close();
-            }
-            catch (Exception ex)
-            {
-                boom = ex;
-            }
-        });
-        worker.IsBackground = true;
-        worker.Start();
-        UpdateCheck result = Updater.Check(url);
-        bool finished = worker.Join(12000);
-        if (boom != null)
-            Check("http feed server", false, boom.Message);
-        Check("http feed server finished", finished && !worker.IsAlive,
-            (worker.IsAlive ? "still running" : "join timed out") + " " + (url ?? ""));
-        return result;
-    }
-
-    static void UpdaterHardeningTests()
-    {
-        Eq("manifest cap is 64 KB", Updater.MaxManifestBytes, 65536L);
-        Eq("payload cap is 32 MB", Updater.MaxPayloadBytes, 33554432L);
-        Eq("redirect cap is 5", Updater.MaxRedirects, 5);
-        RedirectRuleTests();
-        PayloadOriginRuleTests();
-        OversizeManifestTests();
-        NearCapManifestTest();
-        CrossHostRedirectTest();
-        SameHostRedirectTest();
-        TooManyRedirectsTest();
-        PayloadOversizeTest(false);
-        PayloadOversizeTest(true);
-        PayloadHashMismatchTest();
-        PayloadHappyPathTest();
-        PayloadOriginNoRequestTest();
-        HttpManifestOtherHostPayloadTest();
-        SilentBackgroundTest();
-    }
-
-    static void RedirectRuleTests()
-    {
-        string why;
-        bool down = Updater.RedirectAllowed(new Uri("https://example.com/a"), new Uri("http://example.com/b"), out why);
-        Check("https to http redirect refused", !down, why);
-        Check("https to http redirect message",
-            why == "Redirect from https to http was refused.", why);
-        bool httpsSame = Updater.RedirectAllowed(new Uri("https://example.com/a"), new Uri("https://example.com/b"), out why);
-        Check("https same host redirect allowed", httpsSame, why);
-        bool host = Updater.RedirectAllowed(new Uri("http://127.0.0.1:1234/a"), new Uri("http://localhost:1234/b"), out why);
-        Check("redirect host change refused", !host, why);
-        Check("redirect host change names both hosts",
-            why.IndexOf("127.0.0.1", StringComparison.Ordinal) >= 0
-            && why.IndexOf("localhost", StringComparison.Ordinal) >= 0, why);
-        bool port = Updater.RedirectAllowed(new Uri("http://127.0.0.1:1234/a"), new Uri("http://127.0.0.1:1235/a"), out why);
-        Check("redirect port change refused", !port, why);
-        bool schemeUp = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("https://example.com/b"), out why);
-        Check("http to https same-host default-port redirect allowed", schemeUp, why);
-        bool schemeUpHost = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("https://other.example/b"), out why);
-        Check("http to https redirect on another host refused", !schemeUpHost, why);
-        bool schemeUpPort = Updater.RedirectAllowed(new Uri("http://example.com:8080/a"), new Uri("https://example.com/b"), out why);
-        Check("http non-default port to https redirect refused", !schemeUpPort, why);
-        bool schemeUpToPort = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("https://example.com:8443/b"), out why);
-        Check("http to https non-default port redirect refused", !schemeUpToPort, why);
-        bool defPort = Updater.RedirectAllowed(new Uri("http://example.com/a"), new Uri("http://example.com:80/b"), out why);
-        Check("redirect to explicit default port allowed", defPort, why);
-    }
-
-    static void PayloadOriginRuleTests()
-    {
-        string why;
-        Check("same-origin http payload allowed",
-            Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "http://127.0.0.1/TechBench.exe", out why), why);
-        Check("payload host change refused",
-            !Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "http://localhost/TechBench.exe", out why), why);
-        Check("payload host change names the payload host",
-            why.IndexOf("localhost", StringComparison.Ordinal) >= 0, why);
-        Check("payload port change refused",
-            !Updater.PayloadOriginAllowed("http://127.0.0.1:8080/latest.json", "http://127.0.0.1:9090/TechBench.exe", out why), why);
-        Check("https manifest to http payload refused",
-            !Updater.PayloadOriginAllowed("https://example.com/latest.json", "http://example.com/TechBench.exe", out why), why);
-        Check("http manifest to https payload allowed",
-            Updater.PayloadOriginAllowed("http://example.com/latest.json", "https://example.com/TechBench.exe", out why), why);
-        Check("file local to file local allowed",
-            Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "file:///C:/TechBench.exe", out why), why);
-        string tempManifest = new Uri(Path.Combine(Path.GetTempPath(), "tb-latest.json")).AbsoluteUri;
-        Check("temp file manifest to local file payload allowed",
-            Updater.PayloadOriginAllowed(tempManifest, "file:///C:/TechBench.exe", out why),
-            why + " | " + tempManifest);
-        Check("file manifest to http payload allowed",
-            Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "http://127.0.0.1/TechBench.exe", out why), why);
-        Check("file manifest to https payload allowed",
-            Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "https://127.0.0.1/TechBench.exe", out why), why);
-        Check("file manifest to other scheme refused",
-            !Updater.PayloadOriginAllowed("file:///C:/feed/latest.json", "ftp://127.0.0.1/TechBench.exe", out why), why);
-        Check("non-http manifest scheme refused",
-            !Updater.PayloadOriginAllowed("ftp://127.0.0.1/latest.json", "ftp://127.0.0.1/TechBench.exe", out why), why);
-        Check("http manifest to file payload refused",
-            !Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "file:///C:/TechBench.exe", out why), why);
-        Check("relative payload refused",
-            !Updater.PayloadOriginAllowed("http://127.0.0.1/latest.json", "TechBench.exe", out why), why);
-        Check("payload host compare ignores case",
-            Updater.PayloadOriginAllowed("http://Example.com/latest.json", "http://example.com/TechBench.exe", out why), why);
-        Check("explicit default http port matches",
-            Updater.PayloadOriginAllowed("http://example.com/latest.json", "http://example.com:80/TechBench.exe", out why), why);
-        Check("http non-default port cannot upgrade to https",
-            !Updater.PayloadOriginAllowed("http://example.com:8080/latest.json", "https://example.com/TechBench.exe", out why), why);
-        Check("unc file host case difference allowed",
-            Updater.PayloadOriginAllowed("file://shop/share/latest.json", "file://SHOP/share/TechBench.exe", out why), why);
-        Check("unc file host change allowed",
-            Updater.PayloadOriginAllowed("file://shop/share/latest.json", "file://other/share/TechBench.exe", out why), why);
-    }
-
-    static void OversizeManifestTests()
-    {
-        byte[] big = RepeatByte((byte)'x', 70000);
-        UpdateCheck withLen = ServeCheck("oversize manifest with Content-Length",
-            new ScriptStep[] { Step(200, big, false, null) }, "latest.json", null);
-        AssertUpdateRefused("oversize manifest with Content-Length", withLen, "64 KB");
-
-        UpdateCheck chunked = ServeCheck("oversize manifest without Content-Length",
-            new ScriptStep[] { Step(200, big, true, null) }, "chunked.json", null);
-        AssertUpdateRefused("oversize manifest without Content-Length", chunked, "64 KB");
-    }
-
-    static void NearCapManifestTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("near-cap manifest listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        Thread worker = null;
-        try
-        {
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            string payload = root + "TechBench.exe";
-            string notes = new string('n', 60000);
-            string json = "{\"version\":\"9.9.9\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"url\":\""
-                + payload + "\",\"notes\":\"" + notes + "\"}";
-            byte[] body = Encoding.UTF8.GetBytes(json);
-            Check("near-cap manifest is under 64 KB",
-                body.Length < Updater.MaxManifestBytes && body.Length > 60000, body.Length.ToString());
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
-            UpdateCheck near = Updater.Check(root + "near.json");
-            CheckServerDone("near-cap manifest", serverError, worker);
-            Check("manifest just under the cap still parses",
-                Updater.IsAvailable(near)
-                && near.Manifest != null
-                && near.Manifest.Notes != null
-                && near.Manifest.Notes.Length == 60000,
-                Updater.StatusText(near));
-            Check("near-cap manifest records source url",
-                near.Manifest != null && near.Manifest.SourceUrl == root + "near.json",
-                near.Manifest == null ? Updater.StatusText(near) : (near.Manifest.SourceUrl ?? "(null source)"));
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-        }
-    }
-
-    static void CrossHostRedirectTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("cross-host redirect listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        List<string> paths = new List<string>();
-        Thread worker = null;
-        try
-        {
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            string loc = "http://localhost:" + port.ToString() + "/x";
-            // Client refuses before a second request; a writer fault is not a failure.
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, new ScriptStep[] { Step(302, new byte[0], false, loc) }, paths, serverError);
-            UpdateCheck refused = Updater.Check(root + "start.json");
-            worker.Join(12000);
-            AssertUpdateRefused("cross-host redirect", refused, "another host");
-            Check("cross-host redirect names localhost",
-                Updater.StatusText(refused).IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0,
-                Updater.StatusText(refused));
-            Check("cross-host redirect did not request the other host",
-                paths.Count == 1, "hits=" + paths.Count.ToString() + Seen(paths));
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-        }
-    }
-
-    static void SameHostRedirectTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("same-host redirect listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        List<string> paths = new List<string>();
-        Thread worker = null;
-        try
-        {
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            string moved = root + "moved.json";
-            byte[] body = Encoding.UTF8.GetBytes(ManifestJson("9.9.9", root + "TechBench.exe"));
-            ScriptStep[] steps = new ScriptStep[]
-            {
-                Step(302, new byte[0], false, moved),
-                Step(200, body, false, null)
-            };
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, steps, paths, serverError);
-            UpdateCheck followed = Updater.Check(root + "start.json");
-            CheckServerDone("same-host redirect", serverError, worker);
-            Check("same-host redirect is followed", Updater.IsAvailable(followed), Updater.StatusText(followed));
-            Check("same-host redirect records the requested url",
-                followed.Manifest != null && followed.Manifest.SourceUrl == root + "start.json",
-                followed.Manifest == null ? Updater.StatusText(followed) : (followed.Manifest.SourceUrl ?? "(null source)"));
-            bool second = paths.Count == 2 && paths[1] != null
-                && paths[1].IndexOf("moved.json", StringComparison.Ordinal) >= 0;
-            Check("same-host redirect fetched moved.json", second, "hits=" + paths.Count.ToString() + Seen(paths));
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-        }
-    }
-
-    static void TooManyRedirectsTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("too many redirects listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        List<string> paths = new List<string>();
-        Thread worker = null;
-        try
-        {
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            ScriptStep[] steps = new ScriptStep[6];
-            for (int i = 0; i < steps.Length; i++)
-                steps[i] = Step(302, new byte[0], false, root + "step" + i.ToString() + ".json");
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, steps, paths, serverError);
-            UpdateCheck refused = Updater.Check(root + "chain.json");
-            CheckServerDone("too many redirects", serverError, worker);
-            AssertUpdateRefused("too many redirects", refused, "more than 5");
-            Check("too many redirects stopped after the cap",
-                paths.Count == Updater.MaxRedirects + 1, "hits=" + paths.Count.ToString());
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-        }
-    }
-
-    static void PayloadOversizeTest(bool chunked)
-    {
-        string label = chunked
-            ? "oversize payload without Content-Length"
-            : "oversize payload with Content-Length";
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check(label + " listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        string dir = null;
-        Thread worker = null;
-        try
-        {
-            dir = NewTempDir("tb-cap-");
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            byte[] body = RepeatByte((byte)'p', 4096);
-            // Client stops at the cap; a short write on the server is expected.
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, chunked, null) }, null, serverError);
-            Exception ex = CatchEx(delegate
-            {
-                Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe", new string('a', 64), 1024L);
-            });
-            worker.Join(12000);
-            Check(label + " throws", ex != null, "no throw");
-            Check(label + " names the limit",
-                ex != null && ex.Message.IndexOf("larger than", StringComparison.Ordinal) >= 0,
-                ex == null ? "(null)" : ex.Message);
-            Check(label + " uses shop setup wording",
-                ex != null
-                && ex.Message.IndexOf("shop Setup", StringComparison.Ordinal) >= 0
-                && ex.Message.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0,
-                ex == null ? "(null)" : ex.Message);
-            AssertNothingStaged(label, dir);
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-            if (dir != null) try { Directory.Delete(dir, true); } catch { }
-        }
-    }
-
-    static void PayloadHashMismatchTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("payload hash mismatch listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        string dir = null;
-        Thread worker = null;
-        try
-        {
-            dir = NewTempDir("tb-hash-");
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            byte[] body = Encoding.UTF8.GetBytes("not-the-real-update");
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
-            Exception ex = CatchEx(delegate
-            {
-                Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe",
-                    new string('b', 64), Updater.MaxPayloadBytes);
-            });
-            CheckServerDone("payload hash mismatch", serverError, worker);
-            Check("payload hash mismatch throws",
-                ex != null && ex.Message.IndexOf("did not match", StringComparison.Ordinal) >= 0,
-                ex == null ? "no throw" : ex.Message);
-            Check("payload hash mismatch uses shop setup wording",
-                ex != null
-                && ex.Message.IndexOf("shop Setup", StringComparison.Ordinal) >= 0
-                && ex.Message.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0,
-                ex == null ? "(null)" : ex.Message);
-            AssertNothingStaged("payload hash mismatch", dir);
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-            if (dir != null) try { Directory.Delete(dir, true); } catch { }
-        }
-    }
-
-    static void PayloadHappyPathTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("payload happy path listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        string dir = null;
-        Thread worker = null;
-        try
-        {
-            dir = NewTempDir("tb-ok-");
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            byte[] body = Encoding.UTF8.GetBytes("tech-bench-payload-v129");
-            string sha = Updater.Sha256Bytes(body);
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
-            Exception ex = CatchEx(delegate
-            {
-                Updater.DownloadAndStage(dir, root + "latest.json", root + "TechBench.exe",
-                    sha.ToUpperInvariant(), Updater.MaxPayloadBytes);
-            });
-            CheckServerDone("payload happy path", serverError, worker);
-            Check("payload happy path does not throw", ex == null, ex == null ? "" : ex.Message);
-            string staged = Path.Combine(dir, "TechBench.exe.new");
-            Check("payload happy path staged the exe", File.Exists(staged), staged);
-            if (File.Exists(staged))
-            {
-                byte[] got = File.ReadAllBytes(staged);
-                Check("payload happy path bytes match", BytesEqual(got, body), "len=" + got.Length.ToString());
-            }
-            Check("payload happy path verifies", Updater.HasVerifiedPending(dir), dir);
-            Check("payload happy path left no .part file",
-                !File.Exists(Path.Combine(dir, "TechBench.exe.new.part")), dir);
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-            if (dir != null) try { Directory.Delete(dir, true); } catch { }
-        }
-    }
-
-    static void PayloadOriginNoRequestTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("payload origin refusal listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        string dir = null;
-        List<string> paths = new List<string>();
-        Thread worker = null;
-        try
-        {
-            dir = NewTempDir("tb-origin-");
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            // Origin is refused before any request, so the worker stays blocked in GetContext.
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener,
-                new ScriptStep[] { Step(200, Encoding.UTF8.GetBytes("should-not-download"), false, null) },
-                paths, serverError);
-            Exception ex = CatchEx(delegate
-            {
-                Updater.DownloadAndStage(dir, "http://127.0.0.1:1/latest.json", root + "TechBench.exe",
-                    new string('c', 64), 1024L);
-            });
-            Check("payload origin mismatch throws", ex != null, "no throw");
-            Check("payload origin mismatch made no request", paths.Count == 0, "hits=" + paths.Count.ToString());
-            Check("payload origin mismatch uses shop setup wording",
-                ex != null
-                && ex.Message.IndexOf("shop Setup", StringComparison.Ordinal) >= 0
-                && ex.Message.IndexOf("never uses a GitHub token", StringComparison.Ordinal) >= 0,
-                ex == null ? "(null)" : ex.Message);
-            AssertNothingStaged("payload origin mismatch", dir);
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-            if (dir != null) try { Directory.Delete(dir, true); } catch { }
-        }
-    }
-
-    static void HttpManifestOtherHostPayloadTest()
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check("http manifest other-host payload listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return;
-        Thread worker = null;
-        try
-        {
-            string root = "http://127.0.0.1:" + port.ToString() + "/";
-            string payloadHost = "localhost";
-            string payload = "http://" + payloadHost + ":" + port.ToString() + "/TechBench.exe";
-            byte[] body = Encoding.UTF8.GetBytes(ManifestJson("9.9.9", payload));
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, new ScriptStep[] { Step(200, body, false, null) }, null, serverError);
-            UpdateCheck cross = Updater.Check(root + "latest.json");
-            CheckServerDone("http manifest other-host payload", serverError, worker);
-            AssertUpdateRefused("http manifest other-host payload", cross, payloadHost);
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-        }
-    }
-
-    static void SilentBackgroundTest()
-    {
-        string shellPath = Path.Combine(FindRepoRoot(), "ShellForm.cs");
-        string shell = File.Exists(shellPath) ? File.ReadAllText(shellPath) : "";
-        string finish = MethodSlice(shell, "void FinishCheck(", "void InstallReadyUpdate(");
-        string install = MethodSlice(shell, "void InstallReadyUpdate(", "Control BuildAdaptersPanel(");
-        Check("FinishCheck returns early when not interactive",
-            finish.IndexOf("if (!interactive) return;", StringComparison.Ordinal) >= 0, "FinishCheck");
-        int can = install.IndexOf("CanApplyNow", StringComparison.Ordinal);
-        int download = install.IndexOf("DownloadAndStage", StringComparison.Ordinal);
-        Check("InstallReadyUpdate checks CanApplyNow before downloading",
-            can >= 0 && download > can, "can=" + can.ToString() + " download=" + download.ToString());
-    }
-
-    static void AssertUpdateRefused(string label, UpdateCheck result, string extra)
-    {
-        string text = Updater.StatusText(result);
-        Check(label + " is not current", !Updater.IsCurrent(result), text);
-        Check(label + " is not available", !Updater.IsAvailable(result), text);
-        Check(label + " begins with update check failed",
-            text.IndexOf("Update check failed", StringComparison.Ordinal) == 0, text);
-        CheckPrivateFeedFailure(label, result);
-        if (!string.IsNullOrEmpty(extra))
-            Check(label + " names the reason", text.IndexOf(extra, StringComparison.Ordinal) >= 0, text);
-    }
-
-    static void AssertNothingStaged(string label, string dir)
-    {
-        Check(label + " left no .part file",
-            !File.Exists(Path.Combine(dir, "TechBench.exe.new.part")), label);
-        Check(label + " left no TechBench.exe.new",
-            !File.Exists(Path.Combine(dir, "TechBench.exe.new")), label);
-    }
-
-    static UpdateCheck ServeCheck(string label, ScriptStep[] steps, string path, List<string> paths)
-    {
-        int port;
-        HttpListener listener = BindLoopback(out port);
-        Check(label + " listener", listener != null, "could not bind 127.0.0.1");
-        if (listener == null) return new UpdateCheck { Error = "no listener" };
-        Thread worker = null;
-        try
-        {
-            // Oversize feeds abort mid-body; do not fail on the writer's fault.
-            Exception[] serverError = new Exception[1];
-            worker = ServeSteps(listener, steps, paths, serverError);
-            string url = "http://127.0.0.1:" + port.ToString() + "/" + (path ?? "");
-            UpdateCheck result = Updater.Check(url);
-            if (worker != null) worker.Join(12000);
-            return result;
-        }
-        finally
-        {
-            CloseFeed(listener, worker);
-        }
-    }
-
-    static ScriptStep Step(int status, byte[] body, bool chunked, string location)
-    {
-        ScriptStep step = new ScriptStep();
-        step.Status = status;
-        step.Body = body;
-        step.Chunked = chunked;
-        step.Location = location;
-        return step;
-    }
-
-    // Full-read tests only. A client that aborts the body can fault the writer.
-    static void CheckServerDone(string label, Exception[] error, Thread worker)
-    {
-        bool finished = false;
-        if (worker != null) finished = worker.Join(12000);
-        string errText = "";
-        if (error != null && error[0] != null) errText = error[0].ToString();
-        Check(label + " server error", error == null || error[0] == null, errText);
-        bool alive = worker != null && worker.IsAlive;
-        Check(label + " server finished", finished && !alive, alive ? "still running" : "join timed out");
-    }
-
-    static Thread ServeSteps(HttpListener listener, ScriptStep[] steps, List<string> paths, Exception[] error)
-    {
-        Thread worker = new Thread(delegate()
-        {
-            try
-            {
-                for (int i = 0; i < steps.Length; i++)
-                {
-                    HttpListenerContext ctx = listener.GetContext();
-                    if (paths != null)
-                    {
-                        string raw = "";
-                        try
-                        {
-                            if (ctx.Request != null && ctx.Request.Url != null)
-                                raw = ctx.Request.RawUrl ?? "";
-                        }
-                        catch { raw = ""; }
-                        paths.Add(raw);
-                    }
-                    ScriptStep step = steps[i];
-                    try
-                    {
-                        int status = step.Status <= 0 ? 200 : step.Status;
-                        if (!string.IsNullOrEmpty(step.Location))
-                            ctx.Response.RedirectLocation = step.Location;
-                        ctx.Response.StatusCode = status;
-                        ctx.Response.KeepAlive = false;
-                        byte[] body = step.Body ?? new byte[0];
-                        if (step.Chunked)
-                            ctx.Response.SendChunked = true;
-                        else
-                            ctx.Response.ContentLength64 = body.Length;
-                        int offset = 0;
-                        while (offset < body.Length)
-                        {
-                            int n = body.Length - offset;
-                            if (n > 8192) n = 8192;
-                            ctx.Response.OutputStream.Write(body, offset, n);
-                            offset += n;
-                        }
-                        ctx.Response.OutputStream.Close();
-                    }
-                    catch (Exception ex)
-                    {
-                        if (error != null && error[0] == null) error[0] = ex;
-                        try { ctx.Response.Abort(); } catch { }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (error != null && error[0] == null) error[0] = ex;
-            }
-        });
-        worker.IsBackground = true;
-        worker.Start();
-        return worker;
-    }
-
-    static HttpListener BindLoopback(out int port)
-    {
-        port = 0;
-        Random rng = new Random();
-        for (int attempt = 0; attempt < 12; attempt++)
-        {
-            int candidate = 21000 + rng.Next(20000);
-            HttpListener listener = new HttpListener();
-            try
-            {
-                listener.Prefixes.Add("http://127.0.0.1:" + candidate.ToString() + "/");
-                listener.Start();
-                try { listener.IgnoreWriteExceptions = true; } catch { }
-                port = candidate;
-                return listener;
-            }
-            catch
-            {
-                try { listener.Close(); } catch { }
-            }
-        }
-        return null;
-    }
-
-    static void CloseFeed(HttpListener listener, Thread worker)
-    {
-        try { if (listener != null) listener.Close(); } catch { }
-        if (worker != null) worker.Join(12000);
-    }
-
-    static Exception CatchEx(Action act)
-    {
-        try
-        {
-            act();
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
-
-    static string MethodSlice(string src, string startSig, string endSig)
-    {
-        if (string.IsNullOrEmpty(src)) return "";
-        int start = src.IndexOf(startSig, StringComparison.Ordinal);
-        if (start < 0) return "";
-        int end = src.IndexOf(endSig, start + startSig.Length, StringComparison.Ordinal);
-        if (end < 0) end = src.Length;
-        return src.Substring(start, end - start);
-    }
-
-    static string NewTempDir(string prefix)
-    {
-        string dir = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
-
-    static byte[] RepeatByte(byte value, int count)
-    {
-        byte[] buf = new byte[count];
-        for (int i = 0; i < count; i++) buf[i] = value;
-        return buf;
-    }
-
-    static bool BytesEqual(byte[] a, byte[] b)
-    {
-        if (a == null || b == null || a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++)
-            if (a[i] != b[i]) return false;
-        return true;
-    }
-
-    static string Seen(List<string> paths)
-    {
-        if (paths == null || paths.Count == 0) return "";
-        string seen = "";
-        for (int i = 0; i < paths.Count; i++) seen = seen + " " + (paths[i] ?? "");
-        return seen;
-    }
-
-    sealed class ScriptStep
-    {
-        public int Status;
-        public byte[] Body;
-        public bool Chunked;
-        public string Location;
-    }
-
+    [SelfTestCase("windows installer", Order = 240)]
     static void InstallerTests()
     {
         string root = FindRepoRoot();
@@ -3067,6 +1359,18 @@ ProtocolDescription=ISO 15765
             && readme.IndexOf("Upload TechBench.exe and latest.json", StringComparison.Ordinal) < 0
             && readme.IndexOf("publish-dist.ps1", StringComparison.OrdinalIgnoreCase) < 0,
             "upload instruction");
+        Check("README documents update-feed-path.txt",
+            readme.IndexOf("update-feed-path.txt", StringComparison.Ordinal) >= 0, "missing feed path");
+        Check("README documents F1 cheat sheet",
+            readme.IndexOf("| F1 |", StringComparison.Ordinal) >= 0
+            || readme.IndexOf("F1 | shop cheat sheet", StringComparison.OrdinalIgnoreCase) >= 0,
+            "missing F1");
+        string rolloutPath = Path.Combine(root, "docs", "shop-rollout.md");
+        string rollout = File.Exists(rolloutPath) ? File.ReadAllText(rolloutPath) : "";
+        Check("shop-rollout documents update-feed-path.txt",
+            rollout.IndexOf("update-feed-path.txt", StringComparison.Ordinal) >= 0, "missing feed path");
+        Check("shop-rollout documents adapter-prefs.json",
+            rollout.IndexOf("adapter-prefs.json", StringComparison.Ordinal) >= 0, "missing adapter prefs");
 
         string peAssert = Path.Combine(root, "tools", "assert-pe-i386.ps1");
         Check("PE i386 assert script present", File.Exists(peAssert), peAssert);
@@ -3177,7 +1481,10 @@ ProtocolDescription=ISO 15765
         return text.IndexOf("ghp_", StringComparison.OrdinalIgnoreCase) >= 0
             || text.IndexOf("github_pat", StringComparison.OrdinalIgnoreCase) >= 0
             || text.IndexOf("GITHUB_TOKEN", StringComparison.OrdinalIgnoreCase) >= 0
-            || text.IndexOf("Authorization:", StringComparison.OrdinalIgnoreCase) >= 0;
+            || text.IndexOf("Authorization:", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("AKIA", StringComparison.Ordinal) >= 0
+            || text.IndexOf("sk-", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("api_key=", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     static string MkRoot()
@@ -3193,6 +1500,7 @@ ProtocolDescription=ISO 15765
         return new UserCode { Brand = brand, Code = code, Title = title };
     }
 
+    [SelfTestCase("shop two-way sync", Order = 250)]
     static void ShopSyncTests()
     {
         string prev = ShopSync.SettingsFolderOverride;
@@ -3417,20 +1725,7 @@ ProtocolDescription=ISO 15765
         }
     }
 
-    static bool HasPacketTemp(string dir)
-    {
-        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return false;
-        string[] files;
-        try { files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories); }
-        catch { return false; }
-        for (int i = 0; i < files.Length; i++)
-        {
-            string name = Path.GetFileName(files[i]);
-            if (name.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-        }
-        return false;
-    }
-
+    [SelfTestCase("data safety", Order = 280)]
     static void DataSafetyTests()
     {
         SubscriptionKeyMaskTests();
@@ -3439,214 +1734,52 @@ ProtocolDescription=ISO 15765
         PacketSidecarSyncTests();
     }
 
-    static void SubscriptionKeyMaskTests()
-    {
-        string path = Path.Combine(FindRepoRoot(), "IdSettingsForm.cs");
-        string src = File.Exists(path) ? File.ReadAllText(path) : "";
-        Check("IdSettingsForm.cs is readable", src.Length > 0, path);
-        Check("subscription key field is masked", SourceAssignsPasswordChar(src, "_key"), "_key");
-        Check("oauth secret field stays masked", SourceAssignsPasswordChar(src, "_secret"), "_secret");
-    }
-
-    static bool SourceAssignsPasswordChar(string src, string field)
-    {
-        if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(field)) return false;
-        string needle = field + ".UseSystemPasswordChar";
-        int from = 0;
-        while (from < src.Length)
-        {
-            int i = src.IndexOf(needle, from, StringComparison.Ordinal);
-            if (i < 0) return false;
-            int lineStart = src.LastIndexOf('\n', i);
-            if (lineStart < 0) lineStart = 0;
-            else lineStart = lineStart + 1;
-            int lineEnd = src.IndexOf('\n', i);
-            if (lineEnd < 0) lineEnd = src.Length;
-            string line = src.Substring(lineStart, lineEnd - lineStart);
-            string trim = line.Trim();
-            if (trim.StartsWith("//") || trim.StartsWith("*") || trim.StartsWith("/*"))
-            {
-                from = i + needle.Length;
-                continue;
-            }
-            int semi = line.IndexOf(';');
-            string stmt = semi >= 0 ? line.Substring(0, semi) : line;
-            if (stmt.IndexOf(needle, StringComparison.Ordinal) >= 0
-                && (stmt.IndexOf("= true", StringComparison.Ordinal) >= 0
-                    || stmt.IndexOf("=true", StringComparison.Ordinal) >= 0))
-                return true;
-            from = i + needle.Length;
-        }
-        return false;
-    }
-
-    static void LaunchBlockTests()
-    {
-        string[] blocked = new string[]
-        {
-            ".exe", ".com", ".bat", ".cmd", ".scr", ".pif", ".msi", ".msp",
-            ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
-            ".hta", ".cpl", ".reg", ".lnk", ".jar",
-            ".appref-ms", ".application", ".gadget", ".msc", ".psc1", ".scf",
-            ".url", ".vb", ".ws", ".inf", ".dll", ".sys"
-        };
-        for (int i = 0; i < blocked.Length; i++)
-        {
-            string ext = blocked[i];
-            Check("blocked " + ext, LaunchPolicy.IsBlockedLaunchPath("manual" + ext), ext);
-            Check("blocked upper " + ext, LaunchPolicy.IsBlockedLaunchPath("MANUAL" + ext.ToUpperInvariant()), ext);
-        }
-        Check("double extension is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf.exe"), "pdf.exe");
-        Check("double extension upper is blocked", LaunchPolicy.IsBlockedLaunchPath("X.PDF.EXE"), "PDF.EXE");
-        Check("document that mentions exe is allowed", !LaunchPolicy.IsBlockedLaunchPath("x.exe.pdf"), "exe.pdf");
-        Check("trailing dot exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe."), "dot");
-        Check("trailing space exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe "), "space");
-        Check("trailing dot and space exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe. "), "dot space");
-        Check("alternate stream exe is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf:evil.exe"), "ads");
-        Check("alternate stream upper is blocked", LaunchPolicy.IsBlockedLaunchPath("x.pdf:evil.EXE"), "ads upper");
-        Check("drive path alternate stream is blocked", LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\x.pdf:evil.exe"), "drive ads");
-        Check("drive-relative exe is blocked", LaunchPolicy.IsBlockedLaunchPath("C:setup.exe"), "C:setup.exe");
-        Check("drive-relative pdf is allowed", !LaunchPolicy.IsBlockedLaunchPath("C:manual.pdf"), "C:manual.pdf");
-        Check("drive pdf path is allowed", !LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\x.pdf"), @"C:\kb\x.pdf");
-        Check("exe with zone stream is blocked", LaunchPolicy.IsBlockedLaunchPath("x.exe:Zone.Identifier"), "zone");
-        Check("full path exe is blocked", LaunchPolicy.IsBlockedLaunchPath(@"C:\kb\files\setup.EXE"), "full");
-        Check("null path is not launched", LaunchPolicy.IsBlockedLaunchPath(null), "null");
-        Check("empty path is not launched", LaunchPolicy.IsBlockedLaunchPath(""), "empty");
-        Check("json is not a script", !LaunchPolicy.IsBlockedLaunchPath("kb.json"), "json");
-        Check("ps1xml is not ps1", !LaunchPolicy.IsBlockedLaunchPath("x.ps1xml"), "ps1xml");
-        string[] allowed = new string[] { "x.pdf", "x.jpg", "x.png", "x.txt", "x.docx", "x.xlsx", "x.exe.pdf" };
-        for (int i = 0; i < allowed.Length; i++)
-            Check("allowed " + allowed[i], !LaunchPolicy.IsBlockedLaunchPath(allowed[i]), allowed[i]);
-        Check("document with trailing dot is allowed", !LaunchPolicy.IsBlockedLaunchPath("photo.jpg."), "jpg.");
-        Check("document with trailing space is allowed", !LaunchPolicy.IsBlockedLaunchPath("photo.jpg "), "jpg space");
-        string msg = LaunchPolicy.BlockedLaunchMessage(@"C:\kb\files\setup.exe");
-        Check("block message names the file", msg.IndexOf("setup.exe", StringComparison.Ordinal) >= 0, msg);
-        Check("block message explains the refusal",
-            msg.IndexOf("won't open program or script files", StringComparison.Ordinal) >= 0
-            && msg.IndexOf("Explorer", StringComparison.Ordinal) >= 0, msg);
-        Check("block message survives a null path",
-            LaunchPolicy.BlockedLaunchMessage(null).IndexOf("won't open", StringComparison.Ordinal) >= 0, "null msg");
-
-        string root = FindRepoRoot();
-        string search = File.Exists(Path.Combine(root, "SearchControl.cs"))
-            ? File.ReadAllText(Path.Combine(root, "SearchControl.cs")) : "";
-        Check("OpenSel refuses a blocked launch",
-            search.IndexOf("IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "SearchControl");
-        string woSrc = File.Exists(Path.Combine(root, "WorkOrderControl.cs"))
-            ? File.ReadAllText(Path.Combine(root, "WorkOrderControl.cs")) : "";
-        Check("OpenMedia refuses a blocked launch",
-            woSrc.IndexOf("IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "WorkOrderControl");
-    }
-
-    static void ManifestVersionTests()
-    {
-        string path = Path.Combine(FindRepoRoot(), "app.manifest");
-        string xml = File.Exists(path) ? File.ReadAllText(path) : "";
-        Check("app.manifest is readable", xml.Length > 0, path);
-        Eq("manifest assemblyIdentity version", ManifestIdentityVersion(xml), AppVersion.Number + ".0");
-    }
-
-    static string ManifestIdentityVersion(string xml)
-    {
-        if (string.IsNullOrEmpty(xml)) return "";
-        int i = xml.IndexOf("<assemblyIdentity", StringComparison.Ordinal);
-        if (i < 0) return "";
-        int end = xml.IndexOf('>', i);
-        if (end < 0) return "";
-        string tag = xml.Substring(i, end - i);
-        const string key = "version=\"";
-        int v = tag.IndexOf(key, StringComparison.Ordinal);
-        if (v < 0) return "";
-        v += key.Length;
-        int q = tag.IndexOf('"', v);
-        if (q < 0) return "";
-        return tag.Substring(v, q - v);
-    }
-
-    static void PacketSidecarSyncTests()
-    {
-        string prevFolder = IdSettings.FolderOverride;
-        string prevExe = IdSettings.ExeDirOverride;
-        string prevWo = WorkOrderStore.FolderOverride;
-        string prevWoExe = WorkOrderStore.ExeDirOverride;
-        string prevSync = ShopSync.SettingsFolderOverride;
-        string kb = MkRoot();
-        string usb = Path.Combine(Path.GetTempPath(), "tb-side-" + Guid.NewGuid().ToString("N"));
-        string cfg = Path.Combine(Path.GetTempPath(), "tb-side-cfg-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(usb);
-        string exe = Path.Combine(cfg, "exe");
-        Directory.CreateDirectory(exe);
-        IdSettings.FolderOverride = cfg;
-        IdSettings.ExeDirOverride = exe;
-        WorkOrderStore.FolderOverride = Path.Combine(cfg, "wo");
-        WorkOrderStore.ExeDirOverride = exe;
-        ShopSync.SettingsFolderOverride = cfg;
-        try
-        {
-            string dir = Path.Combine(kb, "data", "shop", "alice", "work-orders", "9");
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "wo.json"), "{\"Number\":\"9\"}");
-            File.WriteAllText(Path.Combine(dir, "wo.json.bak"), "{\"Number\":\"old\"}");
-            File.WriteAllText(Path.Combine(dir, "wo.json.tmp-abc"), "{ partial");
-            File.WriteAllText(Path.Combine(dir, "notes.txt.tmp-zzz"), "partial notes");
-            ShopSyncResult synced = ShopSync.Run(kb, new ShopSyncSettings { TechId = "alice", SyncFolder = usb });
-            string remote = Path.Combine(usb, "data", "shop", "alice", "work-orders", "9");
-            Check("sync copies wo.json", File.Exists(Path.Combine(remote, "wo.json")), "missing");
-            Check("sync ignores wo.json.bak", !File.Exists(Path.Combine(remote, "wo.json.bak")), "bak copied");
-            Check("sync ignores wo.json.tmp", !File.Exists(Path.Combine(remote, "wo.json.tmp-abc")), "tmp copied");
-            Check("sync ignores notes tmp", !File.Exists(Path.Combine(remote, "notes.txt.tmp-zzz")), "notes tmp copied");
-            bool sidecarConflict = false;
-            foreach (ShopConflict c in synced.ConflictList)
-            {
-                string rel = c.RelativePath ?? "";
-                if (rel.IndexOf(".bak", StringComparison.OrdinalIgnoreCase) >= 0
-                    || rel.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0)
-                    sidecarConflict = true;
-            }
-            Check("sync does not conflict on bak or tmp", !sidecarConflict, "conflict");
-
-            File.WriteAllText(Path.Combine(remote, "report.txt.bak"), "old report");
-            File.WriteAllText(Path.Combine(remote, "report.txt.tmp-qq"), "partial report");
-            ShopSync.Run(kb, new ShopSyncSettings { TechId = "alice", SyncFolder = usb });
-            Check("sync does not pull bak", !File.Exists(Path.Combine(dir, "report.txt.bak")), "bak pulled");
-            Check("sync does not pull tmp", !File.Exists(Path.Combine(dir, "report.txt.tmp-qq")), "tmp pulled");
-        }
-        finally
-        {
-            IdSettings.FolderOverride = prevFolder;
-            IdSettings.ExeDirOverride = prevExe;
-            WorkOrderStore.FolderOverride = prevWo;
-            WorkOrderStore.ExeDirOverride = prevWoExe;
-            ShopSync.SettingsFolderOverride = prevSync;
-            try { Directory.Delete(kb, true); } catch { }
-            try { Directory.Delete(usb, true); } catch { }
-            try { Directory.Delete(cfg, true); } catch { }
-        }
-    }
-
+    [SelfTestCase("source list", Order = 300)]
     static void SourceListTests()
     {
         string root = FindRepoRoot();
+        string coreListPath = Path.Combine(root, "sources", "core.list");
+        string appListPath = Path.Combine(root, "sources", "app.list");
         string corePath = Path.Combine(root, "sources", "core.rsp");
         string appPath = Path.Combine(root, "sources", "app.rsp");
+        string selftestPath = Path.Combine(root, "sources", "selftest.rsp");
         string buildPath = Path.Combine(root, "build.bat");
         string testPath = Path.Combine(root, "test.bat");
+        string genBat = Path.Combine(root, "tools", "gen-rsp.bat");
+        string genSh = Path.Combine(root, "tools", "gen-rsp.sh");
+        Check("sources\\core.list present", File.Exists(coreListPath), coreListPath);
+        Check("sources\\app.list present", File.Exists(appListPath), appListPath);
+        Check("tools\\gen-rsp.bat present", File.Exists(genBat), genBat);
+        Check("tools\\gen-rsp.sh present", File.Exists(genSh), genSh);
         Check("sources\\core.rsp present", File.Exists(corePath), corePath);
         Check("sources\\app.rsp present", File.Exists(appPath), appPath);
+        Check("sources\\selftest.rsp present", File.Exists(selftestPath), selftestPath);
+        string gitIgnorePath = Path.Combine(root, ".gitignore");
+        string gitIgnore = File.Exists(gitIgnorePath) ? File.ReadAllText(gitIgnorePath) : "";
+        Check("generated sources/*.rsp are gitignored",
+            gitIgnore.IndexOf("sources/*.rsp", StringComparison.Ordinal) >= 0
+            || gitIgnore.IndexOf(@"sources\*.rsp", StringComparison.Ordinal) >= 0,
+            "gitignore");
         Check("build.bat present for source list", File.Exists(buildPath), buildPath);
         Check("test.bat present for source list", File.Exists(testPath), testPath);
 
+        List<string> coreList = ReadRspNames(coreListPath);
+        List<string> appList = ReadRspNames(appListPath);
         List<string> core = ReadRspNames(corePath);
         List<string> app = ReadRspNames(appPath);
+        List<string> selftest = ReadRspNames(selftestPath);
+        Check("core.rsp matches core.list", SameNameList(coreList, core), "drift");
+        Check("app.rsp matches app.list", SameNameList(appList, app), "drift");
         int dup = 0;
         var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var seenBase = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int pass = 0; pass < 2; pass++)
         {
             List<string> list = pass == 0 ? core : app;
             string which = pass == 0 ? "core.rsp" : "app.rsp";
             for (int i = 0; i < list.Count; i++)
             {
-                string name = list[i];
+                string name = NormalizeRspPath(list[i]);
                 string prior;
                 if (seen.TryGetValue(name, out prior))
                 {
@@ -3654,17 +1787,61 @@ ProtocolDescription=ISO 15765
                     dup++;
                 }
                 else seen[name] = which;
+                string baseName = RspBaseName(name);
+                if (seenBase.TryGetValue(baseName, out prior))
+                {
+                    Check("no duplicate source basename " + baseName, false, prior + " and " + which);
+                    dup++;
+                }
+                else seenBase[baseName] = which;
             }
         }
         if (dup == 0)
             Check("response files have no duplicate sources", true, "");
-        Check("SelfTest.cs is not in a response file", !seen.ContainsKey("SelfTest.cs"), "listed");
+        Check("SelfTest.cs is not in a response file", !seenBase.ContainsKey("SelfTest.cs"), "listed");
+
+        int selfDup = 0;
+        var selfSeen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < selftest.Count; i++)
+        {
+            string name = NormalizeRspPath(selftest[i]);
+            string prior;
+            if (selfSeen.TryGetValue(name, out prior))
+            {
+                Check("no duplicate selftest source " + name, false, prior + " and selftest.rsp");
+                selfDup++;
+            }
+            else selfSeen[name] = "selftest.rsp";
+            if (seenBase.ContainsKey(RspBaseName(name)))
+                Check("selftest file is not in core or app rsp", false, name);
+        }
+        if (selfDup == 0 && selftest.Count > 0)
+            Check("selftest.rsp has no duplicate sources", true, "");
 
         int badListed = 0;
         for (int i = 0; i < core.Count; i++) badListed += BadRspEntry(root, core[i]);
         for (int i = 0; i < app.Count; i++) badListed += BadRspEntry(root, app[i]);
+        for (int i = 0; i < selftest.Count; i++) badListed += BadRspPathEntry(root, selftest[i]);
         if (badListed == 0)
             Check("every listed source file exists", true, "");
+
+        string testsDir = Path.Combine(root, "tests");
+        int missingTest = 0;
+        if (Directory.Exists(testsDir))
+        {
+            string[] testsDirCs = Directory.GetFiles(testsDir, "*.cs");
+            for (int i = 0; i < testsDirCs.Length; i++)
+            {
+                string rel = "tests\\" + Path.GetFileName(testsDirCs[i]);
+                if (!selfSeen.ContainsKey(rel))
+                {
+                    Check("tests source is listed in selftest.rsp (" + rel + ")", false, "missing");
+                    missingTest++;
+                }
+            }
+        }
+        if (missingTest == 0 && selftest.Count > 0)
+            Check("every tests\\*.cs is listed in selftest.rsp", true, "");
 
         int missing = 0;
         if (Directory.Exists(root))
@@ -3675,6 +1852,8 @@ ProtocolDescription=ISO 15765
                 string name = Path.GetFileName(rootCs[i]);
                 if (string.Equals(name, "SelfTest.cs", StringComparison.OrdinalIgnoreCase))
                     continue;
+                // Path-aware: root file must be listed as the bare name, not only via a
+                // same-basename src\ entry (basename-only would hide a leftover root copy).
                 string where;
                 if (!seen.TryGetValue(name, out where))
                 {
@@ -3686,8 +1865,31 @@ ProtocolDescription=ISO 15765
         if (missing == 0 && dup == 0)
             Check("every root .cs except SelfTest.cs is listed once", true, "");
 
+        int missingSrc = 0;
+        string srcRoot = Path.Combine(root, "src");
+        if (Directory.Exists(srcRoot))
+        {
+            string[] srcCs = Directory.GetFiles(srcRoot, "*.cs", SearchOption.AllDirectories);
+            for (int i = 0; i < srcCs.Length; i++)
+            {
+                string rel = srcCs[i].Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                rel = NormalizeRspPath(rel);
+                if (!seen.ContainsKey(rel))
+                {
+                    Check("src source is listed (" + rel + ")", false, "missing from core.rsp and app.rsp");
+                    missingSrc++;
+                }
+            }
+        }
+        if (missingSrc == 0 && Directory.Exists(srcRoot))
+            Check("every src\\**\\*.cs is listed once", true, "");
+
         string build = File.Exists(buildPath) ? File.ReadAllText(buildPath) : "";
         string test = File.Exists(testPath) ? File.ReadAllText(testPath) : "";
+        Check("build.bat calls tools\\gen-rsp.bat",
+            build.IndexOf(@"tools\gen-rsp.bat", StringComparison.OrdinalIgnoreCase) >= 0, "gen-rsp");
+        Check("test.bat calls tools\\gen-rsp.bat",
+            test.IndexOf(@"tools\gen-rsp.bat", StringComparison.OrdinalIgnoreCase) >= 0, "gen-rsp");
         Check("build.bat references sources\\core.rsp",
             build.IndexOf(@"sources\core.rsp", StringComparison.OrdinalIgnoreCase) >= 0, "core.rsp");
         Check("build.bat references sources\\app.rsp",
@@ -3710,6 +1912,9 @@ ProtocolDescription=ISO 15765
                 self.IndexOf("SelfTest.cs", StringComparison.OrdinalIgnoreCase) >= 0
                 && self.IndexOf(@"sources\core.rsp", StringComparison.OrdinalIgnoreCase) >= 0,
                 "core");
+            Check("SelfTest compile references selftest.rsp",
+                self.IndexOf(@"sources\selftest.rsp", StringComparison.OrdinalIgnoreCase) >= 0,
+                "selftest.rsp");
             Check("SelfTest compile does not reference app.rsp",
                 self.IndexOf(@"sources\app.rsp", StringComparison.OrdinalIgnoreCase) < 0,
                 "app.rsp");
@@ -3728,11 +1933,14 @@ ProtocolDescription=ISO 15765
         for (int i = 0; i < testCs.Count; i++)
         {
             if (AllowedTestInline(testCs[i])) continue;
-            Check("test.bat inline .cs is only SelfTest or LayoutAudit", false, testCs[i]);
+            Check("test.bat inline .cs is only SelfTest, CrashForm, or LayoutAudit", false, testCs[i]);
             stray++;
         }
         if (stray == 0)
-            Check("test.bat lists no root .cs inline except SelfTest.cs and tools\\LayoutAudit.cs", true, "");
+            Check("test.bat lists no root .cs inline except SelfTest.cs, CrashForm path, and tools\\LayoutAudit.cs", true, "");
+        Check("test.bat SelfTest compile references moved CrashForm path",
+            test.IndexOf(@"src\Features\Crash\CrashForm.cs", StringComparison.OrdinalIgnoreCase) >= 0,
+            "src\\Features\\Crash\\CrashForm.cs");
 
         Check("build.bat has no *.cs wildcard",
             build.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
@@ -3742,20 +1950,131 @@ ProtocolDescription=ISO 15765
             test.IndexOf("*.cs", StringComparison.OrdinalIgnoreCase) < 0, "*.cs");
         Check("test.bat has no /recurse: wildcard",
             test.IndexOf("/recurse:", StringComparison.OrdinalIgnoreCase) < 0, "/recurse:");
+
+        string linuxCheck = Path.Combine(root, "tools", "linux-compile-check.sh");
+        Check("tools\\linux-compile-check.sh present", File.Exists(linuxCheck), linuxCheck);
+        if (File.Exists(linuxCheck))
+        {
+            string sh = File.ReadAllText(linuxCheck);
+            Check("linux-compile-check uses mcs",
+                sh.IndexOf("mcs", StringComparison.Ordinal) >= 0, "mcs");
+            Check("linux-compile-check locks C# 5 like Framework csc",
+                sh.IndexOf("-langversion:5", StringComparison.Ordinal) >= 0, "langversion");
+            Check("linux-compile-check regenerates rsp via gen-rsp.sh",
+                sh.IndexOf("gen-rsp.sh", StringComparison.Ordinal) >= 0, "gen-rsp");
+            Check("linux-compile-check compiles SelfTest sources",
+                sh.IndexOf("SelfTest.cs", StringComparison.Ordinal) >= 0
+                && sh.IndexOf("selftest.rsp", StringComparison.Ordinal) >= 0, "SelfTest");
+            Check("linux-compile-check references moved CrashForm path",
+                sh.IndexOf("src/Features/Crash/CrashForm.cs", StringComparison.Ordinal) >= 0,
+                "CrashForm path");
+            Check("linux-compile-check compiles app sources",
+                sh.IndexOf("app.rsp", StringComparison.Ordinal) >= 0
+                && sh.IndexOf("TechBench.exe", StringComparison.Ordinal) >= 0, "TechBench");
+            Check("linux-compile-check is compile-only (no test.bat substitute claim)",
+                sh.IndexOf("Not a substitute for test.bat", StringComparison.Ordinal) >= 0, "disclaimer");
+        }
+
+        if (File.Exists(genBat))
+        {
+            string gen = File.ReadAllText(genBat);
+            Check("gen-rsp.bat globs tests\\*.cs for selftest.rsp",
+                gen.IndexOf(@"tests\*.cs", StringComparison.OrdinalIgnoreCase) >= 0, "tests glob");
+            Check("gen-rsp.bat reads sources\\core.list",
+                gen.IndexOf(@"sources\core.list", StringComparison.OrdinalIgnoreCase) >= 0, "core.list");
+            Check("gen-rsp.bat reads sources\\app.list",
+                gen.IndexOf(@"sources\app.list", StringComparison.OrdinalIgnoreCase) >= 0, "app.list");
+            Check("gen-rsp.bat uses shared GENERATED by tools/gen-rsp header",
+                gen.IndexOf("# GENERATED by tools/gen-rsp", StringComparison.Ordinal) >= 0, "header");
+        }
+        if (File.Exists(genSh))
+        {
+            string genShText = File.ReadAllText(genSh);
+            Check("gen-rsp.sh uses shared GENERATED by tools/gen-rsp header",
+                genShText.IndexOf("# GENERATED by tools/gen-rsp", StringComparison.Ordinal) >= 0, "header");
+            Check("gen-rsp.sh sorts tests with LC_ALL=C",
+                genShText.IndexOf("LC_ALL=C", StringComparison.Ordinal) >= 0, "sort");
+        }
+    }
+
+    static bool SameNameList(List<string> a, List<string> b)
+    {
+        if (a == null || b == null || a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (!string.Equals(NormalizeRspPath(a[i]), NormalizeRspPath(b[i]), StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    }
+
+    static string NormalizeRspPath(string path)
+    {
+        if (path == null) return "";
+        return path.Replace('/', '\\');
+    }
+
+    /// <summary>
+    /// File name from an rsp path. rsp lists use '\'; Path.GetFileName on Mono
+    /// treats '\' as a normal character, so split after NormalizeRspPath.
+    /// </summary>
+    static string RspBaseName(string path)
+    {
+        string norm = NormalizeRspPath(path);
+        int i = norm.LastIndexOf('\\');
+        return i < 0 ? norm : norm.Substring(i + 1);
     }
 
     static int BadRspEntry(string root, string name)
     {
         if (string.IsNullOrEmpty(name)
-            || name.IndexOf('\\') >= 0 || name.IndexOf('/') >= 0
             || name.IndexOf(' ') >= 0 || name.IndexOf('\t') >= 0)
         {
-            Check("listed source is one root file name", false, name ?? "(null)");
+            Check("listed source path is non-empty", false, name ?? "(null)");
             return 1;
         }
-        if (!File.Exists(Path.Combine(root, name)))
+        string norm = NormalizeRspPath(name);
+        if (norm.IndexOf("..", StringComparison.Ordinal) >= 0)
+        {
+            Check("listed source has no parent segments", false, name);
+            return 1;
+        }
+        if (norm.IndexOf('\\') >= 0)
+        {
+            if (!norm.StartsWith("src\\", StringComparison.OrdinalIgnoreCase))
+            {
+                Check("listed path source stays under src\\", false, name);
+                return 1;
+            }
+        }
+        string onDisk = norm.Replace('\\', Path.DirectorySeparatorChar);
+        if (!File.Exists(Path.Combine(root, onDisk)))
         {
             Check("listed source exists", false, name);
+            return 1;
+        }
+        return 0;
+    }
+
+    static int BadRspPathEntry(string root, string relative)
+    {
+        if (string.IsNullOrEmpty(relative)
+            || relative.IndexOf(' ') >= 0 || relative.IndexOf('\t') >= 0)
+        {
+            Check("listed selftest path is relative", false, relative ?? "(null)");
+            return 1;
+        }
+        string norm = relative.Replace('/', '\\');
+        if (!norm.StartsWith("tests\\", StringComparison.OrdinalIgnoreCase))
+        {
+            Check("selftest path stays under tests\\", false, relative);
+            return 1;
+        }
+        // rsp lists use Windows separators; File.Exists needs the host separator (Linux agents).
+        string onDisk = norm.Replace('\\', Path.DirectorySeparatorChar);
+        if (!File.Exists(Path.Combine(root, onDisk)))
+        {
+            Check("listed selftest file exists", false, relative);
             return 1;
         }
         return 0;
@@ -3764,6 +2083,7 @@ ProtocolDescription=ISO 15765
     static bool AllowedTestInline(string token)
     {
         return string.Equals(token, "SelfTest.cs", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(token, "CrashForm.cs", StringComparison.OrdinalIgnoreCase)
             || string.Equals(token, @"tools\LayoutAudit.cs", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -3839,6 +2159,7 @@ ProtocolDescription=ISO 15765
         return found;
     }
 
+    [SelfTestCase("install smoke", Order = 310)]
     static void SmokeTests()
     {
         string kb = Path.Combine(FindRepoRoot(), "kb");
@@ -3878,7 +2199,7 @@ ProtocolDescription=ISO 15765
             try { Directory.Delete(empty, true); } catch { }
         }
 
-        string programPath = Path.Combine(FindRepoRoot(), "Program.cs");
+        string programPath = Path.Combine(FindRepoRoot(), "src", "Shell", "Program.cs");
         string program = File.Exists(programPath) ? File.ReadAllText(programPath) : "";
         int mainAt = program.IndexOf("static int Main(string[] args)", StringComparison.Ordinal);
         int wantsAt = mainAt < 0 ? -1 : program.IndexOf("static bool WantsSmoke", mainAt, StringComparison.Ordinal);
@@ -3895,7 +2216,7 @@ ProtocolDescription=ISO 15765
             && smokeLit > wantsAt,
             "main=" + mainAt + " wants=" + wantsAt + " call=" + callSmoke
             + " run=" + callRun + " swap=" + callSwap + " lit=" + smokeLit);
-        string appVerPath = Path.Combine(FindRepoRoot(), "AppVersion.cs");
+        string appVerPath = Path.Combine(FindRepoRoot(), "src", "Core", "Version", "AppVersion.cs");
         string appVer = File.Exists(appVerPath) ? File.ReadAllText(appVerPath) : "";
         Check("smoke loads through KbIndex.FindRoot",
             appVer.IndexOf("KbIndex.FindRoot()", StringComparison.Ordinal) >= 0, "FindRoot");

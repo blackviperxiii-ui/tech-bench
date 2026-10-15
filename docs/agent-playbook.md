@@ -34,17 +34,17 @@ git switch -c cursor/<topic> origin/main
 - Versioned PRs: title `Version: vX.Y.Z <summary>`, and a one-page spec at `docs/specs/vX.Y.Z.md` whose first line is `Version: vX.Y.Z`.
 - PR body sections: `Spec version: vX.Y.Z` (or say why there's none, e.g. docs-only), starting `main` SHA, What changed, ACs with evidence, What I ran and saw, Verify commands, `Skipped / not verified`, Non-goals.
 - Lockstep version bump, all 4 spots together:
-  1. `AppVersion.cs`: `Number` plus `AssemblyVersion`, `AssemblyFileVersion` (`X.Y.Z.0`) and `AssemblyInformationalVersion` (`X.Y.Z`).
+  1. `src/Core/Version/AppVersion.cs`: `Number` plus `AssemblyVersion`, `AssemblyFileVersion` (`X.Y.Z.0`) and `AssemblyInformationalVersion` (`X.Y.Z`).
   2. `app.manifest`: `<assemblyIdentity version="X.Y.Z.0" ...>`.
-  3. `SelfTest.cs`: `Eq("stamped version", AppVersion.Number, "X.Y.Z")`.
+  3. `tests/SelfTest.Feed.cs`: `Eq("stamped version", AppVersion.Number, "X.Y.Z")`.
   4. `README.md`: the `Current stamp: **X.Y.Z**` line.
   On Jeremy's box, `/workspace/tech-bench-tools/lockstep-version-bump.sh <repo> X.Y.Z` applies and verifies all 4; `--check` only reports them.
-- New `.cs` files go in `sources/core.rsp` or `sources/app.rsp` (the only source list). SelfTest fails on drift.
+- New `.cs` files go in `sources/core.list` or `sources/app.list` (membership: root name or `src\...` path). `tools/gen-rsp.bat` (and `tools/gen-rsp.sh` on Linux) write `sources/*.rsp`; `tests/*.cs` are picked up by glob into `selftest.rsp`. SelfTest fails on drift. Do not hand-edit generated `.rsp` files. Stage 6 moves feature code into `src/` one folder per PR; safety files last and separately.
 - No `.github/` changes (workflow, settings) without Jeremy's OK.
 
 ## 6. Tests and CI
 - CI (`.github/workflows/windows-installer.yml`, job `installer`, windows-latest, on every push): `test.bat`, then `release.bat`, then `tools\assert-pe-i386.ps1` on `TechBench.exe` and `-Native` on the Setup exe, then `tools\install-smoke.ps1 -Setup dist\TechBench-Setup-<ver>.exe`.
-- Locally from the repo root: `test.bat` (SelfTest plus LayoutAudit; both must end clean). Build only: `build.bat`. Needs Windows and the .NET Framework 4 `csc.exe`. Linux/Mono runs are only a hint; Windows CI green on the PR head is required.
+- Locally from the repo root: `test.bat` (SelfTest plus LayoutAudit; both must end clean). Build only: `build.bat`. Needs Windows and the .NET Framework 4 `csc.exe`. On Linux agent boxes, run `tools/linux-compile-check.sh` (Mono `mcs`; `sudo apt-get install -y mono-devel` once) before opening a PR to catch CS errors early — it is not a substitute for `test.bat`. Windows CI green on the PR head is still required.
 - New tests call the code the way the app does and assert a literal expected value. Before keeping one, ask: would it still pass if the code under test returned `default`/`null` or a stub? If yes, rewrite it. Don't add tests that only restate a constant, check that a mock was called, or assert their own fixture. No test beats a bad test, and no single-test PRs.
 - Never delete, skip or loosen an existing test. If one looks tautological or wrong, report it in the findings log. Disclose any test change in the PR.
 - Before a refactor, the touched behavior must be covered by passing tests. If it isn't, add behavior tests first, in the same PR.

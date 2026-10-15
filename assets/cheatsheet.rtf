@@ -1,0 +1,48 @@
+{\rtf1\ansi\ansicpg1252\deff0
+{\fonttbl{\f0\fnil\fcharset0 Segoe UI;}{\f1\fmodern\fcharset0 Consolas;}}
+\viewkind4\uc1\pard\f0\fs26\b Tech Bench quick reference\b0\fs20\par
+\par
+\b Keyboard shortcuts\b0\par
+F1\tab Open this cheat sheet (press F1 again to focus it if it is already open)\par
+Ctrl+F or F3\tab Jump to the search box on the Search page\par
+Ctrl+N\tab Add a fault code to the knowledge base\par
+Enter (in search)\tab Run search now\par
+Down (in search)\tab Move focus into the results list\par
+\par
+\b Main navigation\b0\par
+Search\tab Fault codes, manuals, rental filters/oil, equipment, iFix passwords, shop notes and files\par
+Work orders\tab Pick a WO, notes, photos, INLINE 7 shots, diagnostic report, shop share, IntelliDealer log on/off when configured\par
+INLINE 7\tab Cummins INLINE 7 / J1939: connect, live data, codes, trend, timeline, unit history, report, bus monitor\par
+Adapters\tab RP1210 adapter list and whether this process is 32-bit (required for INLINE 7)\par
+\par
+\b Job strip (top)\b0\par
+WO picker\tab Load customer, model, and serial from a work order; last customer and WO are remembered across launches\par
+Search this job\tab Search using model and serial from the strip\par
+Add code to KB / Add note\tab Same as Ctrl+N and Shop - Add note\par
+Sync line\tab Click for Shop sync status and settings\par
+\par
+\b Shop menu\b0\par
+Sync now / Sync...\tab Two-way share of shop notes, user codes, and files through the KB or a folder you pick\par
+Add note / Add file...\tab Drop a text note or copy a file into the knowledge-base shop folder\par
+IntelliDealer settings\tab Azure API Gateway credentials (DPAPI-protected, not in the repo)\par
+Refresh work orders\tab Reload the assigned work-order list (file-backed, or ServiceToday when gateway + subscription key are set)\par
+\par
+\b Help menu\b0\par
+Check for updates\tab Read latest.json and a hashed TechBench.exe (applies after you quit, never mid-session). Shop override: update-url.txt or update-feed-path.txt beside the exe\par
+Install update\tab Enabled when a verified update is staged\par
+About Tech Bench\tab Version, install path, knowledge-base location, process bitness, and which update feed is active\par
+\par
+\b Search filters (kind box)\b0\par
+ALL, CODE, PASSWORD, MANUAL, FILTER, EQUIP, NOTE, FILE\tab Narrow what the index searches\par
+\par
+\b INLINE 7 (high level)\b0\par
+Connect\tab Close USB-Link 3 Explorer and Guidanz first so the adapter is not locked. Last adapter is remembered when still installed\par
+Module box\tab Whose DM1/DM2 the code lists show (engine vs compressor controller, etc.)\par
+Clear codes menu\tab J1939 DM11/DM3 requests with per-module report; no DEF/SCR disable or calibration writes\par
+Trend / Timeline / Unit history\tab Session charts and fleet history from saved _dtcs.csv files\par
+Report\tab Printable one-page summary for the current work order\par
+Sessions\tab Saved under Desktop\\TechBench-sessions (or Documents / LocalAppData fallback). Fatal crashes also write techbench-crash.log beside the exe\par
+\par
+\b Knowledge base\b0\par
+Shipped data is embedded in TechBench.exe and copied beside the exe on install. Override with TECHBENCH_KB, kb-path.txt, or sync-path.txt next to the exe.\par
+}
