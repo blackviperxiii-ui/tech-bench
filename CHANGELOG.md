@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.25: SelfTest for job persistence: customer and last WO survive a restart (trimmed, null-safe), missing or corrupt settings.json falls back to defaults and recovers on the next save. No production change. Lockstep version bump.
+
 - v1.2.24: SelfTest.Feed pins the exact about wording (`an anonymous manifest (built-in URL`) and diffs linux-compile-check `-resource:` against build.bat `/resource:`. Lockstep version bump.
 
 - v1.2.23: SelfTests for TrendSample/TrendLog and DtcEvent/DtcTimeline (`tests/SelfTest.Trend.cs`). No production change. Lockstep version bump.
