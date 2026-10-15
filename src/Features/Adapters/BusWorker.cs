@@ -1,0 +1,629 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+
+namespace J1939Reader
+{
+    internal enum BusCmdKind
+    {
+        RequestCodes,
+        ClearPrevious,
+        ResetAll,
+        PingIdentity,
+        SetTsc1,
+        Dm13,
+        ClearBusStats,
+        ClearHistory
+    }
+
+    internal sealed class BusCommand
+    {
+        public BusCmdKind Kind;
+        public int Arg;
+        public bool Flag;
+
+        public BusCommand(BusCmdKind kind) { Kind = kind; }
+        public BusCommand(BusCmdKind kind, int arg) { Kind = kind; Arg = arg; }
+        public BusCommand(BusCmdKind kind, bool flag) { Kind = kind; Flag = flag; }
+    }
+
+    /// <summary>Immutable view of the bus for the UI thread.</summary>
+    internal sealed class BusSnapshot
+    {
+        public bool Connected;
+        public bool Busy;                 // a blocking operation (reset) is running
+        public string BusyWhat = "";
+        public string AdapterName = "";
+        public short DeviceId;
+        public string Protocol = "";
+        public string LastError = "";
+        public int Fps;
+        public double QuietSeconds;
+        public bool Stale;
+        public int TscRpm;
+        public int EngineSa;
+        public int ViewSa;
+        public double Rpm = double.NaN;
+        public double CoolantC = double.NaN;
+        public double OilKpa = double.NaN;
+        public double BatteryV = double.NaN;
+        public double FuelLph = double.NaN;
+        public string DefText = "—";
+        public string AftText = new AftState().Text();
+        public int SeverityRaw = -1;
+        public int LowLampRaw = -1;
+        public string OilText = "—";
+        public string Vin = "";
+        public string Sw = "";
+        public string CompId = "";
+        public string Hours = "";
+        public bool Red, Amber, Protect, Mil;
+        public bool HasSpn5246, HasTankFmi9, Has1569;
+        public string LastResetReport = "";
+        /// <summary>Bumps on every finished clear, so the same report text twice still shows.</summary>
+        public int ResetSeq;
+        public int DefSa = -1;
+        public List<Dtc> Active = new List<Dtc>();
+        public List<Dtc> Prev = new List<Dtc>();
+        public List<int> FaultModules = new List<int>();
+        public List<PgnRow> Pgns = new List<PgnRow>();
+        public List<SaRow> Sas = new List<SaRow>();
+        /// <summary>
+        /// True when this snapshot filled <see cref="Pgns"/> / <see cref="Sas"/>.
+        /// UI Refresh must gate Bus-list Repopulate on this flag, not a second clock read —
+        /// the 800 ms boundary can fall between OnUiTick and Refresh and wipe the boxes.
+        /// </summary>
+        public bool IncludesBusLists;
+
+        /// <summary>
+        /// Disconnect can race the UI snapshot: IsConnected is already false while the monitor still
+        /// holds the last live values. Blanking here keeps the HUD from looking hooked up.
+        /// </summary>
+        public void BlankDisconnectedReadouts()
+        {
+            Rpm = CoolantC = OilKpa = BatteryV = FuelLph = double.NaN;
+            DefText = "—";
+            AftText = new AftState().Text();
+            DefSa = -1;
+            SeverityRaw = -1;
+            LowLampRaw = -1;
+            OilText = "—";
+            Vin = "";
+            Sw = "";
+            CompId = "";
+            Hours = "";
+            Red = Amber = Protect = Mil = false;
+            HasSpn5246 = HasTankFmi9 = Has1569 = false;
+            Active.Clear();
+            Prev.Clear();
+            FaultModules = new List<int>();
+        }
+    }
+
+    /// <summary>
+    /// Owns the adapter on a background thread. Everything that blocks — SendMessage, a code clear
+    /// waiting on ACKs, reconnect attempts — used to run on the UI thread from a 40 ms timer, which
+    /// froze the window during a reset and stuttered while connected.
+    /// </summary>
+    internal sealed class BusWorker : IDisposable
+    {
+        const int CycleMs = 5;
+        const int TscHeartbeatMs = 40;
+        const int AutoRefreshMs = 2000;
+        const int ReconnectEveryMs = 5000;
+        const double StaleAfterSeconds = 3.0;
+        const int MaxLogQueued = 500;
+        const int DisposeJoinMs = 30000;
+
+        readonly Rp1210 _rp = new Rp1210();
+        readonly BusMonitor _mon = new BusMonitor();
+        readonly object _gate = new object();
+        readonly Queue<BusCommand> _cmds = new Queue<BusCommand>();
+        readonly Queue<string> _log = new Queue<string>();
+
+        Thread _thread;
+        volatile bool _stop;
+        volatile bool _wantConnected;
+        volatile bool _autoReconnect = true;
+        volatile bool _autoRefresh = true;
+        volatile int _tscRpm;
+        volatile int _viewSa = -1;
+        volatile bool _busy;
+        volatile string _busyWhat = "";
+
+        Rp1210Api _api;
+        string _lastResetReport = "";
+        int _resetSeq;
+        DateTime _lastReq = DateTime.MinValue;
+        DateTime _lastTsc = DateTime.MinValue;
+        DateTime _lastReconnect = DateTime.MinValue;
+        DateTime _lastGood = DateTime.MinValue;
+        DateTime _fpsWindow = DateTime.MinValue;
+        int _framesThisWindow;
+        int _fps;
+
+        public bool AutoReconnect { get { return _autoReconnect; } set { _autoReconnect = value; } }
+        public bool AutoRefresh { get { return _autoRefresh; } set { _autoRefresh = value; } }
+        public bool WantConnected { get { return _wantConnected; } }
+
+        /// <summary>Which module's DM1/DM2 the UI is showing; -1 follows the engine.</summary>
+        public int ViewSa { get { return _viewSa; } set { _viewSa = value; } }
+
+        public int EngineSaSetting
+        {
+            get { lock (_gate) return _mon.EngineSaSetting; }
+            set { lock (_gate) _mon.EngineSaSetting = value; }
+        }
+
+        public void Start()
+        {
+            if (_thread != null) return;
+            _thread = new Thread(Loop);
+            _thread.IsBackground = true;
+            _thread.Name = "J1939 bus";
+            _thread.Start();
+        }
+
+        public void Dispose()
+        {
+            _stop = true;
+            Thread t = _thread;
+            _thread = null;
+            if (t != null)
+            {
+                try { t.Join(DisposeJoinMs); }
+                catch { }
+            }
+            // ResetAll blocks in the native DLL well past 1.5 s. Unload only after the
+            // worker has left those calls; Loop already disconnects and disposes.
+            if (t != null && t.IsAlive) return;
+            _rp.Dispose();
+        }
+
+        public void Enqueue(BusCommand cmd)
+        {
+            if (cmd == null) return;
+            lock (_gate) _cmds.Enqueue(cmd);
+        }
+
+        public List<string> DrainLog()
+        {
+            lock (_gate)
+            {
+                if (_log.Count == 0) return null;
+                var list = new List<string>(_log.Count);
+                while (_log.Count > 0) list.Add(_log.Dequeue());
+                return list;
+            }
+        }
+
+        void Log(string s)
+        {
+            lock (_gate)
+            {
+                if (_log.Count >= MaxLogQueued) _log.Dequeue();
+                _log.Enqueue(s);
+            }
+        }
+
+        /// <summary>Adapters this PC has installed. Safe to call before Start.</summary>
+        public static List<Rp1210Api> Adapters()
+        {
+            return Rp1210.Adapters();
+        }
+
+        public void RequestConnect(Rp1210Api api)
+        {
+            lock (_gate) _api = api;
+            _wantConnected = true;
+            _lastReconnect = DateTime.MinValue;
+        }
+
+        public void RequestDisconnect()
+        {
+            _wantConnected = false;
+        }
+
+        public void SetTsc1(int rpm)
+        {
+            _tscRpm = rpm < 0 ? 0 : rpm;
+            Enqueue(new BusCommand(BusCmdKind.SetTsc1, _tscRpm));
+        }
+
+        void Loop()
+        {
+            while (!_stop)
+            {
+                try { Cycle(); }
+                catch (Exception ex) { Log("bus worker error: " + ex.Message); }
+                Thread.Sleep(CycleMs);
+            }
+            try
+            {
+                if (_rp.IsConnected)
+                {
+                    if (_tscRpm > 0) _rp.SendTsc1(0, EngineSaLocked());
+                    _rp.Disconnect();
+                }
+            }
+            catch { }
+            try { _rp.Dispose(); }
+            catch { }
+        }
+
+        void Cycle()
+        {
+            DateTime now = DateTime.UtcNow;
+
+            if (!_wantConnected)
+            {
+                if (_rp.IsConnected)
+                {
+                    if (_tscRpm > 0) { _rp.SendTsc1(0, EngineSaLocked()); _tscRpm = 0; }
+                    _rp.Disconnect();
+                    lock (_gate) _mon.ClearLive();
+                    Log("Disconnected");
+                }
+                DrainCommandsWhileOffline();
+                return;
+            }
+
+            if (!_rp.IsConnected)
+            {
+                TryConnect(now);
+                return;
+            }
+
+            DrainCommands();
+            if (!_rp.IsConnected) return;
+            // A code clear in DrainCommands can take several seconds.
+            now = DateTime.UtcNow;
+
+            if (_autoRefresh && (now - _lastReq).TotalMilliseconds >= AutoRefreshMs)
+                RequestCodes(false);
+
+            ServiceBus(now);
+
+            // An adapter that stops answering keeps IsConnected true, so silence is the real signal.
+            if (_autoReconnect && _lastGood != DateTime.MinValue
+                && (now - _lastGood).TotalSeconds > 6
+                && (now - _lastReconnect).TotalMilliseconds > ReconnectEveryMs)
+            {
+                _lastReconnect = now;
+                Log("Auto-reconnect…");
+                _rp.Disconnect();
+                lock (_gate) _mon.ClearLive();
+            }
+        }
+
+        /// <summary>
+        /// TSC1 heartbeat, frame reads, frames/s, and the trend sample. Also runs while a code clear
+        /// waits, so ACKs and the fresh DM1/DM2 are read instead of piling up in the adapter.
+        /// </summary>
+        void ServiceBus(DateTime now)
+        {
+            if (_tscRpm > 0 && (now - _lastTsc).TotalMilliseconds >= TscHeartbeatMs)
+            {
+                _lastTsc = now;
+                _rp.SendTsc1(_tscRpm, EngineSaLocked());
+            }
+
+            int read = 0;
+            J1939Frame f;
+            while (read++ < 500 && _rp.Read(out f))
+            {
+                _framesThisWindow++;
+                _lastGood = now;
+                lock (_gate) _mon.Feed(f, now);
+            }
+
+            if (_fpsWindow == DateTime.MinValue) _fpsWindow = now;
+            if ((now - _fpsWindow).TotalSeconds >= 1)
+            {
+                _fps = _framesThisWindow;
+                _framesThisWindow = 0;
+                _fpsWindow = now;
+            }
+
+            lock (_gate) _mon.SampleTrend(now);
+        }
+
+        void TryConnect(DateTime now)
+        {
+            if ((now - _lastReconnect).TotalMilliseconds < ReconnectEveryMs && _lastReconnect != DateTime.MinValue)
+                return;
+            _lastReconnect = now;
+            Rp1210Api api;
+            lock (_gate) api = _api;
+            _busy = true; _busyWhat = "connecting";
+            bool ok;
+            try { ok = _rp.Connect(api); }
+            catch (Exception ex) { ok = false; Log("Connect threw: " + ex.Message); }
+            finally { _busy = false; _busyWhat = ""; }
+            if (!ok)
+            {
+                Log("Connect failed: " + _rp.LastError);
+                if (!_autoReconnect) _wantConnected = false;
+                return;
+            }
+            _lastGood = now;
+            _fpsWindow = now;
+            _framesThisWindow = 0;
+            lock (_gate) _mon.ClearLive();
+            Log("Connected  device " + _rp.DeviceId + "  " + _rp.Protocol);
+            if (!string.IsNullOrEmpty(_rp.ClaimStatus)) Log(_rp.ClaimStatus);
+            RequestCodes(true);
+        }
+
+        void DrainCommandsWhileOffline()
+        {
+            lock (_gate)
+            {
+                while (_cmds.Count > 0)
+                {
+                    BusCommand c = _cmds.Dequeue();
+                    if (c.Kind == BusCmdKind.ClearBusStats) _mon.ClearBusStats();
+                    else if (c.Kind == BusCmdKind.ClearHistory) _mon.ClearHistory();
+                    else if (c.Kind == BusCmdKind.ResetAll || c.Kind == BusCmdKind.ClearPrevious)
+                    {
+                        // The inline report box shows this next to the last clear, so name the failure.
+                        _lastResetReport = (c.Kind == BusCmdKind.ResetAll ? "Reset all codes" : "Clear previous")
+                            + " FAILED: adapter not connected — nothing was sent.\r\n";
+                        _resetSeq++;
+                    }
+                }
+            }
+        }
+
+        void DrainCommands()
+        {
+            while (true)
+            {
+                BusCommand c;
+                lock (_gate)
+                {
+                    if (_cmds.Count == 0) return;
+                    c = _cmds.Dequeue();
+                }
+                Execute(c);
+            }
+        }
+
+        void Execute(BusCommand c)
+        {
+            switch (c.Kind)
+            {
+                case BusCmdKind.RequestCodes:
+                    RequestCodes(true);
+                    break;
+                case BusCmdKind.ClearPrevious:
+                    RunClear(ClearKind.Previous);
+                    break;
+                case BusCmdKind.ResetAll:
+                    RunClear(ClearKind.All);
+                    break;
+                case BusCmdKind.PingIdentity:
+                    lock (_gate)
+                    {
+                        _mon.Vin = ""; _mon.Sw = ""; _mon.CompId = ""; _mon.HoursText = "";
+                    }
+                    byte pingSa = Rp1210.Tsc1Dest(EngineSaLocked());
+                    _rp.RequestPgn(0xFEEC, pingSa);
+                    _rp.RequestPgn(0xFEEC, 255);
+                    _rp.RequestPgn(0xFEDA, pingSa);
+                    _rp.RequestPgn(0xFEDA, 255);
+                    _rp.RequestPgn(0xFEEB, pingSa);
+                    _rp.RequestPgn(0xFEE5, pingSa);
+                    _rp.RequestPgn(0xFECA, pingSa);
+                    if (pingSa != 0)
+                    {
+                        _rp.RequestPgn(0xFEEC, 0);
+                        _rp.RequestPgn(0xFEDA, 0);
+                    }
+                    Log("Pinged ECM for VIN / software / component / hours / DM1");
+                    break;
+                case BusCmdKind.SetTsc1:
+                    _rp.SendTsc1(c.Arg, EngineSaLocked());
+                    Log(c.Arg <= 0
+                        ? "TSC1 release — ECM has its own throttle back"
+                        : "TSC1 request " + c.Arg + " RPM (heartbeat while held)");
+                    break;
+                case BusCmdKind.Dm13:
+                    _rp.SendDm13(c.Flag);
+                    Log(c.Flag ? "DM13 Stop Broadcast sent" : "DM13 Start Broadcast sent");
+                    break;
+                case BusCmdKind.ClearBusStats:
+                    lock (_gate) _mon.ClearBusStats();
+                    Log("Bus stats cleared");
+                    break;
+                case BusCmdKind.ClearHistory:
+                    lock (_gate) _mon.ClearHistory();
+                    Log("Trend and timeline cleared");
+                    break;
+                default:
+                {
+                    BusCmdKind unhandled = c.Kind;
+                    throw new InvalidOperationException("unhandled bus command: " + unhandled);
+                }
+            }
+        }
+
+        int EngineSaLocked()
+        {
+            lock (_gate) return _mon.EngineSa;
+        }
+
+        /// <summary>DM11/DM3 clear on the bus thread; the window stays live and shows progress.</summary>
+        void RunClear(ClearKind kind)
+        {
+            _busy = true;
+            _busyWhat = kind == ClearKind.All ? "resetting codes" : "clearing previous codes";
+            string report;
+            string headline;
+            try
+            {
+                var run = new CodeClearRun(kind, _mon, _gate, new WorkerClearLink(this));
+                report = run.Execute();
+                headline = run.Headline;
+            }
+            catch (Exception ex)
+            {
+                report = (kind == ClearKind.All ? "Reset all codes" : "Clear previous") + " FAILED: " + ex.Message + "\r\n";
+                headline = report.TrimEnd();
+            }
+            finally
+            {
+                _busy = false;
+                _busyWhat = "";
+            }
+            lock (_gate)
+            {
+                _lastResetReport = report;
+                _resetSeq++;
+            }
+            Log("Code clear — " + headline + Environment.NewLine + report.TrimEnd());
+            // The clear just re-read DM1/DM2/FE56; the next auto-refresh can wait its turn.
+            _lastReq = DateTime.UtcNow;
+        }
+
+        /// <summary>The live adapter as a code clear sees it.</summary>
+        sealed class WorkerClearLink : IClearLink
+        {
+            readonly BusWorker _w;
+
+            public WorkerClearLink(BusWorker w) { _w = w; }
+
+            public DateTime Now { get { return DateTime.UtcNow; } }
+
+            public string LastError { get { return _w._rp.LastError; } }
+
+            public bool Send(J1939Tx tx)
+            {
+                return _w._rp.SendJ1939(tx);
+            }
+
+            public bool Pump(int ms, Func<bool> done)
+            {
+                DateTime end = DateTime.UtcNow.AddMilliseconds(ms);
+                while (true)
+                {
+                    if (_w._stop || !_w._wantConnected || !_w._rp.IsConnected) return false;
+                    _w.ServiceBus(DateTime.UtcNow);
+                    if (done != null && done()) return true;
+                    if (DateTime.UtcNow >= end) return true;
+                    Thread.Sleep(CycleMs);
+                }
+            }
+
+            public void Progress(string what)
+            {
+                _w._busyWhat = what ?? "";
+            }
+        }
+
+        void RequestCodes(bool log)
+        {
+            if (!_rp.IsConnected) return;
+            int engineSa, defSa;
+            lock (_gate)
+            {
+                engineSa = _mon.EngineSa;
+                defSa = _mon.DefSa;
+            }
+            _rp.RequestDm(engineSa);
+            byte engine = Rp1210.Tsc1Dest(engineSa);
+            _rp.RequestPgn(J1939Clear.DefTank, engine);
+            // Some machines send FE56 from the tank header or an aftertreatment module, not the ECM.
+            if (defSa >= 0 && defSa <= 253 && defSa != engine) _rp.RequestPgn(J1939Clear.DefTank, (byte)defSa);
+            _lastReq = DateTime.UtcNow;
+            if (log) Log("Requested DM1 / DM2 / DEF tank (engine + compressor SA " + J1939Clear.CompressorSa + ")");
+        }
+
+        public BusSnapshot Snapshot()
+        {
+            return Snapshot(true);
+        }
+
+        /// <param name="includeBusLists">
+        /// When false, skip allocating/sorting PGN and SA traffic rows (used on non-Bus pages).
+        /// </param>
+        public BusSnapshot Snapshot(bool includeBusLists)
+        {
+            var s = new BusSnapshot();
+            DateTime now = DateTime.UtcNow;
+            s.Connected = _rp.IsConnected;
+            s.Busy = _busy;
+            s.BusyWhat = _busyWhat ?? "";
+            s.DeviceId = _rp.DeviceId;
+            s.Protocol = _rp.Protocol ?? "";
+            s.LastError = _rp.LastError ?? "";
+            s.AdapterName = _rp.Api == null ? "" : _rp.Api.ToString();
+            s.Fps = _fps;
+            s.TscRpm = _tscRpm;
+            s.QuietSeconds = _lastGood == DateTime.MinValue ? 0 : (now - _lastGood).TotalSeconds;
+            s.Stale = s.Connected && _lastGood != DateTime.MinValue && s.QuietSeconds > StaleAfterSeconds;
+
+            lock (_gate)
+            {
+                s.EngineSa = _mon.EngineSa;
+                int view = _viewSa < 0 ? _mon.EngineSa : _viewSa;
+                s.ViewSa = view;
+                ModuleFaults m = _mon.Module(view);
+                s.Active.AddRange(m.Active);
+                s.Prev.AddRange(m.Prev);
+                s.Red = m.Red; s.Amber = m.Amber; s.Protect = m.Protect; s.Mil = m.Mil;
+                s.FaultModules = _mon.ModulesWithFaults();
+                s.Rpm = _mon.Rpm;
+                s.CoolantC = _mon.CoolantC;
+                s.OilKpa = _mon.OilKpa;
+                s.BatteryV = _mon.BatteryV;
+                s.FuelLph = _mon.FuelLph;
+                s.DefText = _mon.DefText();
+                s.AftText = _mon.AftText();
+                AftState aft = _mon.Aft ?? new AftState();
+                s.SeverityRaw = aft.SeverityRaw;
+                s.LowLampRaw = aft.LowLampRaw;
+                s.OilText = _mon.OilText();
+                s.Vin = _mon.Vin; s.Sw = _mon.Sw; s.CompId = _mon.CompId; s.Hours = _mon.HoursText;
+                s.HasSpn5246 = _mon.HasSpn(5246);
+                s.HasTankFmi9 = _mon.HasTankFmi9();
+                s.Has1569 = _mon.HasSpn(1569);
+                if (includeBusLists)
+                {
+                    s.IncludesBusLists = true;
+                    s.Pgns = _mon.PgnRows();
+                    s.Sas = _mon.SaRows();
+                }
+                s.LastResetReport = _lastResetReport;
+                s.ResetSeq = _resetSeq;
+                s.DefSa = _mon.DefSa;
+            }
+            if (!s.Connected)
+                s.BlankDisconnectedReadouts();
+            return s;
+        }
+
+        public List<TrendSample> TrendCopy()
+        {
+            lock (_gate) return _mon.Trend.Copy();
+        }
+
+        public List<DtcEvent> TimelineCopy(int sa)
+        {
+            lock (_gate)
+            {
+                int view = sa < 0 ? _mon.EngineSa : sa;
+                return _mon.Module(view).Timeline.Recent();
+            }
+        }
+
+        public string TimelineCsv(int sa, string jobTag)
+        {
+            lock (_gate)
+            {
+                int view = sa < 0 ? _mon.EngineSa : sa;
+                return _mon.Module(view).Timeline.Csv(jobTag);
+            }
+        }
+    }
+}

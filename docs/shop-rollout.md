@@ -33,7 +33,12 @@ Setup reuses the folder chosen last time and keeps the earlier Desktop shortcut 
 
 Files the app added later are not in that copy, so they stay. See "Where your data lives" below.
 
-Help → Check for updates has no published feed, so it will not download a new exe. Upgrade by running the newer Setup. A shop can still point the installed copy at its own feed with `update-url.txt` next to `TechBench.exe` (one URL, lines starting with `#` are comments).
+Help → Check for updates uses the unpublished built-in feed by default, so it will not download a new exe until a shop override is set. Upgrade by running the newer Setup, or configure a shop feed:
+
+- `update-url.txt` next to `TechBench.exe` (one URL, lines starting with `#` are comments), or
+- `update-feed-path.txt` with a UNC/drive folder that holds `latest.json` (hash checked before an offer)
+
+Help → About shows which feed source is active.
 
 ## Check the version
 
@@ -49,11 +54,13 @@ Upgrades keep these because Setup does not delete them.
 
 Outside the install folder:
 
-- `%LOCALAPPDATA%\TechBench\settings.json` — last model/serial and window size
+- `%LOCALAPPDATA%\TechBench\settings.json` — last model/serial/customer/work order and window size
+- `%LOCALAPPDATA%\TechBench\adapter-prefs.json` — last RP1210 adapter id and shell/INLINE page
 - `%LOCALAPPDATA%\TechBench\id-settings.json` — IntelliDealer settings (secrets stay on this PC)
 - `%LOCALAPPDATA%\TechBench\sync.json` and `sync-state-*.json` — tech name and sync folder
 - `%LOCALAPPDATA%\TechBench\work-orders\` — local work-order packets
 - Session files, screenshots, and `techbench-errors.log` — `Desktop\TechBench-sessions` if that folder can be created, otherwise Documents, otherwise `%LOCALAPPDATA%\TechBench-sessions`
+- `techbench-crash.log` beside the installed exe — fatal crash records from CrashForm
 
 Inside the knowledge base the app opens. A normal install uses `air-compressor-kb` next to the exe. `TECHBENCH_KB`, then each path in `kb-path.txt` next to the exe, is tried first, and only used when that folder already contains `data\kb.json`.
 
@@ -65,7 +72,7 @@ In that folder:
 - Added files: `data\shop\<tech>\files\`
 - Shared work-order copies: `data\shop\<tech>\work-orders\` and `data\shop\_shared\work-orders\`
 
-Next to the installed exe, if you created them, these are not part of Setup's file list and are not deleted by an upgrade: `update-url.txt`, `kb-path.txt`, `sync-path.txt`, `id-api.json`, `id-settings.json`, `id-work-orders.json`, `id-work-orders.csv`.
+Next to the installed exe, if you created them, these are not part of Setup's file list and are not deleted by an upgrade: `update-url.txt`, `update-feed-path.txt`, `kb-path.txt`, `sync-path.txt`, `id-api.json`, `id-settings.json`, `id-work-orders.json`, `id-work-orders.csv`.
 
 Uninstall (Start Menu → Uninstall Tech Bench, or `unins000.exe` in the install folder) removes the files Setup copied: the exe, icons, shipped knowledge-base files, and the shortcuts. It does not remove `%LOCALAPPDATA%\TechBench` or the session folder. It has no extra uninstall-delete list, so files you added under the knowledge base after install are left behind.
 

@@ -1,8 +1,14 @@
 @echo off
 rem Response files are relative to the current directory, so build from the repo root.
 cd /d "%~dp0."
-if not exist "sources\core.rsp" (
+if not exist "sources\core.list" (
   echo Could not enter the repo root
+  exit /b 1
+)
+call tools\gen-rsp.bat
+if errorlevel 1 exit /b 1
+if not exist "sources\core.rsp" (
+  echo gen-rsp did not write sources\core.rsp
   exit /b 1
 )
 set CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe
@@ -11,7 +17,7 @@ if not exist "%CSC%" (
   exit /b 1
 )
 rem /platform:x86 is required: RP1210 adapter drivers are 32-bit only.
-rem Source list: sources\core.rsp and sources\app.rsp. Add new files there, not in this script.
+rem Source list: generated sources\core.rsp + sources\app.rsp from *.list (and tests\ for SelfTest).
 "%CSC%" /nologo /platform:x86 /target:winexe /optimize ^
   /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
   /r:"%WINDIR%\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll" ^
@@ -23,6 +29,7 @@ rem Source list: sources\core.rsp and sources\app.rsp. Add new files there, not 
   /resource:kb\data\usb-manuals.json,TechBench.BundledKb.data.usb-manuals.json ^
   /resource:kb\data\rental-portable-filters-oil.json,TechBench.BundledKb.data.rental-portable-filters-oil.json ^
   /resource:kb\data\rental-equipment-info.json,TechBench.BundledKb.data.rental-equipment-info.json ^
+  /resource:assets\cheatsheet.rtf,TechBench.assets.cheatsheet.rtf ^
   /out:TechBench.exe ^
   @sources\core.rsp @sources\app.rsp
 if errorlevel 1 exit /b 1

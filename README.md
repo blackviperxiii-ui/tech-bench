@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.10** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
+Current stamp: **1.2.22** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
 
 ## What it does
 
@@ -13,9 +13,9 @@ Current stamp: **1.2.10** (Help → About). The field database ships with the ap
 - **Timeline** of every code that came and went, with the RPM at the moment it latched
 - **Unit history** — what this model/serial has shown in past saved sessions
 - **Report** — printable one-page summary for a work order
-- Job strip (model/serial) prefixes saved sessions and scopes the history
-- Remembers last model/serial and window size in `%LocalAppData%\TechBench\settings.json`
-- Help → Check for updates: `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token). The built-in feed is not published
+- Job strip (model/serial/customer + last work order) prefixes saved sessions and scopes the history
+- Remembers last model/serial/customer/WO and window size in `%LocalAppData%\TechBench\settings.json`; last RP1210 adapter and shell/INLINE page in `adapter-prefs.json`
+- Help → Check for updates: `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token). The built-in feed is not published. A shop can point at a network share with `update-feed-path.txt` beside the exe (folder holding `latest.json`), or at a URL with `update-url.txt`
 - **Shop sync** — two-way share of tech notes, user codes, and shop files through the knowledge-base folder or a USB/network folder you pick in Shop → Sync
 - **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off. IntelliDealer Azure API Gateway log on / log off / sign off / multimedia post-back only when dealer credentials are in Shop → IntelliDealer
 
@@ -44,7 +44,7 @@ build.bat
 
 That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
 
-`build.bat` compiles from `sources\core.rsp` and `sources\app.rsp`. Those response files are the only source list. `test.bat` compiles SelfTest from `sources\core.rsp`, and LayoutAudit from both. Add a new `.cs` file there instead of pasting it into the scripts.
+`build.bat` / `test.bat` call `tools\gen-rsp.bat`, which writes `sources\*.rsp` from `sources\core.list`, `sources\app.list`, and a `tests\*.cs` glob (gitignored; always regenerated). Edit the `.list` files (root names or `src\...` paths) or drop a new file under `tests\`; do not commit or hand-edit the generated `.rsp` files. `gen-rsp.sh` sorts the same way for Linux agents. Feature code is moving into `src\Features\`, `src\Core\`, and `src\Shell\` (one folder per PR).
 
 `TechBench.exe --smoke` checks the version stamp and the bundled knowledge base, then exits without a window. `--smoke-out <path>` writes the one-line report (the exe is a Windows program, so the CI gate reads that file). The Windows installer workflow runs this after a silent per-user install, then uninstalls.
 
@@ -65,9 +65,12 @@ Building the Setup exe needs the Inno Setup compiler (`ISCC.exe`). `installer\bu
 
 Attach `dist\TechBench-Setup-<version>.exe`, `TechBench.exe`, and `latest.json` to the private GitHub release `v<version>` on [blackviperxiii-ui/tech-bench](https://github.com/blackviperxiii-ui/tech-bench). Techs install or upgrade by running that shop Setup. See [docs/shop-rollout.md](docs/shop-rollout.md).
 
-The in-app updater's built-in default feed URL (`https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`) is unchanged and not published, so Help → Check for updates reports the feed as unavailable. On a shop PC you can override the feed with `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed).
+The in-app updater's built-in default feed URL (`https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`) is unchanged and not published, so Help → Check for updates reports the feed as unavailable unless a shop override is set. On a shop PC you can:
 
-The updater never sends credentials and the installer does not contain a GitHub token. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start, in the same folder the Setup exe used.
+- Drop `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed), or
+- Drop `update-feed-path.txt` with a UNC/drive folder that holds `latest.json` (and usually `TechBench.exe`); the hash in `latest.json` is checked before an update is offered
+
+Help → About names which feed source is active. The updater never sends credentials and the installer does not contain a GitHub token. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start, in the same folder the Setup exe used.
 
 ## Test
 
@@ -76,6 +79,15 @@ test.bat
 ```
 
 Offline checks: J1939 decoding, BAM reassembly, DM11/DM3 code clear against simulated ECMs (ACK, refusal, silent controller, codes that come back, DEF from a separate module), RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
+
+On Linux agent boxes (no Windows csc), catch compile breaks with Mono before opening a PR:
+
+```bash
+# once: sudo apt-get install -y mono-devel
+tools/linux-compile-check.sh
+```
+
+That compiles SelfTest and TechBench with `mcs` from the same `sources\*.rsp` lists. It does **not** replace `test.bat` or the Windows CI `installer` job.
 
 ## Knowledge base
 
@@ -149,7 +161,7 @@ The **Module** box picks whose DM1/DM2 the code lists show. On a portable compre
 
 ### Clearing codes
 
-**Reset all codes** and **Clear codes after repair** clear active then previously active codes; **Clear previous** clears previously active only. Each one:
+Clear actions live under the **Clear codes** menu (not as peer toolbar buttons). **Reset all codes** and **Clear codes after repair** clear active then previously active codes; **Clear previous** clears previously active only. Each one:
 
 1. Asks every module directly — the engine (SA 0 and the detected engine SA), the compressor controller (SA 48), and any other module that has sent DM1/DM2 on this hookup, such as a separate DEF/aftertreatment module — then everyone (SA 255). Broadcast-only was not enough for SA 48.
 2. Uses the J1939-73 method: a Request (PGN 59904) for DM11 (clear active), then for DM3 (clear previously active). DM11/DM3 are not sent as data.
@@ -179,12 +191,17 @@ This tool does not disable DEF/SCR or Red Stop. Those lamps follow active DTCs. 
 - `shot_<stamp>.png` — screenshots
 - `techbench-errors.log` — anything unexpected, worth sending along with a bug report
 
+Next to the installed exe:
+
+- `techbench-crash.log` — fatal crash records (CrashForm / unexpected close). Separate from the sessions `techbench-errors.log`.
+
 The `_dtcs.csv` files are what the Unit history tab reads back, so saving a session is what builds fleet history.
 
 ## Keyboard
 
 | Key | Action |
 |---|---|
+| F1 | shop cheat sheet (Help → Keyboard / shop cheat sheet) |
 | Ctrl+F or F3 | jump to the search box |
 | Ctrl+N | add a code to the knowledge base |
 | Shop → Sync | pick a folder, run two-way sync, resolve conflicts |
