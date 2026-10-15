@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.22: IdGateway refuses 307/308 redirects after non-GET (POST payload no longer wiped to GET). SelfTest covers POST+307. Lockstep version bump.
+
 - v1.2.21: BusSnapshot.IncludesBusLists — Refresh gates Bus PGN/SA Repopulate on the snapshot flag (not a second 800 ms clock read). Lockstep version bump.
 
 - v1.2.20: Nightly adaptive 2026-10-15 — gateway HTTP hygiene (gzip, keepalive, loopback proxy, 429 floor, body cap, CombineUrl port match); WO AddPhoto/PullAssigned status honesty; media open confined under packet/media; ContainsSecret patterns widened; playbook lockstep pointer to SelfTest.Feed.

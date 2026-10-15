@@ -272,6 +272,86 @@ static partial class SelfTest
                 new Uri("https://dealer.azure-api.net/a"),
                 new Uri("http://dealer.azure-api.net/b"),
                 out why), why);
+
+        Eq("307 after POST is refused",
+            IdGateway.RedirectFollowError(307, "POST"),
+            "Gateway 307 redirect after POST was refused (payload would not be resent).");
+        Eq("308 after PUT is refused",
+            IdGateway.RedirectFollowError(308, "PUT"),
+            "Gateway 308 redirect after PUT was refused (payload would not be resent).");
+        Eq("307 after GET may follow", IdGateway.RedirectFollowError(307, "GET"), null);
+        Eq("302 after POST may follow (method switch)", IdGateway.RedirectFollowError(302, "POST"), null);
+    }
+
+    [SelfTestCase("IdGateway POST 307 redirect refused", Order = 304)]
+    static void IdGatewayPost307RedirectTests()
+    {
+        int port;
+        HttpListener listener = BindLoopback(out port);
+        Check("POST-307 bind loopback", listener != null, "listener");
+        if (listener == null) return;
+
+        var paths = new List<string>();
+        var methods = new List<string>();
+        Exception[] error = new Exception[1];
+        Thread worker = new Thread(delegate()
+        {
+            try
+            {
+                HttpListenerContext ctx = listener.GetContext();
+                methods.Add(ctx.Request.HttpMethod ?? "");
+                paths.Add(ctx.Request.RawUrl ?? "");
+                ctx.Response.StatusCode = 307;
+                ctx.Response.RedirectLocation = "http://127.0.0.1:" + port.ToString() + "/after";
+                ctx.Response.ContentLength64 = 0;
+                ctx.Response.OutputStream.Close();
+                // A second accept would mean the client followed with a new request.
+                listener.GetContext();
+                methods.Add("FOLLOWED");
+            }
+            catch (HttpListenerException) { }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex)
+            {
+                if (error[0] == null) error[0] = ex;
+            }
+        });
+        worker.IsBackground = true;
+        worker.Start();
+
+        var prevHttp = IdGateway.HttpOverride;
+        try
+        {
+            IdGateway.HttpOverride = null;
+            IdHttpResponse resp = IdGateway.SendRaw(new IdHttpRequest
+            {
+                Method = "POST",
+                Url = "http://127.0.0.1:" + port.ToString() + "/sign-off",
+                ContentType = "application/json",
+                Body = "{\"action\":\"signOff\"}"
+            });
+            Check("POST 307 sets status 307", resp != null && resp.Status == 307,
+                resp == null ? "null" : ("status=" + resp.Status));
+            Check("POST 307 is not success", resp != null && !resp.Ok, resp == null ? "null" : "ok");
+            Check("POST 307 error names 307 and POST",
+                resp != null
+                && (resp.Error ?? "").IndexOf("307", StringComparison.Ordinal) >= 0
+                && (resp.Error ?? "").IndexOf("POST", StringComparison.Ordinal) >= 0,
+                resp == null ? "null" : resp.Error);
+            Check("POST 307 did not follow to /after",
+                methods.Count == 1 && paths.Count == 1
+                && (paths[0] ?? "").IndexOf("sign-off", StringComparison.Ordinal) >= 0
+                && string.Equals(methods[0], "POST", StringComparison.OrdinalIgnoreCase),
+                "methods=" + string.Join(",", methods.ToArray())
+                + " paths=" + string.Join(",", paths.ToArray()));
+        }
+        finally
+        {
+            IdGateway.HttpOverride = prevHttp;
+            CloseFeed(listener, worker);
+        }
+        Check("POST-307 server error", error[0] == null,
+            error[0] == null ? "" : error[0].ToString());
     }
 
     static void WorkOrderMergeTests(IdSettings s, string kb)
