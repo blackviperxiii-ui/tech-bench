@@ -19,8 +19,6 @@ namespace TechBench
         readonly WorkOrderControl _orders;
         readonly Panel _host;
         readonly Control[] _pages;
-        readonly Control _pSearch;
-        readonly Control _pOrders;
         readonly FlowLayoutPanel _nav;
         readonly FlowLayoutPanel _job;
         readonly FlowLayoutPanel _actions;
@@ -176,16 +174,22 @@ namespace TechBench
             // Panels, not TabControl: native headers paint "Work orders / INLINE 7 / Adapters"
             // at 192 DPI but those pages are not hit-testable. Big wrap buttons + Visible pages
             // cannot ghost.
-            _pSearch = ShellPage("shellPage0", _search);
-            _pOrders = ShellPage("shellPage1", _orders);
-            var pInline = ShellPage("shellPage2", _inline);
-            var pAdapters = ShellPage("shellPage3", BuildAdaptersPanel());
-            _pages = new Control[] { _pSearch, _pOrders, pInline, pAdapters };
+            var bodies = new Dictionary<ShellPageId, Control>
+            {
+                { ShellPageId.Search, _search },
+                { ShellPageId.WorkOrders, _orders },
+                { ShellPageId.Inline7, _inline },
+                { ShellPageId.Adapters, BuildAdaptersPanel() }
+            };
+            _pages = new Control[ShellPages.Count];
+            for (int i = 0; i < _pages.Length; i++)
+            {
+                ShellPageInfo info = ShellPages.At(i);
+                _pages[i] = ShellPage(info.PanelName, bodies[info.Id]);
+            }
             _host = new Panel { Name = "shellHost", Dock = DockStyle.Fill };
 
-            _nav = UiLayout.SwitchBar(
-                new[] { "Search", "Work orders", "INLINE 7", "Adapters" },
-                delegate(int i) { ShowPage(i); });
+            _nav = UiLayout.SwitchBar(ShellPages.Titles(), delegate(int i) { ShowPage(i); });
             // Startup page restore must not persist: ShowPage(0) would wipe a saved shell page.
             SettingsWriteGate.BeginLoad();
             try
@@ -228,7 +232,7 @@ namespace TechBench
             useJob.Click += delegate
             {
                 string q = (_model.Text + " " + _serial.Text).Trim();
-                ShowPage(0);
+                ShowPage(ShellPageId.Search);
                 _search.Prefill(q);
                 SyncJob();
             };
@@ -242,7 +246,7 @@ namespace TechBench
             // The INLINE 7 tab knows SPNs; the knowledge base knows the shop's own write-ups on them.
             _inline.OpenInSearch = delegate(string query)
             {
-                ShowPage(0);
+                ShowPage(ShellPageId.Search);
                 _search.Prefill(query);
             };
             _inline.LookupCode = delegate(int spn, int fmi)
@@ -277,7 +281,7 @@ namespace TechBench
             {
                 if ((e.Control && e.KeyCode == Keys.F) || e.KeyCode == Keys.F3)
                 {
-                    ShowPage(0);
+                    ShowPage(ShellPageId.Search);
                     _search.FocusQuery();
                     e.Handled = true;
                 }
@@ -370,6 +374,11 @@ namespace TechBench
         void ShowPage(int i)
         {
             ShowPage(i, true);
+        }
+
+        void ShowPage(ShellPageId id)
+        {
+            ShowPage((int)id, true);
         }
 
         void ShowPage(int i, bool persistShellPage)
@@ -664,7 +673,7 @@ namespace TechBench
                 }
                 RunSync(false);
                 ReloadKb();
-                ShowPage(0);
+                ShowPage(ShellPageId.Search);
                 _search.Prefill((dlg.Result.Code + " " + dlg.Result.Title).Trim());
             }
         }
@@ -685,7 +694,7 @@ namespace TechBench
                     ShopSync.SaveNote(_kb.Root, ShopSync.LoadSettings().TechId, dlg.NoteTitle, dlg.NoteBody);
                     RunSync(false);
                     ReloadKb();
-                    ShowPage(0);
+                    ShowPage(ShellPageId.Search);
                     string q = dlg.NoteTitle;
                     if (string.IsNullOrWhiteSpace(q))
                     {
@@ -723,7 +732,7 @@ namespace TechBench
                     string dest = ShopSync.AddFile(_kb.Root, ShopSync.LoadSettings().TechId, dlg.FileName);
                     RunSync(false);
                     ReloadKb();
-                    ShowPage(0);
+                    ShowPage(ShellPageId.Search);
                     _search.Prefill(Path.GetFileName(dest));
                 }
                 catch (Exception ex)
