@@ -1070,9 +1070,9 @@ namespace J1939Reader
             UpdateIdBox(s);
             // The bus lists carry live ages, so they have to be rebuilt rather than diffed. Once a
             // second is fast enough to read and slow enough not to fight the scrollbar.
-            // Only touch these lists on the Bus page — off-page snapshots omit Pgns/Sas to save work,
-            // and repopulating then would wipe the boxes until the next Bus visit.
-            if (_innerPage == 2 && (DateTime.UtcNow - _lastBusUi).TotalMilliseconds > 800)
+            // Only touch these lists when the snapshot actually includes them — re-reading the
+            // 800 ms clock here can disagree with OnUiTick and wipe the boxes for a cycle.
+            if (_innerPage == 2 && s.IncludesBusLists)
             {
                 _lastBusUi = DateTime.UtcNow;
                 Repopulate(_lstPgn, PgnItems(s));

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.21: BusSnapshot.IncludesBusLists — Refresh gates Bus PGN/SA Repopulate on the snapshot flag (not a second 800 ms clock read). Lockstep version bump.
+
 - v1.2.20: Nightly adaptive 2026-10-15 — gateway HTTP hygiene (gzip, keepalive, loopback proxy, 429 floor, body cap, CombineUrl port match); WO AddPhoto/PullAssigned status honesty; media open confined under packet/media; ContainsSecret patterns widened; playbook lockstep pointer to SelfTest.Feed.
 
 - v1.2.19: sync vendored vstack skills in `.cursor/skills/` to vstack `6f2fbd3` (viper-mode, setup-vstack). Lockstep version bump.
