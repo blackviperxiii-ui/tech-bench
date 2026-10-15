@@ -15,7 +15,7 @@ static partial class SelfTest
     [SelfTestCase("updater", Order = 230)]
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.26");
+        Eq("stamped version", AppVersion.Number, "1.2.28");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- v1.2.26: Rearch stage 7: `ShellPages` registry (`src/Core/Shell/`) is the one list of shell pages; `ShellForm` switch bar, panels and `AdapterPrefs` clamp read it. New SelfTest case `shell page registry`. No behaviour change. Lockstep version bump.
+- v1.2.28: Rearch stage 7: `ShellPages` registry (`src/Core/Shell/`) is the one list of shell pages; `ShellForm` switch bar, panels and `AdapterPrefs` clamp read it. New SelfTest case `shell page registry`. No behaviour change. Lockstep version bump.
+
+- v1.2.27: switch agent tooling back to pstack: vendored `.cursor/skills/` now pstack 0.15.23 (`837067b`), `.cursor/rules/vstack.mdc` -> `pstack.mdc`, AGENTS.md/CLAUDE.md/tech-bench.mdc say always pstack, never vstack. v1.2.26 is reserved for the IntelliDealer card (PR #74), so this takes the next free patch. Lockstep version bump.
 
 - v1.2.25: SelfTest for job persistence: customer and last WO survive a restart (trimmed, null-safe), missing or corrupt settings.json falls back to defaults and recovers on the next save. No production change. Lockstep version bump.
 
