@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.19: sync vendored vstack skills in `.cursor/skills/` to vstack `6f2fbd3` (viper-mode, setup-vstack). Lockstep version bump.
+
 - Docs: correct v1.2.13 (no lockstep stamp); playbook lockstep paths → `src/Core/Version/AppVersion.cs` and `tests/SelfTest.Feed.cs`.
 
 - Restore SelfTest About assert for anonymous manifest URL (require both "anonymous manifest" and "built-in URL").
