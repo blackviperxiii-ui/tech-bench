@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- SelfTestCase runner asserts the exact discovered case count (was `>= 20`), so a dropped `[SelfTestCase]` fails the run.
+
 - v1.2.16: SelfTests for SessionIo.BaseName (blank/symbol tags, sanitize, trim, 40-char cut) and Names.SaLabel / OverrideCount. Test-only plus lockstep version bump.
 
 - v1.2.15: SelfTests for Ini (Parse, HasSection, Get, GetInt, GetList, GetIntList). Test-only plus lockstep version bump.
