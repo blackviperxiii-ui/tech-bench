@@ -15,7 +15,11 @@ namespace TechBench
 
     internal static class AdapterPrefs
     {
-        public const int ShellPageCount = 4;
+        public static int ShellPageCount
+        {
+            get { return ShellPages.Count; }
+        }
+
         public const int InnerPageCount = 7;
 
         /// <summary>Tests point this at a temp folder so we do not touch LocalAppData.</summary>
@@ -96,9 +100,7 @@ namespace TechBench
 
         public static int ClampShell(int page)
         {
-            if (page < 0) return 0;
-            if (page >= ShellPageCount) return ShellPageCount - 1;
-            return page;
+            return ShellPages.Clamp(page);
         }
 
         public static int ClampInner(int page)

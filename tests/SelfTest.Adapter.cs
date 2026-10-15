@@ -94,6 +94,65 @@ static partial class SelfTest
         }
     }
 
+    [SelfTestCase("shell page registry", Order = 95)]
+    static void ShellPageRegistryTests()
+    {
+        Eq("shell page count", ShellPages.Count, 4);
+        Eq("shell page titles in switch-bar order", string.Join("|", ShellPages.Titles()),
+            "Search|Work orders|INLINE 7|Adapters");
+        var panels = new List<string>();
+        var ids = new List<string>();
+        for (int i = 0; i < ShellPages.Count; i++)
+        {
+            panels.Add(ShellPages.At(i).PanelName);
+            ids.Add(((int)ShellPages.At(i).Id).ToString());
+        }
+        Eq("shell panel names unchanged", string.Join("|", panels.ToArray()),
+            "shellPage0|shellPage1|shellPage2|shellPage3");
+        Eq("saved shell page ints map to registry order", string.Join("|", ids.ToArray()), "0|1|2|3");
+        Eq("INLINE 7 is saved as page 2", (int)ShellPageId.Inline7, 2);
+        Eq("clamp below range", ShellPages.Clamp(-1), 0);
+        Eq("clamp in range", ShellPages.Clamp(2), 2);
+        Eq("clamp past end", ShellPages.Clamp(4), 3);
+        Eq("At falls back to first page", ShellPages.At(-5).Title, "Search");
+        Eq("At falls back to last page", ShellPages.At(99).Title, "Adapters");
+        Eq("AdapterPrefs page count follows registry", AdapterPrefs.ShellPageCount, 4);
+        Eq("AdapterPrefs clamp follows registry", AdapterPrefs.ClampShell(7), 3);
+
+        string dir = Path.Combine(Path.GetTempPath(), "tb-shell-pages-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string prev = AdapterPrefs.FolderOverride;
+        AdapterPrefs.FolderOverride = dir;
+        try
+        {
+            AdapterPrefs.Save(new AdapterPrefsData { AdapterId = "CMNSI7", ShellPage = 1, InnerPage = 0 });
+            Eq("saved page 1 restores Work orders",
+                ShellPages.At(AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage)).Title, "Work orders");
+            File.WriteAllText(AdapterPrefs.PathName(), "{\"AdapterId\":\"CMNSI7\",\"ShellPage\":9,\"InnerPage\":0}");
+            Eq("out-of-range saved page restores Adapters",
+                ShellPages.At(AdapterPrefs.Load().ShellPage).Title, "Adapters");
+        }
+        finally
+        {
+            AdapterPrefs.FolderOverride = prev;
+            try { Directory.Delete(dir, true); }
+            catch { }
+        }
+
+        // One list: the shell builds its switch bar from the registry, and the layout audit's
+        // independent page list still agrees with it.
+        string root = FindRepoRoot();
+        string shellSrc = File.ReadAllText(Path.Combine(root, "src", "Shell", "ShellForm.cs"));
+        Check("shell switch bar reads the registry",
+            shellSrc.IndexOf("UiLayout.SwitchBar(ShellPages.Titles()", StringComparison.Ordinal) >= 0
+            && shellSrc.IndexOf("\"Work orders\"", StringComparison.Ordinal) < 0,
+            "ShellForm still hardcodes shell page titles");
+        string audit = File.ReadAllText(Path.Combine(root, "tools", "LayoutAudit.cs"));
+        Check("layout audit page list matches registry",
+            audit.IndexOf("{ \"Search\", \"Work orders\", \"INLINE 7\", \"Adapters\" }", StringComparison.Ordinal) >= 0,
+            "tools/LayoutAudit.cs page names drifted from ShellPages");
+    }
+
     // ---------------- names ----------------
 
     [SelfTestCase("name overrides", Order = 100)]
