@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+<<<<<<< HEAD
 - SelfTestCase runner asserts the exact discovered case count (was `>= 20`), so a dropped `[SelfTestCase]` fails the run.
+=======
+- Stop committing generated `sources/*.rsp` (gitignore + always regenerate); align `gen-rsp.bat` / `gen-rsp.sh` shared header and test-file sort so drift checks can fail for real.
+>>>>>>> 43d8ab0 (Stop committing generated sources/*.rsp; align gen-rsp sort)
 
 - v1.2.16: SelfTests for SessionIo.BaseName (blank/symbol tags, sanitize, trim, 40-char cut) and Names.SaLabel / OverrideCount. Test-only plus lockstep version bump.
 
