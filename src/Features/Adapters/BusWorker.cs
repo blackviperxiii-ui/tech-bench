@@ -68,6 +68,12 @@ namespace J1939Reader
         public List<int> FaultModules = new List<int>();
         public List<PgnRow> Pgns = new List<PgnRow>();
         public List<SaRow> Sas = new List<SaRow>();
+        /// <summary>
+        /// True when this snapshot filled <see cref="Pgns"/> / <see cref="Sas"/>.
+        /// UI Refresh must gate Bus-list Repopulate on this flag, not a second clock read —
+        /// the 800 ms boundary can fall between OnUiTick and Refresh and wipe the boxes.
+        /// </summary>
+        public bool IncludesBusLists;
 
         /// <summary>
         /// Disconnect can race the UI snapshot: IsConnected is already false while the monitor still
@@ -584,6 +590,7 @@ namespace J1939Reader
                 s.Has1569 = _mon.HasSpn(1569);
                 if (includeBusLists)
                 {
+                    s.IncludesBusLists = true;
                     s.Pgns = _mon.PgnRows();
                     s.Sas = _mon.SaRows();
                 }
