@@ -1,0 +1,6 @@
+---
+description: "Always use pstack skills; never vstack."
+alwaysApply: true
+---
+
+Always load and follow the pstack skills in .cursor/skills (start with poteto-mode); never use vstack.

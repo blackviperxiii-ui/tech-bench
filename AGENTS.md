@@ -16,4 +16,4 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Agents stop at green + Ready. Squash-merge, tag, and release only on Viper's explicit word.
 - No `dyl-ready-pr` merge or babysit. No auto-merge.
 
-- **vstack:** Always load and follow the vstack skills in .cursor/skills (start with viper-mode); never use pstack.
+- **pstack:** Always load and follow the pstack skills in .cursor/skills (start with poteto-mode); never use vstack.
