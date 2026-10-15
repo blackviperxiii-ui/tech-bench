@@ -10,4 +10,5 @@ tests\SelfTest.Job.cs
 tests\SelfTest.Open.cs
 tests\SelfTest.Persist.cs
 tests\SelfTest.Search.cs
+tests\SelfTest.Session.cs
 tests\SelfTest.WorkOrders.cs

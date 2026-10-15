@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.16: SelfTests for SessionIo.BaseName (blank/symbol tags, sanitize, trim, 40-char cut) and Names.SaLabel / OverrideCount. Test-only plus lockstep version bump.
+
 - v1.2.15: SelfTests for Ini (Parse, HasSection, Get, GetInt, GetList, GetIntList). Test-only plus lockstep version bump.
 
 - v1.2.14: SelfTests for WorkOrder (Key, JobTag, ListLabel, clock line) and UserCode/UserCodes (IsUsable, KeyOf, PathFor). Test-only plus lockstep version bump.
