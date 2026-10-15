@@ -5,6 +5,7 @@ tests\SelfTest.Crash.cs
 tests\SelfTest.Decode.cs
 tests\SelfTest.Feed.cs
 tests\SelfTest.Gateway.cs
+tests\SelfTest.Ini.cs
 tests\SelfTest.Job.cs
 tests\SelfTest.Open.cs
 tests\SelfTest.Persist.cs
