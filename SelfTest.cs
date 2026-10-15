@@ -1481,7 +1481,10 @@ ProtocolDescription=ISO 15765
         return text.IndexOf("ghp_", StringComparison.OrdinalIgnoreCase) >= 0
             || text.IndexOf("github_pat", StringComparison.OrdinalIgnoreCase) >= 0
             || text.IndexOf("GITHUB_TOKEN", StringComparison.OrdinalIgnoreCase) >= 0
-            || text.IndexOf("Authorization:", StringComparison.OrdinalIgnoreCase) >= 0;
+            || text.IndexOf("Authorization:", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("AKIA", StringComparison.Ordinal) >= 0
+            || text.IndexOf("sk-", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("api_key=", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     static string MkRoot()

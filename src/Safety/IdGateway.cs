@@ -99,6 +99,8 @@ namespace TechBench
                     return "";
                 if (!string.Equals(gateUri.Host ?? "", pathUri.Host ?? "", StringComparison.OrdinalIgnoreCase))
                     return "";
+                if (gateUri.Port != pathUri.Port)
+                    return "";
                 if (string.Equals(gateUri.Scheme, "https", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(pathUri.Scheme, "http", StringComparison.OrdinalIgnoreCase))
                     return "";
@@ -255,8 +257,7 @@ namespace TechBench
                 if (resp.Ok || resp.Status == 401 || resp.Status == 403) return resp;
                 if (resp.Status == 429 && attempt < maxRateRetries)
                 {
-                    int waitMs = RetryAfterMs(resp);
-                    if (waitMs > 0) Thread.Sleep(waitMs);
+                    Thread.Sleep(RetryAfterMs(resp));
                     continue;
                 }
                 return resp;
@@ -283,11 +284,19 @@ namespace TechBench
             return RealSend(req);
         }
 
+        /// <summary>
+        /// Backoff for 429. Honor Retry-After when present; otherwise use a floor so
+        /// missing/zero headers cannot tight-loop the gateway.
+        /// </summary>
         static int RetryAfterMs(IdHttpResponse resp)
         {
-            if (resp == null) return 0;
-            if (resp.RetryAfterSeconds > 0) return resp.RetryAfterSeconds * 1000;
-            return 0;
+            const int minMs = 250;
+            if (resp != null && resp.RetryAfterSeconds > 0)
+            {
+                int fromHeader = resp.RetryAfterSeconds * 1000;
+                return fromHeader < minMs ? minMs : fromHeader;
+            }
+            return minMs;
         }
 
         public static string Token(IdSettings settings)
@@ -363,6 +372,28 @@ namespace TechBench
         }
 
         const int MaxGatewayRedirects = 5;
+        /// <summary>Cap gateway response text so a runaway body cannot fill memory.</summary>
+        const int MaxGatewayBodyChars = 4 * 1024 * 1024;
+
+        static string ReadBodyCapped(Stream stream)
+        {
+            if (stream == null) return "";
+            var sb = new StringBuilder();
+            var buf = new char[8192];
+            using (var r = new StreamReader(stream, Encoding.UTF8))
+            {
+                int n;
+                while ((n = r.Read(buf, 0, buf.Length)) > 0)
+                {
+                    int room = MaxGatewayBodyChars - sb.Length;
+                    if (room <= 0) break;
+                    if (n > room) n = room;
+                    sb.Append(buf, 0, n);
+                    if (sb.Length >= MaxGatewayBodyChars) break;
+                }
+            }
+            return sb.ToString();
+        }
 
         static IdHttpResponse RealSend(IdHttpRequest req)
         {
@@ -389,6 +420,9 @@ namespace TechBench
                     http.Method = method;
                     http.Timeout = 20000;
                     http.AllowAutoRedirect = false;
+                    http.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                    http.KeepAlive = false;
+                    if (current.IsLoopback) http.Proxy = null;
                     http.UseDefaultCredentials = false;
                     http.Credentials = null;
                     http.PreAuthenticate = false;
@@ -443,8 +477,7 @@ namespace TechBench
                     result.RetryAfterSeconds = ParseRetryAfterHeader(resp.Headers["Retry-After"]);
                     try
                     {
-                        using (var r = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
-                            result.Body = r.ReadToEnd();
+                        result.Body = ReadBodyCapped(resp.GetResponseStream());
                     }
                     catch { }
                     try { resp.Close(); } catch { }
