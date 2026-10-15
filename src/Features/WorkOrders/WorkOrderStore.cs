@@ -158,6 +158,42 @@ namespace TechBench
                 MarkKeepBoth(kbRoot, c.Key);
         }
 
+        /// <summary>
+        /// Resolve a media list entry to a full path under {woFolder}/media.
+        /// Basename only; rejects path segments and escapes outside the media folder.
+        /// </summary>
+        public static string ResolveMediaPath(string woFolder, string mediaName)
+        {
+            if (string.IsNullOrWhiteSpace(woFolder) || string.IsNullOrWhiteSpace(mediaName))
+                return null;
+            string raw = mediaName.Trim();
+            string name = Path.GetFileName(raw);
+            if (string.IsNullOrEmpty(name)
+                || !string.Equals(name, raw, StringComparison.Ordinal)
+                || name.IndexOf("..", StringComparison.Ordinal) >= 0
+                || name.IndexOf(Path.DirectorySeparatorChar) >= 0
+                || name.IndexOf(Path.AltDirectorySeparatorChar) >= 0)
+                return null;
+            string mediaRoot;
+            string candidate;
+            try
+            {
+                mediaRoot = Path.GetFullPath(Path.Combine(woFolder, "media"));
+                candidate = Path.GetFullPath(Path.Combine(mediaRoot, name));
+            }
+            catch
+            {
+                return null;
+            }
+            string prefix = mediaRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? mediaRoot
+                : mediaRoot + Path.DirectorySeparatorChar;
+            if (!candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(candidate, mediaRoot, StringComparison.OrdinalIgnoreCase))
+                return null;
+            return candidate;
+        }
+
         public static string AttachFile(WorkOrder wo, string sourcePath, IdSettings settings, string kbRoot)
         {
             if (wo == null || string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) return null;
