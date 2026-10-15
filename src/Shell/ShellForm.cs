@@ -179,7 +179,7 @@ namespace TechBench
                 { ShellPageId.Search, _search },
                 { ShellPageId.WorkOrders, _orders },
                 { ShellPageId.Inline7, _inline },
-                { ShellPageId.Adapters, BuildAdaptersPanel() }
+                { ShellPageId.Adapters, new AdaptersPage() }
             };
             _pages = new Control[ShellPages.Count];
             for (int i = 0; i < _pages.Length; i++)
@@ -583,56 +583,6 @@ namespace TechBench
             PersistSettings();
             Updater.LaunchSwap(exeDir);
             Close();
-        }
-
-        Control BuildAdaptersPanel()
-        {
-            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12) };
-            var box = new TextBox
-            {
-                Dock = DockStyle.Fill,
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Both,
-                MaxLength = 0,
-                WordWrap = false,
-                Font = new Font("Consolas", 9.5f)
-            };
-            var bar = UiLayout.WrapBar(new Padding(0, 0, 0, 8));
-            var rescan = new Button { Text = "Rescan", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, AutoEllipsis = false };
-            bar.Controls.Add(rescan);
-            rescan.Click += delegate { box.Text = DescribeAdapters(); };
-            box.Text = DescribeAdapters();
-            host.Controls.Add(box);
-            host.Controls.Add(bar);
-            return host;
-        }
-
-        static string DescribeAdapters()
-        {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("RP1210 adapters installed on this PC");
-            sb.AppendLine("(read from " + Path.Combine(Rp1210Api.WindowsDir(), "RP121032.INI") + ")");
-            sb.AppendLine();
-            sb.AppendLine("Process: " + (Rp1210.HostIs32Bit ? "32-bit — correct for RP1210" : "64-bit — RP1210 drivers will NOT load; rebuild with build.bat"));
-            sb.AppendLine();
-            List<Rp1210Api> apis = Rp1210.Adapters();
-            if (apis.Count == 0)
-            {
-                sb.AppendLine("None found.");
-                sb.AppendLine();
-                sb.AppendLine("Install the adapter vendor's RP1210 drivers (for the INLINE 7 that is the");
-                sb.AppendLine("Cummins CIL7 package), then press Rescan.");
-                return sb.ToString();
-            }
-            foreach (Rp1210Api a in apis)
-            {
-                sb.AppendLine(a.Describe());
-                sb.AppendLine();
-            }
-            sb.AppendLine("The INLINE 7 tab connects with whichever adapter is picked in its Adapter box.");
-            sb.AppendLine("Sullair / IR Xe datalinks appear here automatically once their drivers are installed.");
-            return sb.ToString();
         }
 
         void AddOrEditCode()

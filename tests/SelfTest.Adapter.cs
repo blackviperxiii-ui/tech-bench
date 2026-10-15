@@ -153,6 +153,58 @@ static partial class SelfTest
             "tools/LayoutAudit.cs page names drifted from ShellPages");
     }
 
+    [SelfTestCase("adapters page summary", Order = 96)]
+    static void AdapterSummaryTests()
+    {
+        string nl = Environment.NewLine;
+        string none = AdapterSummary.Text(@"C:\Windows\RP121032.INI", true, new List<Rp1210Api>());
+        Eq("no adapters text", none, string.Join(nl, new[]
+        {
+            "RP1210 adapters installed on this PC",
+            "(read from C:\\Windows\\RP121032.INI)",
+            "",
+            "Process: 32-bit — correct for RP1210",
+            "",
+            "None found.",
+            "",
+            "Install the adapter vendor's RP1210 drivers (for the INLINE 7 that is the",
+            "Cummins CIL7 package), then press Rescan.",
+            ""
+        }));
+        Eq("null adapter list reads as none",
+            AdapterSummary.Text(@"C:\Windows\RP121032.INI", true, null), none);
+        Check("64-bit host warns drivers will not load",
+            AdapterSummary.Text("x", false, null).Contains("Process: 64-bit — RP1210 drivers will NOT load; rebuild with build.bat" + nl),
+            "missing 64-bit warning");
+
+        Rp1210Api api = Rp1210Api.FromIni("CMNSI7", Ini.Parse(VendorIni), @"C:\Windows\SysWOW64\CMNSI7.DLL");
+        Eq("one INLINE 7 text", AdapterSummary.Text(@"C:\Windows\RP121032.INI", true, new List<Rp1210Api> { api }),
+            string.Join(nl, new[]
+            {
+                "RP1210 adapters installed on this PC",
+                "(read from C:\\Windows\\RP121032.INI)",
+                "",
+                "Process: 32-bit — correct for RP1210",
+                "",
+                "Cummins Inc. INLINE 7  (CMNSI7)",
+                "DLL: C:\\Windows\\SysWOW64\\CMNSI7.DLL",
+                "Devices: 1 — INLINE 7 over USB, 2 — INLINE 7 Bluetooth",
+                "J1939: J1939:Baud=250, J1939:Baud=500, J1939",
+                "ISO15765: yes",
+                "",
+                "",
+                "The INLINE 7 tab connects with whichever adapter is picked in its Adapter box.",
+                "Sullair / IR Xe datalinks appear here automatically once their drivers are installed.",
+                ""
+            }));
+
+        string shellSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Shell", "ShellForm.cs"));
+        Check("shell hosts AdaptersPage for the Adapters slot",
+            shellSrc.IndexOf("{ ShellPageId.Adapters, new AdaptersPage() }", StringComparison.Ordinal) >= 0
+            && shellSrc.IndexOf("DescribeAdapters", StringComparison.Ordinal) < 0,
+            "ShellForm still builds the adapters page itself");
+    }
+
     // ---------------- names ----------------
 
     [SelfTestCase("name overrides", Order = 100)]

@@ -9,6 +9,7 @@ src\Features\WorkOrders\WorkOrderControl.cs
 src\Shell\IdSettingsForm.cs
 src\Features\Inline7\Inline7Control.cs
 src\Features\Adapters\TrendChart.cs
+src\Features\Adapters\AdaptersPage.cs
 src\Features\WorkOrders\JobReportPrint.cs
 src\Shell\Session.cs
 src\Features\Crash\CrashForm.cs
