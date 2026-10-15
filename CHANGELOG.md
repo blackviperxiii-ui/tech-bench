@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.24: SelfTest.Feed pins the exact about wording (`an anonymous manifest (built-in URL`) and diffs linux-compile-check `-resource:` against build.bat `/resource:`. Lockstep version bump.
+
 - v1.2.22: IdGateway refuses 307/308 redirects after non-GET (POST payload no longer wiped to GET). SelfTest covers POST+307. Lockstep version bump.
 
 - v1.2.21: BusSnapshot.IncludesBusLists — Refresh gates Bus PGN/SA Repopulate on the snapshot flag (not a second 800 ms clock read). Lockstep version bump.

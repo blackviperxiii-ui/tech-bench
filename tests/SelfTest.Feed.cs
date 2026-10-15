@@ -15,7 +15,7 @@ static partial class SelfTest
     [SelfTestCase("updater", Order = 230)]
     static void UpdaterTests()
     {
-        Eq("stamped version", AppVersion.Number, "1.2.22");
+        Eq("stamped version", AppVersion.Number, "1.2.24");
         Check("1.2.5 is newer than 1.2.4", Updater.IsNewer("1.2.5", "1.2.4"), "strict greater");
         Check("same 1.2.5 is not newer", !Updater.IsNewer("1.2.5", "1.2.5"), "strict same");
         Version parsed;
@@ -144,8 +144,7 @@ static partial class SelfTest
         Check("about does not claim a public latest.json",
             shell.IndexOf("public latest.json", StringComparison.OrdinalIgnoreCase) < 0, "public latest.json");
         Check("about names an anonymous manifest URL",
-            shell.IndexOf("anonymous manifest", StringComparison.Ordinal) >= 0
-            && shell.IndexOf("built-in URL", StringComparison.Ordinal) >= 0, "about");
+            shell.IndexOf("an anonymous manifest (built-in URL", StringComparison.Ordinal) >= 0, "about");
         Check("about names shop feed overrides",
             shell.IndexOf("update-url.txt", StringComparison.Ordinal) >= 0
             && shell.IndexOf("update-feed-path.txt", StringComparison.Ordinal) >= 0, "about");
@@ -158,10 +157,45 @@ static partial class SelfTest
             updaterSrc.IndexOf("Host latest.json on a public HTTPS URL", StringComparison.Ordinal) < 0
             && updaterSrc.IndexOf("public feed", StringComparison.OrdinalIgnoreCase) < 0, "old copy");
 
+        CheckResourceListsMatch();
         ShopShareFeedTests();
         HttpFeedTests();
         UpdaterHardeningTests();
         try { Directory.Delete(dir, true); } catch { }
+    }
+
+    // Pure file read: the linux compile-check -resource: list must match the build.bat /resource: list.
+    static void CheckResourceListsMatch()
+    {
+        string root = FindRepoRoot();
+        string shPath = Path.Combine(Path.Combine(root, "tools"), "linux-compile-check.sh");
+        string batPath = Path.Combine(root, "build.bat");
+        if (!File.Exists(shPath) || !File.Exists(batPath))
+        {
+            Check("resource lists: compile-check and build.bat present", false, "missing file");
+            return;
+        }
+        List<string> sh = ResourceEntries(File.ReadAllText(shPath), "-resource:");
+        List<string> bat = ResourceEntries(File.ReadAllText(batPath), "/resource:");
+        sh.Sort(StringComparer.Ordinal);
+        bat.Sort(StringComparer.Ordinal);
+        Check("compile-check lists bundled resources", sh.Count >= 6, sh.Count.ToString());
+        Check("compile-check -resource list matches build.bat",
+            string.Join("|", sh.ToArray()) == string.Join("|", bat.ToArray()),
+            "sh=" + string.Join(",", sh.ToArray()) + " bat=" + string.Join(",", bat.ToArray()));
+    }
+
+    static List<string> ResourceEntries(string text, string prefix)
+    {
+        List<string> found = new List<string>();
+        foreach (string raw in text.Split('\n'))
+        {
+            string line = raw.Trim();
+            if (!line.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            string entry = line.Substring(prefix.Length).TrimEnd('^', ' ');
+            found.Add(entry.Replace('\\', '/'));
+        }
+        return found;
     }
 
     static void CheckPrivateFeedFailure(string label, UpdateCheck result)
