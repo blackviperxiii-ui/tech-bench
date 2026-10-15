@@ -2,11 +2,9 @@
 
 ## Unreleased
 
-<<<<<<< HEAD
 - v1.2.24: SelfTest.Feed pins the exact about wording (`an anonymous manifest (built-in URL`) and diffs linux-compile-check `-resource:` against build.bat `/resource:`. Lockstep version bump.
-=======
+
 - v1.2.23: SelfTests for TrendSample/TrendLog and DtcEvent/DtcTimeline (`tests/SelfTest.Trend.cs`). No production change. Lockstep version bump.
->>>>>>> origin/beta
 
 - v1.2.22: IdGateway refuses 307/308 redirects after non-GET (POST payload no longer wiped to GET). SelfTest covers POST+307. Lockstep version bump.
 
