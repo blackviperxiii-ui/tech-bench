@@ -12,6 +12,7 @@ src\Features\Adapters\Trend.cs
 src\Features\Adapters\Timeline.cs
 src\Features\Adapters\History.cs
 src\Features\Adapters\JobReport.cs
+src\Features\Adapters\AdapterSummary.cs
 src\Core\J1939\SessionData.cs
 src\Features\Kb\KbIndex.cs
 src\Features\Kb\UserCodes.cs
