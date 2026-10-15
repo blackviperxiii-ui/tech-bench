@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Docs: correct v1.2.13 (no lockstep stamp); playbook lockstep paths → `src/Core/Version/AppVersion.cs` and `tests/SelfTest.Feed.cs`.
+
 - Restore SelfTest About assert for anonymous manifest URL (require both "anonymous manifest" and "built-in URL").
 
 - Stop committing generated `sources/*.rsp` (gitignore + always regenerate); align `gen-rsp.bat` / `gen-rsp.sh` shared header and test-file sort so drift checks can fail for real.
@@ -14,7 +16,7 @@
 
 - v1.2.14: SelfTests for WorkOrder (Key, JobTag, ListLabel, clock line) and UserCode/UserCodes (IsUsable, KeyOf, PathFor). Test-only plus lockstep version bump.
 
-- v1.2.13: always-apply `.cursor/rules/vstack.mdc` plus AGENTS.md/CLAUDE.md line: always use vstack skills (viper-mode first), never pstack. Lockstep version bump.
+- v1.2.13: always-apply `.cursor/rules/vstack.mdc` plus AGENTS.md/CLAUDE.md line: always use vstack skills (viper-mode first), never pstack. Agent-tooling only — stamp stayed 1.2.12 (no lockstep bump).
 
 - v1.2.12: vendor vstack skills (`242d4f9`) under `.cursor/skills/` for Cursor Cloud agents; CodeBot keeps them in sync. Lockstep version bump.
 
