@@ -17,6 +17,7 @@ src\Core\J1939\SessionData.cs
 src\Features\Kb\KbIndex.cs
 src\Features\Kb\UserCodes.cs
 src\Safety\ShopSync.cs
+src\Features\Sync\ShopWatch.cs
 src\Core\Version\AppVersion.cs
 src\Core\Settings\AppSettings.cs
 src\Safety\Updater.cs
