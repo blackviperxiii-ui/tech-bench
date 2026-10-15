@@ -252,6 +252,9 @@ static partial class SelfTest
         Eq("combine refuses https-to-http absolute",
             IdGateway.CombineUrl("https://dealer.azure-api.net", "http://dealer.azure-api.net/svc"),
             "");
+        Eq("combine refuses same-host wrong-port absolute",
+            IdGateway.CombineUrl("https://dealer.azure-api.net", "https://dealer.azure-api.net:8443/svc"),
+            "");
 
         string why;
         Check("gateway redirect same host allowed",

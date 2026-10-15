@@ -109,6 +109,8 @@ static partial class SelfTest
         string woSrc = File.Exists(woPath) ? File.ReadAllText(woPath) : "";
         Check("OpenMedia uses SafeOpen",
             woSrc.IndexOf("SafeOpen.TryOpen", StringComparison.Ordinal) >= 0, "WorkOrderControl");
+        Check("OpenMedia uses ResolveMediaPath",
+            woSrc.IndexOf("WorkOrderStore.ResolveMediaPath", StringComparison.Ordinal) >= 0, "WorkOrderControl");
         string kbPath = Path.Combine(root, "src", "Features", "Kb", "KbIndex.cs");
         string kbSrc = File.Exists(kbPath) ? File.ReadAllText(kbPath) : "";
         Check("LaunchPolicy delegates to SafeOpen",

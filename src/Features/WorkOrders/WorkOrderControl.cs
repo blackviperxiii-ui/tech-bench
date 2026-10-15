@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using J1939Reader;
 
 namespace TechBench
 {
@@ -548,22 +549,39 @@ namespace TechBench
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 try
                 {
+                    int attached = 0;
+                    int dmsOk = 0;
+                    int dmsFail = 0;
                     foreach (string f in dlg.FileNames)
                     {
                         string dest = WorkOrderStore.AttachFile(_current, f, _settings, _kbRoot);
-                        if (_settings.GatewayConfigured() && dest != null)
+                        if (dest == null) continue;
+                        attached++;
+                        if (_settings.GatewayConfigured())
                         {
                             IdCallResult posted = IdGateway.PostMultimedia(_settings, _current, dest);
                             _current.ApiMessage = posted.Message;
                             if (posted.Posted)
+                            {
+                                dmsOk++;
                                 _current.AddClock("multimedia", Path.GetFileName(dest), true);
+                            }
                             else
+                            {
+                                dmsFail++;
                                 _current.AddClock("multimedia", posted.Message, false);
+                            }
                         }
                     }
                     WorkOrderStore.Save(_current, _settings, _kbRoot);
                     ShowCurrent();
-                    Status("Attached " + dlg.FileNames.Length + " file(s).");
+                    if (dmsFail > 0)
+                        Status("Attached " + attached + " file(s); " + dmsFail
+                            + " DMS upload(s) failed — see clock / API message.");
+                    else if (dmsOk > 0)
+                        Status("Attached " + attached + " file(s); posted to IntelliDealer.");
+                    else
+                        Status("Attached " + attached + " file(s).");
                 }
                 catch (Exception ex)
                 {
@@ -671,6 +689,7 @@ namespace TechBench
                 return;
             }
             int n = 0;
+            int failed = 0;
             foreach (WorkOrder wo in api.WorkOrders)
             {
                 try
@@ -678,10 +697,17 @@ namespace TechBench
                     WorkOrderStore.Save(wo, _settings, _kbRoot);
                     n++;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    failed++;
+                    SessionIo.LogError("PullAssigned save " + (wo == null ? "?" : wo.Key()), ex);
+                }
             }
             Reload(false);
-            Status("Saved " + n + " assigned work order(s) from IntelliDealer.");
+            if (failed > 0)
+                Status("Saved " + n + " assigned work order(s); " + failed + " failed to save.");
+            else
+                Status("Saved " + n + " assigned work order(s) from IntelliDealer.");
         }
 
         void OpenSettings()
@@ -698,7 +724,12 @@ namespace TechBench
         void OpenMedia()
         {
             if (_current == null || _media.SelectedItem == null || string.IsNullOrEmpty(_current.Folder)) return;
-            string path = Path.Combine(_current.Folder, "media", _media.SelectedItem.ToString());
+            string path = WorkOrderStore.ResolveMediaPath(_current.Folder, _media.SelectedItem.ToString());
+            if (path == null)
+            {
+                Status("Media name is not a file inside this work order's media folder.");
+                return;
+            }
             string error;
             if (!SafeOpen.TryOpen(path, out error))
             {

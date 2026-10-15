@@ -1,4 +1,5 @@
 // Pure helpers on WorkOrder / WorkOrderClock and UserCode / UserCodes (no UI, no disk).
+using System;
 using System.IO;
 using TechBench;
 
@@ -69,5 +70,30 @@ static partial class SelfTest
         string s = Path.DirectorySeparatorChar.ToString();
         Eq("PathFor under data", UserCodes.PathFor("kb"), "kb" + s + "data" + s + "user-codes.json");
         Eq("PathFor null root", UserCodes.PathFor(null), "data" + s + "user-codes.json");
+    }
+
+    [SelfTestCase("WorkOrder media path confinement", Order = 302)]
+    static void WorkOrderMediaPathTests()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "tb-media-" + Guid.NewGuid().ToString("N"));
+        string media = Path.Combine(root, "media");
+        Directory.CreateDirectory(media);
+        string pic = Path.Combine(media, "shot.jpg");
+        File.WriteAllText(pic, "x");
+        try
+        {
+            string ok = WorkOrderStore.ResolveMediaPath(root, "shot.jpg");
+            Check("basename resolves under media",
+                ok != null && string.Equals(Path.GetFullPath(pic), ok, StringComparison.OrdinalIgnoreCase),
+                ok ?? "(null)");
+            Eq("parent escape rejected", WorkOrderStore.ResolveMediaPath(root, ".." + Path.DirectorySeparatorChar + "secret.txt"), null);
+            Eq("nested relative rejected", WorkOrderStore.ResolveMediaPath(root, "sub" + Path.DirectorySeparatorChar + "shot.jpg"), null);
+            Eq("blank name rejected", WorkOrderStore.ResolveMediaPath(root, "  "), null);
+            Eq("blank folder rejected", WorkOrderStore.ResolveMediaPath("", "shot.jpg"), null);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
     }
 }
