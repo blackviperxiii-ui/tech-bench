@@ -400,27 +400,17 @@ namespace TechBench
         void ApplyWindow(AppSettings s)
         {
             if (s == null) return;
-            if (s.Width >= MinimumSize.Width && s.Height >= MinimumSize.Height)
+            var areas = new List<Rectangle>();
+            foreach (Screen screen in Screen.AllScreens) areas.Add(screen.WorkingArea);
+            Rectangle? saved = WindowPlacement.SavedBounds(s, MinimumSize, areas);
+            if (saved.HasValue)
             {
-                var bounds = new Rectangle(s.X, s.Y, s.Width, s.Height);
-                if (OnAnyScreen(bounds))
-                {
-                    StartPosition = FormStartPosition.Manual;
-                    Bounds = bounds;
-                }
+                StartPosition = FormStartPosition.Manual;
+                Bounds = saved.Value;
             }
             if (s.Maximized) WindowState = FormWindowState.Maximized;
             UiLayout.FitToWorkingArea(this);
             ApplyChromeBudget();
-        }
-
-        static bool OnAnyScreen(Rectangle bounds)
-        {
-            foreach (Screen screen in Screen.AllScreens)
-            {
-                if (screen.WorkingArea.IntersectsWith(bounds)) return true;
-            }
-            return false;
         }
 
         void PersistSettings()
@@ -430,12 +420,8 @@ namespace TechBench
             // Job customer and last WO are owned by WorkOrderControl; window save must not clobber them.
             _settings.Customer = "";
             _settings.LastWo = "";
-            _settings.Maximized = WindowState == FormWindowState.Maximized;
-            Rectangle r = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            _settings.X = r.X;
-            _settings.Y = r.Y;
-            _settings.Width = r.Width;
-            _settings.Height = r.Height;
+            WindowPlacement.Capture(_settings, WindowState == FormWindowState.Maximized,
+                WindowState == FormWindowState.Normal ? Bounds : RestoreBounds);
             SettingsStore.SaveAppSettings(_settings);
         }
 
