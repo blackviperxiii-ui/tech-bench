@@ -31,7 +31,7 @@ namespace TechBench
                 Directory.CreateDirectory(FolderOverride);
                 return FolderOverride;
             }
-            return Path.Combine(IdSettings.Folder(), WoRel);
+            return Path.Combine(ShopSettings.Folder(), WoRel);
         }
 
         public static string SafeKey(string raw)
@@ -55,7 +55,7 @@ namespace TechBench
 
         public static string ShopTechDir(string kbRoot, string techId)
         {
-            return Path.Combine(kbRoot ?? "", ShopRel, IdSettings.Sanitize(techId), WoRel);
+            return Path.Combine(kbRoot ?? "", ShopRel, ShopSettings.Sanitize(techId), WoRel);
         }
 
         public static string ShopSharedDir(string kbRoot)
@@ -63,7 +63,7 @@ namespace TechBench
             return Path.Combine(kbRoot ?? "", ShopRel, SharedTech, WoRel);
         }
 
-        public static void Save(WorkOrder wo, IdSettings settings, string kbRoot)
+        public static void Save(WorkOrder wo, ShopSettings settings, string kbRoot)
         {
             if (wo == null) return;
             if (string.IsNullOrWhiteSpace(wo.Number)) throw new InvalidOperationException("Work order number is required.");
@@ -73,8 +73,8 @@ namespace TechBench
             WritePacket(local, wo);
             wo.Folder = local;
 
-            if (settings == null) settings = new IdSettings();
-            string tech = IdSettings.Sanitize(settings.TechId);
+            if (settings == null) settings = new ShopSettings();
+            string tech = ShopSettings.Sanitize(settings.TechId);
             if (!string.IsNullOrEmpty(kbRoot) && Directory.Exists(kbRoot))
                 CopyPacket(local, PacketDir(ShopTechDir(kbRoot, tech), key));
         }
@@ -112,12 +112,12 @@ namespace TechBench
             }
         }
 
-        public static List<WorkOrder> ListAll(IdSettings settings, string kbRoot)
+        public static List<WorkOrder> ListAll(ShopSettings settings, string kbRoot)
         {
             Conflicts.Clear();
             var byKey = new Dictionary<string, WorkOrder>(StringComparer.OrdinalIgnoreCase);
-            if (settings == null) settings = new IdSettings();
-            string tech = IdSettings.Sanitize(settings.TechId);
+            if (settings == null) settings = new ShopSettings();
+            string tech = ShopSettings.Sanitize(settings.TechId);
 
             Absorb(byKey, LocalRoot(), "file", kbRoot);
             if (!string.IsNullOrEmpty(kbRoot) && Directory.Exists(kbRoot))
@@ -139,7 +139,7 @@ namespace TechBench
             return list;
         }
 
-        public static void CollectConflicts(IdSettings settings, string kbRoot, ShopSyncResult result)
+        public static void CollectConflicts(ShopSettings settings, string kbRoot, ShopSyncResult result)
         {
             ListAll(settings, kbRoot);
             if (result == null) return;
@@ -194,7 +194,7 @@ namespace TechBench
             return candidate;
         }
 
-        public static string AttachFile(WorkOrder wo, string sourcePath, IdSettings settings, string kbRoot)
+        public static string AttachFile(WorkOrder wo, string sourcePath, ShopSettings settings, string kbRoot)
         {
             if (wo == null || string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) return null;
             Save(wo, settings, kbRoot);
@@ -209,7 +209,7 @@ namespace TechBench
             return dest;
         }
 
-        public static string AttachText(WorkOrder wo, string fileName, string text, IdSettings settings, string kbRoot)
+        public static string AttachText(WorkOrder wo, string fileName, string text, ShopSettings settings, string kbRoot)
         {
             if (wo == null) return null;
             Save(wo, settings, kbRoot);
@@ -224,7 +224,7 @@ namespace TechBench
             return dest;
         }
 
-        public static string Share(WorkOrder wo, IdSettings settings, string kbRoot)
+        public static string Share(WorkOrder wo, ShopSettings settings, string kbRoot)
         {
             if (wo == null) return null;
             Save(wo, settings, kbRoot);
@@ -240,7 +240,7 @@ namespace TechBench
             }
             if (dests.Count == 0)
                 throw new InvalidOperationException(
-                    "No shop share folder. Set one in Shop → IntelliDealer, or keep the knowledge base on a shared OneDrive tree.");
+                    "No shop share folder. Set one in Shop → Shop settings, or keep the knowledge base on a shared OneDrive tree.");
             string last = null;
             foreach (string d in dests)
             {
@@ -248,7 +248,7 @@ namespace TechBench
                 last = d;
             }
             wo.Source = "file";
-            wo.AddClock("share", "Copied packet for other techs", false);
+            wo.AddClock("share", "Copied packet for other techs");
             Save(wo, settings, kbRoot);
             return last;
         }
@@ -430,9 +430,6 @@ namespace TechBench
             copy.ReportText = wo.ReportText;
             copy.Source = wo.Source;
             copy.ClockState = wo.ClockState;
-            copy.ApiMessage = wo.ApiMessage;
-            copy.ApiLogOn = wo.ApiLogOn;
-            copy.ApiSignOff = wo.ApiSignOff;
             copy.UpdatedUtc = wo.UpdatedUtc;
             copy.Media = wo.Media == null ? new List<string>() : new List<string>(wo.Media);
             copy.Clock = wo.Clock == null ? new List<WorkOrderClock>() : new List<WorkOrderClock>(wo.Clock);
@@ -624,7 +621,7 @@ namespace TechBench
         {
             if (!string.IsNullOrEmpty(kbRoot))
                 return Path.Combine(kbRoot, ShopRel, "_resolved", "keep-both-wo.txt");
-            return Path.Combine(IdSettings.Folder(), "keep-both-wo.txt");
+            return Path.Combine(ShopSettings.Folder(), "keep-both-wo.txt");
         }
 
         static bool KeepBoth(string kbRoot, string key)
@@ -661,7 +658,7 @@ namespace TechBench
         static void AbsorbAssignedSidecar(Dictionary<string, WorkOrder> byKey, string kbRoot)
         {
             var files = new List<string>();
-            string exe = string.IsNullOrEmpty(ExeDirOverride) ? IdSettings.ExeDir() : ExeDirOverride;
+            string exe = string.IsNullOrEmpty(ExeDirOverride) ? ShopSettings.ExeDir() : ExeDirOverride;
             files.Add(Path.Combine(exe, "id-work-orders.json"));
             files.Add(Path.Combine(exe, "id-work-orders.csv"));
             if (!string.IsNullOrEmpty(kbRoot))

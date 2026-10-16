@@ -7,7 +7,7 @@ src\Features\Sync\SyncForm.cs
 src\Features\Sync\ShopWatcher.cs
 src\Shell\UiLayout.cs
 src\Features\WorkOrders\WorkOrderControl.cs
-src\Shell\IdSettingsForm.cs
+src\Shell\ShopSettingsForm.cs
 src\Features\Inline7\Inline7Control.cs
 src\Features\Adapters\TrendChart.cs
 src\Features\Adapters\AdaptersPage.cs
