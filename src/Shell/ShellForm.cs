@@ -458,7 +458,7 @@ namespace TechBench
         void MarkReadyFromPending()
         {
             _installUpdate.Enabled = true;
-            _installUpdate.Text = "&Install pending update";
+            _installUpdate.Text = UpdatePrompt.PendingMenuText;
         }
 
         void CheckUpdates(bool interactive)
@@ -498,24 +498,20 @@ namespace TechBench
                 MessageBoxIcon icon = Updater.IsCurrent(result)
                     ? MessageBoxIcon.Information
                     : MessageBoxIcon.Warning;
-                string status = Updater.StatusText(result);
-                string feed = Updater.DescribeManifestSource(_settings);
-                if (!string.IsNullOrEmpty(feed) && status.IndexOf(feed, StringComparison.Ordinal) < 0)
-                    status = status + "\n\n" + feed;
-                MessageBox.Show(this, status, "Updates", MessageBoxButtons.OK, icon);
+                string status = UpdatePrompt.StatusWithFeed(Updater.StatusText(result),
+                    Updater.DescribeManifestSource(_settings));
+                MessageBox.Show(this, status, UpdatePrompt.Title, MessageBoxButtons.OK, icon);
                 return;
             }
 
             _ready = result.Manifest;
             _installUpdate.Enabled = true;
-            _installUpdate.Text = "&Install update " + _ready.Version;
+            _installUpdate.Text = UpdatePrompt.InstallMenuText(_ready.Version);
             if (!interactive) return;
 
-            string notes = string.IsNullOrEmpty(_ready.Notes) ? "" : ("\n\n" + _ready.Notes);
             DialogResult ask = MessageBox.Show(this,
-                "Version " + _ready.Version + " is available (you have " + AppVersion.Number + ")."
-                + notes + "\n\nDownload and install after this window closes?",
-                "Updates", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                UpdatePrompt.AvailableQuestion(_ready.Version, AppVersion.Number, _ready.Notes),
+                UpdatePrompt.Title, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (ask == DialogResult.Yes) InstallReadyUpdate();
         }
 
