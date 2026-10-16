@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.36: Rearch stage 14: the update menu and dialog text around an update check moves out of `ShellForm` into pure `UpdatePrompt` (`src/Core/Version/`). `Updater` and the install order are untouched. New SelfTest case `update prompt text`. No behaviour change. Lockstep version bump.
+
 - v1.2.35: Rearch stage 13: the main-window keyboard shortcuts move into pure `ShellShortcuts` (`src/Core/Shell/`), and the job hand-offs (Search this job query, launch customer, session DTC csv path) join `JobStrip`. New SelfTest case `shell shortcuts and job hand-offs`. No behaviour change. Lockstep version bump.
 
 - v1.2.34: Rearch stage 12: the job strip text (window title, job tag, sync chip, work-order pick list) moves out of `ShellForm` into pure `JobStrip` (`src/Features/WorkOrders/`). New SelfTest case `job strip text`. No behaviour change. Lockstep version bump.

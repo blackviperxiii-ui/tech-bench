@@ -20,6 +20,7 @@ src\Features\Kb\ShopAdd.cs
 src\Safety\ShopSync.cs
 src\Features\Sync\ShopWatch.cs
 src\Core\Version\AppVersion.cs
+src\Core\Version\UpdatePrompt.cs
 src\Core\Settings\AppSettings.cs
 src\Core\Settings\ShopSettings.cs
 src\Core\Settings\WindowPlacement.cs
