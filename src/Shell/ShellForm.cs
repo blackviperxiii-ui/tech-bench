@@ -577,25 +577,15 @@ namespace TechBench
         {
             if (_kb == null || string.IsNullOrEmpty(_kb.Root))
             {
-                MessageBox.Show(this, "No knowledge base folder is configured, so there is nowhere to save.",
+                MessageBox.Show(this, ShopAdd.NoKbMessage,
                     "Add code", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            var seed = new UserCode();
             Hit sel = _search.Selected;
-            if (sel != null && sel.Kind == "CODE")
-            {
-                // Pre-fill from the highlighted entry so editing an existing code is one click.
-                foreach (UserCode existing in ShopSync.LoadAllCodes(_kb.Root))
-                {
-                    string title = (existing.Brand + "  " + existing.Code + "  —  " + existing.Title);
-                    if (string.Equals(title, sel.Title, StringComparison.OrdinalIgnoreCase)) { seed = existing; break; }
-                }
-                if (!seed.IsUsable())
-                {
-                    seed.Title = sel.Title;
-                }
-            }
+            // Pre-fill from the highlighted entry so editing an existing code is one click.
+            UserCode seed = sel != null && sel.Kind == "CODE"
+                ? ShopAdd.CodeSeed(ShopSync.LoadAllCodes(_kb.Root), sel.Kind, sel.Title)
+                : new UserCode();
             using (var dlg = new CodeEditForm(seed))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result == null) return;
@@ -612,7 +602,7 @@ namespace TechBench
                 RunSync(false);
                 ReloadKb();
                 ShowPage(ShellPageId.Search);
-                _search.Prefill((dlg.Result.Code + " " + dlg.Result.Title).Trim());
+                _search.Prefill(ShopAdd.CodeQuery(dlg.Result));
             }
         }
 
@@ -620,7 +610,7 @@ namespace TechBench
         {
             if (_kb == null || string.IsNullOrEmpty(_kb.Root))
             {
-                MessageBox.Show(this, "No knowledge base folder is configured, so there is nowhere to save.",
+                MessageBox.Show(this, ShopAdd.NoKbMessage,
                     "Add note", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -633,15 +623,7 @@ namespace TechBench
                     RunSync(false);
                     ReloadKb();
                     ShowPage(ShellPageId.Search);
-                    string q = dlg.NoteTitle;
-                    if (string.IsNullOrWhiteSpace(q))
-                    {
-                        foreach (string raw in (dlg.NoteBody ?? "").Replace("\r\n", "\n").Split('\n'))
-                        {
-                            if (raw.Trim().Length > 0) { q = raw.Trim(); break; }
-                        }
-                    }
-                    _search.Prefill(q);
+                    _search.Prefill(ShopAdd.NoteQuery(dlg.NoteTitle, dlg.NoteBody));
                 }
                 catch (Exception ex)
                 {
@@ -655,7 +637,7 @@ namespace TechBench
         {
             if (_kb == null || string.IsNullOrEmpty(_kb.Root))
             {
-                MessageBox.Show(this, "No knowledge base folder is configured, so there is nowhere to save.",
+                MessageBox.Show(this, ShopAdd.NoKbMessage,
                     "Add file", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
