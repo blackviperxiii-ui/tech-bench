@@ -5,9 +5,9 @@ using System.Reflection;
 [assembly: AssemblyTitle("Tech Bench")]
 [assembly: AssemblyProduct("Tech Bench")]
 [assembly: AssemblyDescription("Shop tool for knowledge-base search and INLINE 7 / J1939")]
-[assembly: AssemblyVersion("1.2.33.0")]
-[assembly: AssemblyFileVersion("1.2.33.0")]
-[assembly: AssemblyInformationalVersion("1.2.33")]
+[assembly: AssemblyVersion("1.2.34.0")]
+[assembly: AssemblyFileVersion("1.2.34.0")]
+[assembly: AssemblyInformationalVersion("1.2.34")]
 
 namespace TechBench
 {
@@ -17,7 +17,7 @@ namespace TechBench
     /// </summary>
     internal static class AppVersion
     {
-        public const string Number = "1.2.33";
+        public const string Number = "1.2.34";
     }
 
     internal sealed class SmokeResult

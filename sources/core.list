@@ -26,6 +26,7 @@ src\Core\Settings\WindowPlacement.cs
 src\Safety\Updater.cs
 src\Features\WorkOrders\WorkOrder.cs
 src\Features\WorkOrders\WorkOrderStore.cs
+src\Features\WorkOrders\JobStrip.cs
 src\Core\Shell\ShellPages.cs
 src\Core\Settings\AdapterPrefs.cs
 src\Core\Settings\SettingsWriteGate.cs

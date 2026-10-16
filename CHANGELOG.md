@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.34: Rearch stage 12: the job strip text (window title, job tag, sync chip, work-order pick list) moves out of `ShellForm` into pure `JobStrip` (`src/Features/WorkOrders/`). New SelfTest case `job strip text`. No behaviour change. Lockstep version bump.
+
 - v1.2.33: Rearch stage 11: main-window restore and save move out of `ShellForm` into pure `WindowPlacement` (`src/Core/Settings/`). New SelfTest case `window placement`. No behaviour change. Lockstep version bump.
 
 - v1.2.32: Rearch stage 10: what Add code / Add note pre-fill and search for moves out of `ShellForm` into pure `ShopAdd` (`src/Features/Kb/`). New SelfTest case `shop add prefill`. No behaviour change. Lockstep version bump.
