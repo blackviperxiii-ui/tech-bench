@@ -34,23 +34,12 @@ static partial class SelfTest
         lab.ClockState = "logged-off";
         Eq("ListLabel logged off", lab.ListLabel(), "1234-1  Acme  HP450 S77  [logged off]");
         lab.ClockState = "idle";
-        lab.ApiSignOff = true;
-        Eq("ListLabel signed off in ID", lab.ListLabel(), "1234-1  Acme  HP450 S77  [signed off in ID]");
-        lab.ClockState = "logged-on";
-        Eq("ListLabel clock state wins over ID sign-off", lab.ListLabel(), "1234-1  Acme  HP450 S77  [logged on]");
-        lab.ClockState = "idle";
-        lab.ApiSignOff = false;
         lab.Source = "SHARED";
         Eq("ListLabel shared is case-insensitive", lab.ListLabel(), "1234-1  Acme  HP450 S77  (shared)");
-        lab.Source = "gateway";
-        lab.ClockState = "logged-on";
-        Eq("ListLabel gateway after clock tag", lab.ListLabel(), "1234-1  Acme  HP450 S77  [logged on]  (ID)");
         Eq("ListLabel blank customer is skipped", new WorkOrder { Number = "5", Customer = "  " }.ListLabel(), "5");
 
         var ev = new WorkOrderClock { Kind = "logon", WhenUtc = "2026-05-01T14:30:00.0000000Z", Detail = "at bench" };
         Eq("clock line shop", ev.ToString(), "2026-05-01T14:30:00.0000000Z  logon  [shop]  at bench");
-        ev.PostedToIntelliDealer = true;
-        Eq("clock line posted", ev.ToString(), "2026-05-01T14:30:00.0000000Z  logon  [ID]  at bench");
     }
 
     [SelfTestCase("UserCode usable, key and path", Order = 301)]

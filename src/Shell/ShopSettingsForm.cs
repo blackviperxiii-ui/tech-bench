@@ -5,27 +5,24 @@ using System.Windows.Forms;
 namespace TechBench
 {
     /// <summary>
-    /// Shop → IntelliDealer: Azure API Gateway credentials and the shop share folder.
+    /// Shop → Shop settings: tech name, shop share folder, and an optional assigned work-order file.
     /// </summary>
-    internal sealed class IdSettingsForm : Form
+    internal sealed class ShopSettingsForm : Form
     {
-        readonly TextBox _techId, _techNo, _company, _location;
-        readonly TextBox _gateway, _key, _client, _secret, _token;
-        readonly TextBox _share, _assigned;
-        readonly TextBox _assignedPath, _logon, _logoff, _signoff, _media;
+        readonly TextBox _techId, _share, _assigned;
 
-        public IdSettings Result { get; private set; }
+        public ShopSettings Result { get; private set; }
 
-        public IdSettingsForm(IdSettings seed)
+        public ShopSettingsForm(ShopSettings seed)
         {
-            Text = "IntelliDealer / Mobile Tech";
+            Text = "Shop settings";
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false;
             ShowInTaskbar = false;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
-            ClientSize = new Size(740, 640);
-            MinimumSize = new Size(640, 520);
+            ClientSize = new Size(640, 260);
+            MinimumSize = new Size(520, 240);
 
             var table = new TableLayoutPanel
             {
@@ -40,50 +37,21 @@ namespace TechBench
             table.RowCount = 1;
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             TextBox hint = UiLayout.WrapText(
-                "Copy credentials from IntelliDealer → Configuration → API Gateway. "
-                + "Live ServiceToday work orders need both the gateway URL and subscription key; "
-                + "until then, work orders stay file-backed and sign-off is not posted to the DMS.");
+                "Work orders are saved on this PC and in the knowledge base shop folder. "
+                + "Add a share folder to also copy shared work orders there for other techs.");
             hint.ForeColor = Color.DimGray;
             table.SetColumnSpan(hint, 2);
             table.Controls.Add(hint, 0, 0);
 
             _techId = Row(table, "Tech name", "Windows user by default — also used as the shop-folder shard");
-            _techNo = Row(table, "ID tech number", "Employee / technician number in IntelliDealer");
-            _company = Row(table, "Company", "");
-            _location = Row(table, "Location", "Branch / store");
-            _gateway = Row(table, "Gateway URL", "https://….azure-api.net  (Azure API Gateway)");
-            _key = Row(table, "Subscription key", "Ocp-Apim-Subscription-Key");
-            _key.UseSystemPasswordChar = true;
-            _client = Row(table, "OAuth client id", "Optional");
-            _secret = Row(table, "OAuth secret", "Optional");
-            _secret.UseSystemPasswordChar = true;
-            _token = Row(table, "Token URL", "Optional client-credentials token URL");
             _share = Row(table, "Shop share folder", "USB / network / extra OneDrive folder other techs use");
             _assigned = Row(table, "Assigned WO file", "Optional id-work-orders.json or .csv");
-            _assignedPath = Row(table, "Assigned path", "GET path with {tech}");
-            _logon = Row(table, "Log on path", "POST  {wo} {tech}");
-            _logoff = Row(table, "Log off path", "POST");
-            _signoff = Row(table, "Sign off path", "POST — never faked");
-            _media = Row(table, "Multimedia path", "POST file  {wo}");
 
             if (seed != null)
             {
                 _techId.Text = seed.TechId;
-                _techNo.Text = seed.TechNumber;
-                _company.Text = seed.Company;
-                _location.Text = seed.Location;
-                _gateway.Text = seed.GatewayUrl;
-                _key.Text = seed.SubscriptionKey;
-                _client.Text = seed.ClientId;
-                _secret.Text = seed.ClientSecret;
-                _token.Text = seed.TokenUrl;
                 _share.Text = seed.ShareFolder;
                 _assigned.Text = seed.AssignedFile;
-                _assignedPath.Text = seed.AssignedPath;
-                _logon.Text = seed.LogOnPath;
-                _logoff.Text = seed.LogOffPath;
-                _signoff.Text = seed.SignOffPath;
-                _media.Text = seed.MultimediaPath;
             }
 
             var buttons = new FlowLayoutPanel
@@ -151,24 +119,11 @@ namespace TechBench
 
         void Collect()
         {
-            Result = new IdSettings
+            Result = new ShopSettings
             {
-                TechId = IdSettings.Sanitize(_techId.Text),
-                TechNumber = _techNo.Text.Trim(),
-                Company = _company.Text.Trim(),
-                Location = _location.Text.Trim(),
-                GatewayUrl = _gateway.Text.Trim(),
-                SubscriptionKey = _key.Text.Trim(),
-                ClientId = _client.Text.Trim(),
-                ClientSecret = _secret.Text.Trim(),
-                TokenUrl = _token.Text.Trim(),
+                TechId = ShopSettings.Sanitize(_techId.Text),
                 ShareFolder = _share.Text.Trim(),
-                AssignedFile = _assigned.Text.Trim(),
-                AssignedPath = string.IsNullOrWhiteSpace(_assignedPath.Text) ? "/service/technicians/{tech}/workorders" : _assignedPath.Text.Trim(),
-                LogOnPath = string.IsNullOrWhiteSpace(_logon.Text) ? "/service/workorders/{wo}/logon" : _logon.Text.Trim(),
-                LogOffPath = string.IsNullOrWhiteSpace(_logoff.Text) ? "/service/workorders/{wo}/logoff" : _logoff.Text.Trim(),
-                SignOffPath = string.IsNullOrWhiteSpace(_signoff.Text) ? "/service/workorders/{wo}/signoff" : _signoff.Text.Trim(),
-                MultimediaPath = string.IsNullOrWhiteSpace(_media.Text) ? "/service/workorders/{wo}/attachments" : _media.Text.Trim()
+                AssignedFile = _assigned.Text.Trim()
             };
         }
     }

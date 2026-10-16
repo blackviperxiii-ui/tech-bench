@@ -8,7 +8,7 @@ using J1939Reader;
 namespace TechBench
 {
     /// <summary>
-    /// Work-order list, packet editor (notes / photos / report), shop share, and ID clock buttons.
+    /// Work-order list, packet editor (notes / photos / report), shop share, and shop clock buttons.
     /// </summary>
     internal sealed class WorkOrderControl : UserControl
     {
@@ -21,10 +21,10 @@ namespace TechBench
         readonly Label _labNotes, _labReport, _labMedia, _labClock;
         readonly ListBox _media;
         readonly TextBox _status;
-        readonly Button _logOn, _logOff, _signOff;
+        readonly Button _logOn, _logOff;
         int _formCols;
         string _kbRoot;
-        IdSettings _settings;
+        ShopSettings _settings;
         WorkOrder _current;
         bool _filling;
         readonly List<WorkOrder> _orders = new List<WorkOrder>();
@@ -44,7 +44,7 @@ namespace TechBench
         {
             _kbRoot = kbRoot;
             _appSettings = AppSettings.Load();
-            _settings = IdSettings.Load();
+            _settings = ShopSettings.Load();
             Dock = DockStyle.Fill;
             AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9.5f);
@@ -54,7 +54,6 @@ namespace TechBench
             var leftBar = UiLayout.WrapBar(new Padding(4, 4, 4, 4));
             leftBar.Controls.Add(Btn("New", delegate { NewOrder(); }));
             leftBar.Controls.Add(Btn("Refresh", delegate { Reload(true); }));
-            leftBar.Controls.Add(Btn("From ID", delegate { PullAssigned(); }));
             leftBar.Controls.Add(Btn("Clear job", delegate { ClearSavedJob(); }));
             var left = new Panel { Dock = DockStyle.Fill };
             left.Controls.Add(_list);
@@ -120,10 +119,8 @@ namespace TechBench
             bar.Controls.Add(Btn("Share with shop", delegate { ShareCurrent(); }));
             _logOn = Btn("Log on", delegate { ShopClock("logon"); });
             _logOff = Btn("Log off", delegate { ShopClock("logoff"); });
-            _signOff = Btn("Sign off", delegate { SignOff(); });
             bar.Controls.Add(_logOn);
             bar.Controls.Add(_logOff);
-            bar.Controls.Add(_signOff);
             bar.Controls.Add(Btn("Settings", delegate { OpenSettings(); }));
 
             var rightHost = new Panel { Dock = DockStyle.Fill };
@@ -144,7 +141,7 @@ namespace TechBench
 
         public void ReloadSettings()
         {
-            _settings = IdSettings.Load();
+            _settings = ShopSettings.Load();
             Reload(false);
         }
 
@@ -230,7 +227,7 @@ namespace TechBench
                 keep = _appSettings.LastWo.Trim();
                 _jobWoRestoreDone = true;
             }
-            if (fromDisk) _settings = IdSettings.Load();
+            if (fromDisk) _settings = ShopSettings.Load();
             _orders.Clear();
             _orders.AddRange(WorkOrderStore.ListAll(_settings, _kbRoot));
             _list.BeginUpdate();
@@ -256,7 +253,7 @@ namespace TechBench
                 ClearFields();
                 RaiseChanged();
             }
-            PaintGatewayStatus();
+            PaintStatus();
         }
 
         Button Btn(string text, EventHandler click)
@@ -473,7 +470,7 @@ namespace TechBench
                 foreach (string m in wo.Media) _media.Items.Add(m);
             _clock.Text = ClockText(wo);
             _filling = false;
-            PaintGatewayStatus();
+            PaintStatus();
         }
 
         void ClearFields()
@@ -550,38 +547,13 @@ namespace TechBench
                 try
                 {
                     int attached = 0;
-                    int dmsOk = 0;
-                    int dmsFail = 0;
                     foreach (string f in dlg.FileNames)
                     {
-                        string dest = WorkOrderStore.AttachFile(_current, f, _settings, _kbRoot);
-                        if (dest == null) continue;
-                        attached++;
-                        if (_settings.GatewayConfigured())
-                        {
-                            IdCallResult posted = IdGateway.PostMultimedia(_settings, _current, dest);
-                            _current.ApiMessage = posted.Message;
-                            if (posted.Posted)
-                            {
-                                dmsOk++;
-                                _current.AddClock("multimedia", Path.GetFileName(dest), true);
-                            }
-                            else
-                            {
-                                dmsFail++;
-                                _current.AddClock("multimedia", posted.Message, false);
-                            }
-                        }
+                        if (WorkOrderStore.AttachFile(_current, f, _settings, _kbRoot) != null) attached++;
                     }
                     WorkOrderStore.Save(_current, _settings, _kbRoot);
                     ShowCurrent();
-                    if (dmsFail > 0)
-                        Status("Attached " + attached + " file(s); " + dmsFail
-                            + " DMS upload(s) failed — see clock / API message.");
-                    else if (dmsOk > 0)
-                        Status("Attached " + attached + " file(s); posted to IntelliDealer.");
-                    else
-                        Status("Attached " + attached + " file(s).");
+                    Status("Attached " + attached + " file(s).");
                 }
                 catch (Exception ex)
                 {
@@ -623,21 +595,8 @@ namespace TechBench
         {
             Flush();
             if (_current == null) { Status("Pick a work order first."); return; }
-            bool logon = kind == "logon";
-            _current.ClockState = logon ? "logged-on" : "logged-off";
-            _current.ApiLogOn = false;
-            IdCallResult api = logon ? IdGateway.LogOn(_settings, _current) : IdGateway.LogOff(_settings, _current);
-            _current.ApiMessage = api.Message;
-            if (api.Posted)
-            {
-                _current.ApiLogOn = logon;
-                _current.AddClock(kind, api.Message, true);
-            }
-            else
-            {
-                _current.AddClock("shop-" + kind,
-                    "Shop record only. " + api.Message, false);
-            }
+            _current.ClockState = kind == "logon" ? "logged-on" : "logged-off";
+            _current.AddClock("shop-" + kind, "Shop record only.");
             try { WorkOrderStore.Save(_current, _settings, _kbRoot); }
             catch (Exception ex)
             {
@@ -646,77 +605,16 @@ namespace TechBench
             }
             ShowCurrent();
             RaiseChanged();
-            Status(api.Posted ? api.Message : ("Shop " + kind + " saved. " + api.Message));
-        }
-
-        void SignOff()
-        {
-            Flush();
-            if (_current == null) { Status("Pick a work order first."); return; }
-            IdCallResult api = IdGateway.SignOff(_settings, _current);
-            _current.ApiMessage = api.Message;
-            if (!api.Posted)
-            {
-                _current.ApiSignOff = false;
-                _current.AddClock("signoff-blocked", api.Message, false);
-                try { WorkOrderStore.Save(_current, _settings, _kbRoot); }
-                catch { }
-                ShowCurrent();
-                MessageBox.Show(this, api.Message, "Sign off", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            _current.ApiSignOff = true;
-            _current.ClockState = "signed-off";
-            _current.AddClock("signoff", api.Message, true);
-            try { WorkOrderStore.Save(_current, _settings, _kbRoot); }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, ex.Message, "Sign off", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            ShowCurrent();
-            RaiseChanged();
-            Status(api.Message);
-        }
-
-        void PullAssigned()
-        {
-            IdCallResult api = IdGateway.FetchAssigned(_settings);
-            if (!api.Posted)
-            {
-                MessageBox.Show(this, api.Message, "Assigned work orders", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                Status(api.Message);
-                return;
-            }
-            int n = 0;
-            int failed = 0;
-            foreach (WorkOrder wo in api.WorkOrders)
-            {
-                try
-                {
-                    WorkOrderStore.Save(wo, _settings, _kbRoot);
-                    n++;
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    SessionIo.LogError("PullAssigned save " + (wo == null ? "?" : wo.Key()), ex);
-                }
-            }
-            Reload(false);
-            if (failed > 0)
-                Status("Saved " + n + " assigned work order(s); " + failed + " failed to save.");
-            else
-                Status("Saved " + n + " assigned work order(s) from IntelliDealer.");
+            Status("Shop " + kind + " saved.");
         }
 
         void OpenSettings()
         {
-            using (var dlg = new IdSettingsForm(_settings))
+            using (var dlg = new ShopSettingsForm(_settings))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result == null) return;
                 dlg.Result.Save();
-                _settings = IdSettings.Load();
+                _settings = ShopSettings.Load();
                 Reload(false);
             }
         }
@@ -741,25 +639,16 @@ namespace TechBench
         static string ClockText(WorkOrder wo)
         {
             if (wo == null || wo.Clock == null || wo.Clock.Count == 0)
-                return "No clock events yet. Log on writes a shop timestamp. Sign off waits for IntelliDealer.";
+                return "No clock events yet. Log on and Log off write a shop timestamp.";
             var sb = new System.Text.StringBuilder();
             foreach (WorkOrderClock ev in wo.Clock)
                 sb.AppendLine(ev.ToString());
             return sb.ToString();
         }
 
-        void PaintGatewayStatus()
+        void PaintStatus()
         {
-            bool live = _settings != null && _settings.GatewayConfigured();
-            _signOff.Enabled = true;
-            string line;
-            if (live)
-                line = "API Gateway: configured (" + _settings.GatewayUrl + "). Sign-off still requires a 2xx from ID.";
-            else
-                line = "API Gateway: not configured — file-backed WOs, shop share, and shop clock only. Sign-off is not posted to IntelliDealer.";
-            if (_current != null && !string.IsNullOrWhiteSpace(_current.ApiMessage))
-                line = line + "  " + _current.ApiMessage;
-            _status.Text = line;
+            _status.Text = "Work orders are saved on this PC and in the shop folder. Share with shop copies one for other techs.";
         }
 
         void Status(string text)

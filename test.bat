@@ -2,7 +2,7 @@
 rem Offline self-test: J1939 decoding, BAM reassembly, DM11/DM3 code clear (simulated ECMs), adapter discovery, trend, timeline,
 rem unit history, KB load/search, user-code round-trip, snapshot diff, report text,
 rem settings, latest.json / SHA-256 updater, Inno Setup script checks, two-way shop sync,
-rem work-order packets / IntelliDealer gateway (no live DMS),
+rem work-order packets / shop share,
 rem and shop-laptop WinForms layout (primary buttons stay on screen).
 rem Needs no adapter. Sample KB data is built in %TEMP%. The shipped field database under kb\ is loaded as-is.
 rem Source list: tools\gen-rsp.bat writes sources\ response files from the .list files and the tests folder; this script only names SelfTest.cs and tools\LayoutAudit.cs.

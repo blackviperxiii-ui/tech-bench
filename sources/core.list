@@ -20,11 +20,10 @@ src\Safety\ShopSync.cs
 src\Features\Sync\ShopWatch.cs
 src\Core\Version\AppVersion.cs
 src\Core\Settings\AppSettings.cs
+src\Core\Settings\ShopSettings.cs
 src\Safety\Updater.cs
 src\Features\WorkOrders\WorkOrder.cs
 src\Features\WorkOrders\WorkOrderStore.cs
-src\Safety\IdSettings.cs
-src\Safety\IdGateway.cs
 src\Core\Shell\ShellPages.cs
 src\Core\Settings\AdapterPrefs.cs
 src\Core\Settings\SettingsWriteGate.cs

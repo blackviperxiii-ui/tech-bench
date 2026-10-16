@@ -50,7 +50,7 @@ static partial class SelfTest
         cases.Sort(CompareCases);
         // Exact count: a missing [SelfTestCase] must fail the run, not hide under a loose floor.
         // Bump ExpectedCaseCount when adding a case; never lower it to silence a drop.
-        const int ExpectedCaseCount = 46;
+        const int ExpectedCaseCount = 47;
         Check("SelfTestCase runner found cases",
             cases.Count == ExpectedCaseCount,
             "count=" + cases.Count + " expected=" + ExpectedCaseCount);

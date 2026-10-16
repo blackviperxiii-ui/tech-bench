@@ -246,7 +246,7 @@ namespace TechBench
             }
 
             CollectCodeConflicts(kbRoot, result);
-            WorkOrderStore.CollectConflicts(IdSettings.Load(), kbRoot, result);
+            WorkOrderStore.CollectConflicts(ShopSettings.Load(), kbRoot, result);
             result.Techs = CountTechs(kbRoot);
             result.Status = Describe(kbRoot, settings, result);
             return result;

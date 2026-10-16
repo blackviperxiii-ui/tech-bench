@@ -26,7 +26,7 @@ id-settings.json
 id-settings*.json
 id-api.json
 
-# Secrets and credentials (never commit; IntelliDealer creds live in %LocalAppData%)
+# Secrets and credentials (never commit; legacy settings files stay in %LocalAppData%)
 .env
 .env.*
 *.pfx
