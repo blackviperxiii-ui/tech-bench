@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.33: Rearch stage 11: main-window restore and save move out of `ShellForm` into pure `WindowPlacement` (`src/Core/Settings/`). New SelfTest case `window placement`. No behaviour change. Lockstep version bump.
+
 - v1.2.32: Rearch stage 10: what Add code / Add note pre-fill and search for moves out of `ShellForm` into pure `ShopAdd` (`src/Features/Kb/`). New SelfTest case `shop add prefill`. No behaviour change. Lockstep version bump.
 
 - v1.2.31: Removed the IntelliDealer integration: gateway client, its settings form, Sign off, From ID and media post-back. Work orders are shop-only; Log on / Log off write the local shop clock and make no network calls. Tech name, share folder and assigned-WO file move to `shop-settings.json` (Shop → Shop settings), copied once from the old `id-settings.json`, which is left in place and no longer read. Old work-order packets still load. Gateway-only SelfTests removed with the code (owner OK); new cases `shop settings migration` and `legacy work-order packet loads`. Lockstep version bump.
