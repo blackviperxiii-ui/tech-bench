@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Web.Script.Serialization;
 
 namespace TechBench
@@ -46,13 +47,15 @@ namespace TechBench
         public static ShopSettings Load()
         {
             string path = PathName();
-            ShopSettings s;
-            if (File.Exists(path))
-                s = LoadFrom(path);
-            else
+            ShopSettings s = TryLoad(path);
+            if (s == null)
             {
                 s = ReadLegacy(Path.Combine(Folder(), LegacyFileName));
-                if (!s.IsBlank()) s.SaveTo(path);
+                if (!s.IsBlank())
+                {
+                    try { s.SaveTo(path); }
+                    catch { }
+                }
             }
             string exe = ExeDir();
             FillBlanks(s, LoadFrom(Path.Combine(exe, FileName)));
@@ -65,15 +68,22 @@ namespace TechBench
 
         public static ShopSettings LoadFrom(string path)
         {
+            return TryLoad(path) ?? new ShopSettings();
+        }
+
+        /// <summary>Null when the file is missing, empty, cut short or unreadable, so migration can run again.</summary>
+        static ShopSettings TryLoad(string path)
+        {
             try
             {
-                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return new ShopSettings();
-                var s = new JavaScriptSerializer().Deserialize<ShopSettings>(File.ReadAllText(path));
-                return s ?? new ShopSettings();
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+                string text = File.ReadAllText(path).Trim();
+                if (!text.StartsWith("{") || !text.EndsWith("}")) return null;
+                return new JavaScriptSerializer().Deserialize<ShopSettings>(text);
             }
             catch
             {
-                return new ShopSettings();
+                return null;
             }
         }
 
@@ -111,7 +121,7 @@ namespace TechBench
             if (string.IsNullOrEmpty(path)) return;
             string dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(path, new JavaScriptSerializer().Serialize(this));
+            WorkOrderStore.AtomicWriteText(path, new JavaScriptSerializer().Serialize(this), new UTF8Encoding(false));
         }
 
         static void FillBlanks(ShopSettings dest, ShopSettings src)

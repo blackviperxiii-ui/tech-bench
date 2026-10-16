@@ -55,6 +55,13 @@ static partial class SelfTest
             Eq("loading does not rewrite saved settings", File.ReadAllText(shopPath),
                 "{\"TechId\":\"carol\",\"ShareFolder\":\"\",\"AssignedFile\":\"\"}");
 
+            File.WriteAllText(legacyPath, legacyJson);
+            File.WriteAllText(shopPath, "");
+            Eq("empty shop file re-runs migration", ShopSettings.Load().TechId, "alice");
+            File.WriteAllText(shopPath, "{\"TechId\":\"al");
+            Eq("truncated shop file re-runs migration", ShopSettings.Load().TechId, "alice");
+            Eq("truncated shop file is repaired", ShopSettings.LoadFrom(shopPath).TechId, "alice");
+
             File.Delete(shopPath);
             File.Delete(legacyPath);
             File.Delete(Path.Combine(exe, "shop-settings.json"));
