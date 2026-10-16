@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.37: sync the vendored pstack skills in `.cursor/skills/` to pstack 0.15.25 (cursor/plugins `f713f14`), from 0.15.23. Adds the new `sharpen` skill and picks up upstream skill text edits. No production, safety or UI change. Lockstep version bump.
+
 - v1.2.36: Rearch stage 14: the update menu and dialog text around an update check moves out of `ShellForm` into pure `UpdatePrompt` (`src/Core/Version/`). `Updater` and the install order are untouched. New SelfTest case `update prompt text`. No behaviour change. Lockstep version bump.
 
 - v1.2.35: Rearch stage 13: the main-window keyboard shortcuts move into pure `ShellShortcuts` (`src/Core/Shell/`), and the job hand-offs (Search this job query, launch customer, session DTC csv path) join `JobStrip`. New SelfTest case `shell shortcuts and job hand-offs`. No behaviour change. Lockstep version bump.
