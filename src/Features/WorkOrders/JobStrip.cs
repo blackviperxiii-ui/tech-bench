@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace TechBench
 {
@@ -23,6 +24,26 @@ namespace TechBench
             if (wo != null && !string.IsNullOrWhiteSpace(wo.Number))
                 return wo.JobTag();
             return ((model ?? "") + " " + (serial ?? "")).Trim();
+        }
+
+        /// <summary>What "Search this job" searches for: the typed model and serial.</summary>
+        public static string SearchQuery(string model, string serial)
+        {
+            return ((model ?? "") + " " + (serial ?? "")).Trim();
+        }
+
+        /// <summary>Customer shown at launch: settings.json first, else the work-order page's saved job.</summary>
+        public static string StartupCustomer(string saved, string savedJobCustomer)
+        {
+            return !string.IsNullOrEmpty(saved) ? saved : savedJobCustomer;
+        }
+
+        /// <summary>The DTC csv INLINE 7 writes beside a saved session file, or "" for no session.</summary>
+        public static string DtcCsvFor(string sessionPath)
+        {
+            if (string.IsNullOrEmpty(sessionPath)) return "";
+            return Path.Combine(Path.GetDirectoryName(sessionPath),
+                Path.GetFileNameWithoutExtension(sessionPath) + "_dtcs.csv");
         }
 
         public static string SyncChip(int conflicts, string tech)

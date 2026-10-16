@@ -216,9 +216,7 @@ namespace TechBench
             {
                 if (!string.IsNullOrEmpty(_settings.Model)) _model.Text = _settings.Model;
                 if (!string.IsNullOrEmpty(_settings.Serial)) _serial.Text = _settings.Serial;
-                string jobCustomer = !string.IsNullOrEmpty(_settings.Customer)
-                    ? _settings.Customer
-                    : _orders.SavedJobCustomer;
+                string jobCustomer = JobStrip.StartupCustomer(_settings.Customer, _orders.SavedJobCustomer);
                 if (!string.IsNullOrEmpty(jobCustomer)) _customer.Text = jobCustomer;
             }
             finally
@@ -230,7 +228,7 @@ namespace TechBench
 
             useJob.Click += delegate
             {
-                string q = (_model.Text + " " + _serial.Text).Trim();
+                string q = JobStrip.SearchQuery(_model.Text, _serial.Text);
                 ShowPage(ShellPageId.Search);
                 _search.Prefill(q);
                 SyncJob();
@@ -257,8 +255,7 @@ namespace TechBench
                 try
                 {
                     if (string.IsNullOrEmpty(path) || _kb == null) return;
-                    string dtc = Path.Combine(Path.GetDirectoryName(path),
-                        Path.GetFileNameWithoutExtension(path) + "_dtcs.csv");
+                    string dtc = JobStrip.DtcCsvFor(path);
                     ShopSync.PublishHistory(_kb.Root, ShopSync.LoadSettings().TechId, dtc);
                     RunSync(false);
                 }
@@ -278,21 +275,21 @@ namespace TechBench
             KeyPreview = true;
             KeyDown += delegate(object s, KeyEventArgs e)
             {
-                if ((e.Control && e.KeyCode == Keys.F) || e.KeyCode == Keys.F3)
+                switch (ShellShortcuts.For(e.Control, e.KeyCode))
                 {
-                    ShowPage(ShellPageId.Search);
-                    _search.FocusQuery();
-                    e.Handled = true;
-                }
-                else if (e.Control && e.KeyCode == Keys.N)
-                {
-                    AddOrEditCode();
-                    e.Handled = true;
-                }
-                else if (e.KeyCode == Keys.F1)
-                {
-                    ShowCheatSheet();
-                    e.Handled = true;
+                    case ShellShortcut.FocusSearch:
+                        ShowPage(ShellPageId.Search);
+                        _search.FocusQuery();
+                        e.Handled = true;
+                        break;
+                    case ShellShortcut.AddCode:
+                        AddOrEditCode();
+                        e.Handled = true;
+                        break;
+                    case ShellShortcut.CheatSheet:
+                        ShowCheatSheet();
+                        e.Handled = true;
+                        break;
                 }
             };
 
