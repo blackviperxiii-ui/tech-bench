@@ -1728,7 +1728,6 @@ ProtocolDescription=ISO 15765
     [SelfTestCase("data safety", Order = 280)]
     static void DataSafetyTests()
     {
-        SubscriptionKeyMaskTests();
         LaunchBlockTests();
         ManifestVersionTests();
         PacketSidecarSyncTests();

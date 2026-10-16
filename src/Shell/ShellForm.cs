@@ -82,11 +82,11 @@ namespace TechBench
             shop.DropDownItems.Add(addNote);
             shop.DropDownItems.Add(addFile);
             shop.DropDownItems.Add(new ToolStripSeparator());
-            var idSettings = new ToolStripMenuItem("Intelli&Dealer settings");
+            var shopSettings = new ToolStripMenuItem("Shop s&ettings…");
             var refreshWo = new ToolStripMenuItem("&Refresh work orders");
-            idSettings.Click += delegate { OpenIdSettings(); };
+            shopSettings.Click += delegate { OpenShopSettings(); };
             refreshWo.Click += delegate { _orders.Reload(true); FillWoPick(); };
-            shop.DropDownItems.Add(idSettings);
+            shop.DropDownItems.Add(shopSettings);
             shop.DropDownItems.Add(refreshWo);
             menu.Items.Add(shop);
 
@@ -770,9 +770,9 @@ namespace TechBench
             Text = Title(tag);
         }
 
-        void OpenIdSettings()
+        void OpenShopSettings()
         {
-            using (var dlg = new IdSettingsForm(IdSettings.Load()))
+            using (var dlg = new ShopSettingsForm(ShopSettings.Load()))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result == null) return;
                 dlg.Result.Save();

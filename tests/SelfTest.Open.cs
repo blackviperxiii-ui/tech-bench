@@ -12,47 +12,6 @@ using TechBench;
 
 static partial class SelfTest
 {
-    static void SubscriptionKeyMaskTests()
-    {
-        string path = Path.Combine(FindRepoRoot(), "src", "Shell", "IdSettingsForm.cs");
-        string src = File.Exists(path) ? File.ReadAllText(path) : "";
-        Check("IdSettingsForm.cs is readable", src.Length > 0, path);
-        Check("subscription key field is masked", SourceAssignsPasswordChar(src, "_key"), "_key");
-        Check("oauth secret field stays masked", SourceAssignsPasswordChar(src, "_secret"), "_secret");
-    }
-
-    static bool SourceAssignsPasswordChar(string src, string field)
-    {
-        if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(field)) return false;
-        string needle = field + ".UseSystemPasswordChar";
-        int from = 0;
-        while (from < src.Length)
-        {
-            int i = src.IndexOf(needle, from, StringComparison.Ordinal);
-            if (i < 0) return false;
-            int lineStart = src.LastIndexOf('\n', i);
-            if (lineStart < 0) lineStart = 0;
-            else lineStart = lineStart + 1;
-            int lineEnd = src.IndexOf('\n', i);
-            if (lineEnd < 0) lineEnd = src.Length;
-            string line = src.Substring(lineStart, lineEnd - lineStart);
-            string trim = line.Trim();
-            if (trim.StartsWith("//") || trim.StartsWith("*") || trim.StartsWith("/*"))
-            {
-                from = i + needle.Length;
-                continue;
-            }
-            int semi = line.IndexOf(';');
-            string stmt = semi >= 0 ? line.Substring(0, semi) : line;
-            if (stmt.IndexOf(needle, StringComparison.Ordinal) >= 0
-                && (stmt.IndexOf("= true", StringComparison.Ordinal) >= 0
-                    || stmt.IndexOf("=true", StringComparison.Ordinal) >= 0))
-                return true;
-            from = i + needle.Length;
-        }
-        return false;
-    }
-
     static void LaunchBlockTests()
     {
         string[] blocked = new string[]
@@ -144,8 +103,8 @@ static partial class SelfTest
 
     static void PacketSidecarSyncTests()
     {
-        string prevFolder = IdSettings.FolderOverride;
-        string prevExe = IdSettings.ExeDirOverride;
+        string prevFolder = ShopSettings.FolderOverride;
+        string prevExe = ShopSettings.ExeDirOverride;
         string prevWo = WorkOrderStore.FolderOverride;
         string prevWoExe = WorkOrderStore.ExeDirOverride;
         string prevSync = ShopSync.SettingsFolderOverride;
@@ -155,8 +114,8 @@ static partial class SelfTest
         Directory.CreateDirectory(usb);
         string exe = Path.Combine(cfg, "exe");
         Directory.CreateDirectory(exe);
-        IdSettings.FolderOverride = cfg;
-        IdSettings.ExeDirOverride = exe;
+        ShopSettings.FolderOverride = cfg;
+        ShopSettings.ExeDirOverride = exe;
         WorkOrderStore.FolderOverride = Path.Combine(cfg, "wo");
         WorkOrderStore.ExeDirOverride = exe;
         ShopSync.SettingsFolderOverride = cfg;
@@ -192,8 +151,8 @@ static partial class SelfTest
         }
         finally
         {
-            IdSettings.FolderOverride = prevFolder;
-            IdSettings.ExeDirOverride = prevExe;
+            ShopSettings.FolderOverride = prevFolder;
+            ShopSettings.ExeDirOverride = prevExe;
             WorkOrderStore.FolderOverride = prevWo;
             WorkOrderStore.ExeDirOverride = prevWoExe;
             ShopSync.SettingsFolderOverride = prevSync;

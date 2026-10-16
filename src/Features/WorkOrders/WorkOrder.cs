@@ -9,17 +9,15 @@ namespace TechBench
         public string Kind = "";
         public string WhenUtc = "";
         public string Detail = "";
-        public bool PostedToIntelliDealer;
 
         public override string ToString()
         {
-            string posted = PostedToIntelliDealer ? "ID" : "shop";
-            return WhenUtc + "  " + Kind + "  [" + posted + "]  " + Detail;
+            return WhenUtc + "  " + Kind + "  [shop]  " + Detail;
         }
     }
 
     /// <summary>
-    /// One WO-keyed job packet: header, notes, report, media names, shop/ID clock.
+    /// One WO-keyed job packet: header, notes, report, media names, shop clock.
     /// </summary>
     public sealed class WorkOrder
     {
@@ -36,9 +34,6 @@ namespace TechBench
         public string ReportText = "";
         public string Source = "file";
         public string ClockState = "idle";
-        public string ApiMessage = "";
-        public bool ApiLogOn;
-        public bool ApiSignOff;
         public string UpdatedUtc = "";
         public string Folder = "";
         public List<string> Media = new List<string>();
@@ -76,9 +71,7 @@ namespace TechBench
             if (unit.Length > 0) sb.Append("  ").Append(unit);
             if (ClockState == "logged-on") sb.Append("  [logged on]");
             else if (ClockState == "logged-off") sb.Append("  [logged off]");
-            else if (ApiSignOff) sb.Append("  [signed off in ID]");
             if (string.Equals(Source, "shared", StringComparison.OrdinalIgnoreCase)) sb.Append("  (shared)");
-            else if (string.Equals(Source, "gateway", StringComparison.OrdinalIgnoreCase)) sb.Append("  (ID)");
             return sb.ToString();
         }
 
@@ -87,14 +80,13 @@ namespace TechBench
             UpdatedUtc = DateTime.UtcNow.ToString("o");
         }
 
-        public WorkOrderClock AddClock(string kind, string detail, bool posted)
+        public WorkOrderClock AddClock(string kind, string detail)
         {
             var ev = new WorkOrderClock
             {
                 Kind = kind ?? "",
                 WhenUtc = DateTime.UtcNow.ToString("o"),
-                Detail = detail ?? "",
-                PostedToIntelliDealer = posted
+                Detail = detail ?? ""
             };
             if (Clock == null) Clock = new List<WorkOrderClock>();
             Clock.Add(ev);

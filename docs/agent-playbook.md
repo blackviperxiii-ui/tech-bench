@@ -76,7 +76,7 @@ git switch -c cursor/<topic> origin/main
 - Get a design review (Critiquito) and address or note its ranked fixes before calling the PR green. Run `LayoutAudit` via `test.bat`.
 
 ## 12. Secrets
-- Never commit `.env*`, tokens, keys/certs (`*.pfx`, `*.p12`, `*.pem`, `*.key`), `id-settings*.json`, or the IntelliDealer subscription key or OAuth secret. Those live only in `%LocalAppData%\TechBench\id-settings.json`, DPAPI-protected. Tests use fake values such as `sub-key`.
+- Never commit `.env*`, tokens, keys/certs (`*.pfx`, `*.p12`, `*.pem`, `*.key`), or legacy settings files (`id-settings*.json`). Users may still have one in `%LocalAppData%\TechBench`; the app no longer reads its secret fields. Tests use fake values only.
 - If you see a real secret in the tree or in history, stop and report it masked so it can be rotated. Don't rewrite history yourself.
 
 ## 13. Safety rails (don't weaken)

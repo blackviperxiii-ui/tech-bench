@@ -2,13 +2,15 @@
 
 ## Unreleased
 
+- v1.2.31: Removed the IntelliDealer integration: gateway client, its settings form, Sign off, From ID and media post-back. Work orders are shop-only; Log on / Log off write the local shop clock and make no network calls. Tech name, share folder and assigned-WO file move to `shop-settings.json` (Shop → Shop settings), copied once from the old `id-settings.json`, which is left in place and no longer read. Old work-order packets still load. Gateway-only SelfTests removed with the code (owner OK); new cases `shop settings migration` and `legacy work-order packet loads`. Lockstep version bump.
+
 - v1.2.30: Rearch stage 9: shop folder watching moves out of `ShellForm` into `ShopWatcher` (`src/Features/Sync/`), with the folder list from pure `ShopWatch.Dirs`. New SelfTest case `shop watch folders`. No behaviour change. Lockstep version bump.
 
 - v1.2.29: Rearch stage 8: the Adapters page moves out of `ShellForm` into `AdaptersPage` (`src/Features/Adapters/`), with its text built by pure `AdapterSummary.Text`. New SelfTest case `adapters page summary`. No behaviour change. Lockstep version bump.
 
 - v1.2.28: Rearch stage 7: `ShellPages` registry (`src/Core/Shell/`) is the one list of shell pages; `ShellForm` switch bar, panels and `AdapterPrefs` clamp read it. New SelfTest case `shell page registry`. No behaviour change. Lockstep version bump.
 
-- v1.2.27: switch agent tooling back to pstack: vendored `.cursor/skills/` now pstack 0.15.23 (`837067b`), `.cursor/rules/vstack.mdc` -> `pstack.mdc`, AGENTS.md/CLAUDE.md/tech-bench.mdc say always pstack, never vstack. v1.2.26 is reserved for the IntelliDealer card (PR #74), so this takes the next free patch. Lockstep version bump.
+- v1.2.27: switch agent tooling back to pstack: vendored `.cursor/skills/` now pstack 0.15.23 (`837067b`), `.cursor/rules/vstack.mdc` -> `pstack.mdc`, AGENTS.md/CLAUDE.md/tech-bench.mdc say always pstack, never vstack. v1.2.26 is reserved for another card (PR #74), so this takes the next free patch. Lockstep version bump.
 
 - v1.2.25: SelfTest for job persistence: customer and last WO survive a restart (trimmed, null-safe), missing or corrupt settings.json falls back to defaults and recovers on the next save. No production change. Lockstep version bump.
 
