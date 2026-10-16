@@ -16,6 +16,7 @@ src\Features\Adapters\AdapterSummary.cs
 src\Core\J1939\SessionData.cs
 src\Features\Kb\KbIndex.cs
 src\Features\Kb\UserCodes.cs
+src\Features\Kb\ShopAdd.cs
 src\Safety\ShopSync.cs
 src\Features\Sync\ShopWatch.cs
 src\Core\Version\AppVersion.cs
