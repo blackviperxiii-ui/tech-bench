@@ -316,8 +316,7 @@ namespace TechBench
 
         static string Title(string jobTag)
         {
-            string head = "Tech Bench " + AppVersion.Number;
-            return string.IsNullOrEmpty(jobTag) ? head : (head + "  ·  " + jobTag);
+            return JobStrip.WindowTitle(AppVersion.Number, jobTag);
         }
 
         static Label JobLabel(string text)
@@ -694,17 +693,15 @@ namespace TechBench
         {
             if (r == null)
             {
-                _syncStatus.Text = "Sync: idle";
-                _jobSync.Text = "Sync: idle";
+                _syncStatus.Text = JobStrip.SyncIdle;
+                _jobSync.Text = JobStrip.SyncIdle;
                 return;
             }
             _syncStatus.Text = r.Status;
             _syncStatus.ForeColor = r.Conflicts > 0 ? Color.DarkRed : Color.Black;
             _jobSync.ForeColor = r.Conflicts > 0 ? Color.OrangeRed : Color.Khaki;
             string tech = ShopSync.SanitizeTechId(ShopSync.LoadSettings().TechId);
-            _jobSync.Text = r.Conflicts > 0
-                ? (r.Conflicts + " sync conflict(s) — click")
-                : ("Sync · " + tech + " · click");
+            _jobSync.Text = JobStrip.SyncChip(r.Conflicts, tech);
             Control bar = _jobSync.Parent;
             if (bar != null) bar.PerformLayout();
         }
@@ -728,12 +725,7 @@ namespace TechBench
 
         void SyncJob()
         {
-            WorkOrder wo = _orders.Current;
-            string tag;
-            if (wo != null && !string.IsNullOrWhiteSpace(wo.Number))
-                tag = wo.JobTag();
-            else
-                tag = (_model.Text + " " + _serial.Text).Trim();
+            string tag = JobStrip.JobTag(_orders.Current, _model.Text, _serial.Text);
             _inline.JobTag = tag;
             Text = Title(tag);
         }
@@ -754,15 +746,9 @@ namespace TechBench
             string keep = _orders.Current == null ? "" : _orders.Current.Key();
             _filling = true;
             _woPick.Items.Clear();
-            _woPick.Items.Add("(no work order)");
-            int sel = 0;
-            List<WorkOrder> all = _orders.Orders();
-            for (int i = 0; i < all.Count; i++)
-            {
-                _woPick.Items.Add(all[i].ListLabel());
-                if (keep.Length > 0 && string.Equals(all[i].Key(), keep, StringComparison.OrdinalIgnoreCase))
-                    sel = i + 1;
-            }
+            int sel;
+            foreach (string row in JobStrip.PickItems(_orders.Orders(), keep, out sel))
+                _woPick.Items.Add(row);
             _woPick.SelectedIndex = sel;
             _filling = false;
         }
@@ -776,10 +762,9 @@ namespace TechBench
                 SyncJob();
                 return;
             }
-            List<WorkOrder> all = _orders.Orders();
-            int idx = i - 1;
-            if (idx < 0 || idx >= all.Count) return;
-            _orders.SelectKey(all[idx].Key());
+            WorkOrder picked = JobStrip.Picked(_orders.Orders(), i);
+            if (picked == null) return;
+            _orders.SelectKey(picked.Key());
         }
 
         void ApplyWo(WorkOrder wo)
