@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.35: Rearch stage 13: the main-window keyboard shortcuts move into pure `ShellShortcuts` (`src/Core/Shell/`), and the job hand-offs (Search this job query, launch customer, session DTC csv path) join `JobStrip`. New SelfTest case `shell shortcuts and job hand-offs`. No behaviour change. Lockstep version bump.
+
 - v1.2.34: Rearch stage 12: the job strip text (window title, job tag, sync chip, work-order pick list) moves out of `ShellForm` into pure `JobStrip` (`src/Features/WorkOrders/`). New SelfTest case `job strip text`. No behaviour change. Lockstep version bump.
 
 - v1.2.33: Rearch stage 11: main-window restore and save move out of `ShellForm` into pure `WindowPlacement` (`src/Core/Settings/`). New SelfTest case `window placement`. No behaviour change. Lockstep version bump.
