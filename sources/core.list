@@ -22,6 +22,7 @@ src\Features\Sync\ShopWatch.cs
 src\Core\Version\AppVersion.cs
 src\Core\Settings\AppSettings.cs
 src\Core\Settings\ShopSettings.cs
+src\Core\Settings\WindowPlacement.cs
 src\Safety\Updater.cs
 src\Features\WorkOrders\WorkOrder.cs
 src\Features\WorkOrders\WorkOrderStore.cs
