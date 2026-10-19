@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v1.2.38: fixes from the PR #69 review. KB documents and photos open again (`SafeOpen` read the `AssocQueryString` S_FALSE size answer as "no app"). The INLINE 7 SPN lookup shows notes and files that name the SPN only in their body, and shares Search's match and ranking. The crash dialog runs on an STA thread and the app exits when it closes. The saved shell page restores without an RP1210 adapter. The job strip no longer rewrites settings.json on every keystroke when the customer is unchanged. Lockstep version bump.
+
 - v1.2.37: sync the vendored pstack skills in `.cursor/skills/` to pstack 0.15.25 (cursor/plugins `f713f14`), from 0.15.23. Adds the new `sharpen` skill and picks up upstream skill text edits. No production, safety or UI change. Lockstep version bump.
 
 - v1.2.36: Rearch stage 14: the update menu and dialog text around an update check moves out of `ShellForm` into pure `UpdatePrompt` (`src/Core/Version/`). `Updater` and the install order are untouched. New SelfTest case `update prompt text`. No behaviour change. Lockstep version bump.

@@ -1,6 +1,7 @@
 // Offline checks for crash log writing (TB1d).
 using System;
 using System.IO;
+using System.Threading;
 using TechBench;
 
 static partial class SelfTest
@@ -26,6 +27,21 @@ static partial class SelfTest
             string clip = CrashForm.BuildClipboardText("SelfTest", ex, path);
             Check("clipboard text includes exception", clip.IndexOf("self-test crash marker", StringComparison.Ordinal) >= 0, clip);
             Check("clipboard text includes log path", clip.IndexOf(expected, StringComparison.Ordinal) >= 0, clip);
+
+            // A background-thread crash lands on an MTA thread; the dialog and clipboard need STA.
+            string seen = "not run";
+            string thrown = "none";
+            var mta = new Thread(delegate()
+            {
+                CrashForm.RunOnSta(delegate { seen = Thread.CurrentThread.GetApartmentState().ToString(); });
+                try { CrashForm.RunOnSta(delegate { throw new InvalidOperationException("sta marker"); }); }
+                catch (InvalidOperationException e) { thrown = e.Message; }
+            });
+            mta.SetApartmentState(ApartmentState.MTA);
+            mta.Start();
+            mta.Join();
+            Eq("crash dialog runs on STA from an MTA thread", seen, "STA");
+            Eq("crash dialog failure reaches the caller", thrown, "sta marker");
         }
         finally
         {

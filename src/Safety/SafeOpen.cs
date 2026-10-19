@@ -154,16 +154,17 @@ namespace TechBench
             StringBuilder pszOut,
             ref uint pcchOut);
 
-        static bool HasExecutableAssociation(string path)
+        internal static bool HasExecutableAssociation(string path)
         {
             string ext = Path.GetExtension(path);
             if (string.IsNullOrEmpty(ext)) return false;
             ext = ext.TrimEnd(' ', '.');
             if (ext.Length == 0 || ext[0] != '.') return false;
             uint length = 0;
+            // A size query (pszOut null) answers S_FALSE (1) with the length when an app is
+            // associated, so 1 is success here, not "no association".
             int hr = AssocQueryString(0, AssocStrExecutable, ext, null, null, ref length);
-            if (hr == 1) return false;
-            if (hr != 0) return false;
+            if ((hr != 0 && hr != 1) || length == 0) return false;
             var sb = new StringBuilder((int)length + 1);
             hr = AssocQueryString(0, AssocStrExecutable, ext, null, sb, ref length);
             return hr == 0 && sb.Length > 0;

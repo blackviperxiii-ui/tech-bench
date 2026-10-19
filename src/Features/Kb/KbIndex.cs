@@ -565,46 +565,34 @@ namespace TechBench
         {
             if (max < 1) return new List<Hit>();
             string spnName = J1939Reader.Names.Spn(spn);
-            string qSpn = ("spn " + spn).ToLowerInvariant();
-            string qNum = spn.ToString(CultureInfo.InvariantCulture).ToLowerInvariant();
-            string qName = spnName.Length > 0 ? spnName.ToLowerInvariant() : "";
-            string[] toksSpn = qSpn.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            string[] toksNum = new[] { qNum };
-            string[] toksName = qName.Length == 0
-                ? null
-                : qName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] queries = spnName.Length > 0
+                ? new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture), spnName }
+                : new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture) };
 
-            var matches = new List<Hit>();
-            foreach (Hit h in All)
+            // One row per entry, at the best score any query gave it. A body-only mention scores 0
+            // and still counts, the same as it does on the Search tab.
+            var best = new Dictionary<string, Hit>();
+            var bestScore = new Dictionary<string, int>();
+            foreach (string q in queries)
             {
-                string hay = h.Hay ?? "";
-                int best = 0;
-                if (HayHasAll(hay, toksSpn))
-                    best = Math.Max(best, Score(h, qSpn, toksSpn));
-                if (hay.IndexOf(qNum, StringComparison.Ordinal) >= 0)
-                    best = Math.Max(best, Score(h, qNum, toksNum));
-                if (toksName != null && HayHasAll(hay, toksName))
-                    best = Math.Max(best, Score(h, qName, toksName));
-                if (best <= 0) continue;
-                h.Score = best;
-                matches.Add(h);
+                foreach (Hit h in Matches(q.Trim().ToLowerInvariant(), "ALL"))
+                {
+                    string key = h.Kind + "\u0001" + h.Title;
+                    int prev;
+                    if (bestScore.TryGetValue(key, out prev) && prev >= h.Score) continue;
+                    best[key] = h;
+                    bestScore[key] = h.Score;
+                }
             }
-            matches.Sort(delegate(Hit a, Hit b)
+            var matches = new List<Hit>();
+            foreach (KeyValuePair<string, Hit> kv in best)
             {
-                int c = b.Score.CompareTo(a.Score);
-                return c != 0 ? c : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
-            });
-            var hits = new List<Hit>();
-            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
-            return hits;
-        }
-
-        static bool HayHasAll(string hay, string[] toks)
-        {
-            if (toks == null || toks.Length == 0) return false;
-            foreach (string t in toks)
-                if (hay.IndexOf(t, StringComparison.Ordinal) < 0) return false;
-            return true;
+                kv.Value.Score = bestScore[kv.Key];
+                matches.Add(kv.Value);
+            }
+            Rank(matches);
+            if (matches.Count > max) matches.RemoveRange(max, matches.Count - max);
+            return matches;
         }
 
         public string SpnText(int spn, int fmi)
@@ -653,7 +641,16 @@ namespace TechBench
                 return hits;
             }
 
-            string q = query.Trim().ToLowerInvariant();
+            List<Hit> matches = Matches(query.Trim().ToLowerInvariant(), kind);
+            total = matches.Count;
+            Rank(matches);
+            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
+            return hits;
+        }
+
+        /// <summary>Every entry of <paramref name="kind"/> whose text holds all of the query's tokens, scored, unsorted.</summary>
+        List<Hit> Matches(string q, string kind)
+        {
             string[] toks = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var matches = new List<Hit>();
             foreach (Hit h in All)
@@ -666,7 +663,11 @@ namespace TechBench
                 h.Score = Score(h, q, toks);
                 matches.Add(h);
             }
-            total = matches.Count;
+            return matches;
+        }
+
+        static void Rank(List<Hit> matches)
+        {
             // An exact fault-code match has to come first. Unranked, "F68" buried the F68 entry behind
             // every row that merely mentioned it.
             matches.Sort(delegate(Hit a, Hit b)
@@ -674,8 +675,6 @@ namespace TechBench
                 int c = b.Score.CompareTo(a.Score);
                 return c != 0 ? c : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
             });
-            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
-            return hits;
         }
 
         static int Score(Hit h, string q, string[] toks)

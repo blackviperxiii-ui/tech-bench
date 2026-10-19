@@ -1250,6 +1250,38 @@ ProtocolDescription=ISO 15765
         Check("missing root explains itself", empty.Status.Contains("nothing loaded"), empty.Status);
 
         try { Directory.Delete(root, true); } catch { }
+
+        SpnHitsTests();
+    }
+
+    static void SpnHitsTests()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "kbspn_" + Guid.NewGuid().ToString("N"));
+        string notes = Path.Combine(root, "data", "notes");
+        Directory.CreateDirectory(notes);
+        File.WriteAllText(Path.Combine(root, "data", "kb.json"), @"{""codes"":[
+          {""brand_id"":""CUMMINS"",""code"":""SPN 5246"",""title"":""SCR inducement"",
+           ""description"":"""",""likely_causes"":[],""checks"":[],""severity"":""high"",
+           ""controller_id"":""cm2350"",""tags"":[]}]}");
+        // Title and key never name the SPN; only the body does, so it scores 0.
+        File.WriteAllText(Path.Combine(notes, "def.txt"), "Aftertreatment checklist\nIf SPN 5246 is active, check DEF quality first.");
+        File.WriteAllText(Path.Combine(notes, "other.txt"), "Belt tension\nNothing about that fault.");
+
+        var kb = new KbIndex();
+        kb.Load(root);
+        List<Hit> hits = kb.SpnHits(5246, 0, 3);
+        Eq("SPN lookup finds the code and the body-only note", hits.Count, 2);
+        Check("SPN code ranks above the body-only note",
+            hits.Count == 2 && hits[0].Kind == "CODE" && hits[1].Title == "Aftertreatment checklist",
+            "order: " + string.Join(" / ", Titles(hits)));
+        Eq("SPN lookup respects max", kb.SpnHits(5246, 0, 1).Count, 1);
+        Eq("SPN lookup with max 0 is empty", kb.SpnHits(5246, 0, 0).Count, 0);
+        string text = kb.SpnText(5246, 0);
+        Check("SPN text includes the note body",
+            text != null && text.IndexOf("check DEF quality first", StringComparison.Ordinal) >= 0, text ?? "(null)");
+        Eq("unrelated SPN finds nothing", kb.SpnHits(9999, 0, 3).Count, 0);
+
+        try { Directory.Delete(root, true); } catch { }
     }
 
     static string[] Titles(List<Hit> hits)
