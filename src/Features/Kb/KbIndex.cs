@@ -571,25 +571,20 @@ namespace TechBench
 
             // One row per entry, at the best score any query gave it. A body-only mention scores 0
             // and still counts, the same as it does on the Search tab.
-            var best = new Dictionary<string, Hit>();
-            var bestScore = new Dictionary<string, int>();
+            // Keyed by the Hit itself: two notes with the same first line are still two entries.
+            var bestScore = new Dictionary<Hit, int>();
+            var matches = new List<Hit>();
             foreach (string q in queries)
             {
                 foreach (Hit h in Matches(q.Trim().ToLowerInvariant(), "ALL"))
                 {
-                    string key = h.Kind + "\u0001" + h.Title;
                     int prev;
-                    if (bestScore.TryGetValue(key, out prev) && prev >= h.Score) continue;
-                    best[key] = h;
-                    bestScore[key] = h.Score;
+                    if (!bestScore.TryGetValue(h, out prev)) matches.Add(h);
+                    else if (prev >= h.Score) continue;
+                    bestScore[h] = h.Score;
                 }
             }
-            var matches = new List<Hit>();
-            foreach (KeyValuePair<string, Hit> kv in best)
-            {
-                kv.Value.Score = bestScore[kv.Key];
-                matches.Add(kv.Value);
-            }
+            foreach (Hit h in matches) h.Score = bestScore[h];
             Rank(matches);
             if (matches.Count > max) matches.RemoveRange(max, matches.Count - max);
             return matches;
