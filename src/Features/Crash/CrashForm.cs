@@ -61,7 +61,9 @@ namespace TechBench
             openLog.Enabled = logDir.Length > 0 && Directory.Exists(logDir);
             restart.Click += delegate
             {
-                try { Application.Restart(); }
+                // Not Application.Restart: a background crash shows this form on its own STA thread,
+                // and Restart closes the shell's forms from here. A fresh process needs no thread.
+                try { Process.Start(new ProcessStartInfo { FileName = Application.ExecutablePath, UseShellExecute = false }); }
                 catch { }
                 Environment.Exit(0);
             };

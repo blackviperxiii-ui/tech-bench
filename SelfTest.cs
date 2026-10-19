@@ -1266,13 +1266,17 @@ ProtocolDescription=ISO 15765
         // Title and key never name the SPN; only the body does, so it scores 0.
         File.WriteAllText(Path.Combine(notes, "def.txt"), "Aftertreatment checklist\nIf SPN 5246 is active, check DEF quality first.");
         File.WriteAllText(Path.Combine(notes, "other.txt"), "Belt tension\nNothing about that fault.");
+        // A second note with the same first line is its own entry, not a duplicate.
+        File.WriteAllText(Path.Combine(notes, "def2.txt"), "Aftertreatment checklist\nSPN 5246 came back after the doser swap.");
 
         var kb = new KbIndex();
         kb.Load(root);
         List<Hit> hits = kb.SpnHits(5246, 0, 3);
-        Eq("SPN lookup finds the code and the body-only note", hits.Count, 2);
-        Check("SPN code ranks above the body-only note",
-            hits.Count == 2 && hits[0].Kind == "CODE" && hits[1].Title == "Aftertreatment checklist",
+        Eq("SPN lookup finds the code and both body-only notes", hits.Count, 3);
+        Check("SPN code ranks above the body-only notes",
+            hits.Count == 3 && hits[0].Kind == "CODE"
+            && hits[1].Title == "Aftertreatment checklist" && hits[2].Title == "Aftertreatment checklist"
+            && hits[1].Path != hits[2].Path,
             "order: " + string.Join(" / ", Titles(hits)));
         Eq("SPN lookup respects max", kb.SpnHits(5246, 0, 1).Count, 1);
         Eq("SPN lookup with max 0 is empty", kb.SpnHits(5246, 0, 0).Count, 0);
