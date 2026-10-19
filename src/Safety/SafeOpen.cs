@@ -144,6 +144,9 @@ namespace TechBench
         }
 
         const int AssocStrExecutable = 2;
+        // ASSOCF_INIT_IGNOREUNKNOWN: an unregistered extension fails instead of answering with the
+        // "Open with" picker, so a size answer means a real app.
+        const int AssocfInitIgnoreUnknown = 0x400;
 
         [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern int AssocQueryString(
@@ -160,14 +163,21 @@ namespace TechBench
             if (string.IsNullOrEmpty(ext)) return false;
             ext = ext.TrimEnd(' ', '.');
             if (ext.Length == 0 || ext[0] != '.') return false;
-            uint length = 0;
-            // A size query (pszOut null) answers S_FALSE (1) with the length when an app is
-            // associated, so 1 is success here, not "no association".
-            int hr = AssocQueryString(0, AssocStrExecutable, ext, null, null, ref length);
+            uint length;
+            // A size query (pszOut null) is documented to answer S_FALSE (1) with the length, so 1
+            // is success here, not "no association".
+            int hr = ExecutableSizeQuery(ext, out length);
             if ((hr != 0 && hr != 1) || length == 0) return false;
             var sb = new StringBuilder((int)length + 1);
-            hr = AssocQueryString(0, AssocStrExecutable, ext, null, sb, ref length);
+            hr = AssocQueryString(AssocfInitIgnoreUnknown, AssocStrExecutable, ext, null, sb, ref length);
             return hr == 0 && sb.Length > 0;
+        }
+
+        /// <summary>Raw HRESULT of the size query, so SelfTest can log what this Windows answers.</summary>
+        internal static int ExecutableSizeQuery(string ext, out uint length)
+        {
+            length = 0;
+            return AssocQueryString(AssocfInitIgnoreUnknown, AssocStrExecutable, ext, null, null, ref length);
         }
 
         static void SplitStream(string path, out string file, out string stream)
