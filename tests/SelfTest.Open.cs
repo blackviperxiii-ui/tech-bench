@@ -57,6 +57,11 @@ static partial class SelfTest
             msg.IndexOf("won't open program or script files", StringComparison.Ordinal) >= 0
             && msg.IndexOf("Explorer", StringComparison.Ordinal) >= 0, msg);
         // shlwapi answers a size query with S_FALSE; reading that as "no app" refused every document.
+        uint txtLen, unkLen;
+        int txtHr = SafeOpen.ExecutableSizeQuery(".txt", out txtLen);
+        int unkHr = SafeOpen.ExecutableSizeQuery(".tbzqx9", out unkLen);
+        Console.WriteLine("  assoc size query: .txt hr=0x" + txtHr.ToString("X8") + " len=" + txtLen
+            + "  .tbzqx9 hr=0x" + unkHr.ToString("X8") + " len=" + unkLen);
         Check("txt has an associated app", SafeOpen.HasExecutableAssociation(@"C:\kb\notes.txt"), ".txt");
         Check("unknown extension has no app", !SafeOpen.HasExecutableAssociation("x.tbzqx9"), ".tbzqx9");
         Check("no extension has no app", !SafeOpen.HasExecutableAssociation("README"), "README");
