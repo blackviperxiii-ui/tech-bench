@@ -95,29 +95,19 @@ namespace TechBench
                 + "Details were saved on this PC only. Nothing was sent over the network."
                 + (path == null ? "" : "\n\nLog file:\n" + path);
 
-            Action show = delegate
-            {
-                using (var form = new CrashForm(message, clip, path))
-                    form.ShowDialog();
-            };
-
+            // The dialog says the app is closing, so it does: Restart exits from inside the form, and
+            // closing it any other way ends the process here. CatchException mode would otherwise let a
+            // UI-thread fault keep running in a bad state.
             try
             {
-                if (Application.MessageLoop)
+                CrashForm.RunOnSta(delegate
                 {
-                    Form host = Form.ActiveForm;
-                    if (host != null && host.InvokeRequired)
-                        host.Invoke(show);
-                    else
-                        show();
-                }
-                else
-                    show();
+                    using (var form = new CrashForm(message, clip, path))
+                        form.ShowDialog();
+                });
             }
-            catch
-            {
-                try { show(); } catch { }
-            }
+            catch { }
+            Environment.Exit(1);
         }
     }
 }

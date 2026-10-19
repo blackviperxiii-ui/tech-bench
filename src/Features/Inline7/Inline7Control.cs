@@ -87,12 +87,6 @@ namespace J1939Reader
             return JobReport.Text(BuildReportData());
         }
 
-        /// <summary>True when startup restored prefs because the saved adapter id is still installed.</summary>
-        public bool AdapterPrefsMatched
-        {
-            get { return _adapterPrefsMatched; }
-        }
-
         public string CurrentAdapterId()
         {
             Rp1210Api api = SelectedAdapter();

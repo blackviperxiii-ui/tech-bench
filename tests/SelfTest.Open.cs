@@ -56,6 +56,10 @@ static partial class SelfTest
         Check("block message explains the refusal",
             msg.IndexOf("won't open program or script files", StringComparison.Ordinal) >= 0
             && msg.IndexOf("Explorer", StringComparison.Ordinal) >= 0, msg);
+        // shlwapi answers a size query with S_FALSE; reading that as "no app" refused every document.
+        Check("txt has an associated app", SafeOpen.HasExecutableAssociation(@"C:\kb\notes.txt"), ".txt");
+        Check("unknown extension has no app", !SafeOpen.HasExecutableAssociation("x.tbzqx9"), ".tbzqx9");
+        Check("no extension has no app", !SafeOpen.HasExecutableAssociation("README"), "README");
         Check("block message survives a null path",
             LaunchPolicy.BlockedLaunchMessage(null).IndexOf("won't open", StringComparison.Ordinal) >= 0, "null msg");
 

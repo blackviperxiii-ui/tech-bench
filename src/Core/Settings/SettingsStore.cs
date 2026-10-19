@@ -74,7 +74,11 @@ namespace TechBench
                 return cur.Customer ?? "";
             }
             AppSettings disk = AppSettings.Load();
-            disk.Customer = (customer ?? "").Trim();
+            string next = (customer ?? "").Trim();
+            // The job strip pushes the header on every keystroke in Model and Serial too; only a
+            // changed customer is worth a temp, replace and .bak cycle.
+            if (string.Equals(disk.Customer ?? "", next, StringComparison.Ordinal)) return next;
+            disk.Customer = next;
             string path = AppSettings.PathOverride ?? AppSettings.PathName();
             disk.SaveTo(path);
             return disk.Customer;

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace TechBench
@@ -108,6 +109,30 @@ namespace TechBench
                 MessageBox.Show(this, "Could not open the log folder: " + ex.Message,
                     Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        /// <summary>
+        /// Runs <paramref name="action"/> on an STA thread and waits for it. A background-thread crash
+        /// arrives on an MTA or pool thread, where WinForms dialogs and the clipboard do not work.
+        /// </summary>
+        internal static void RunOnSta(Action action)
+        {
+            if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+            {
+                action();
+                return;
+            }
+            Exception failed = null;
+            var t = new Thread(delegate()
+            {
+                try { action(); }
+                catch (Exception ex) { failed = ex; }
+            });
+            t.SetApartmentState(ApartmentState.STA);
+            t.IsBackground = false;
+            t.Start();
+            t.Join();
+            if (failed != null) throw failed;
         }
 
         /// <summary>Append a crash record next to the exe (local only; no network).</summary>
