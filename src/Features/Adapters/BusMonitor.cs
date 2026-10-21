@@ -141,7 +141,8 @@ namespace J1939Reader
             if (active)
             {
                 m.Active.Clear();
-                m.Red = m.Amber = m.Protect = m.Mil = false;
+                // Leave lamp bits until a fresh DM1 arrives. Clearing them made the HUD look
+                // briefly "healthy silent" after an ACK with no new DM1 yet.
                 m.Timeline.Update(m.Active, now, sa == _engineSa ? Rpm : double.NaN);
             }
             if (previous) m.Prev.Clear();

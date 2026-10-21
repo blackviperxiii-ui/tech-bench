@@ -66,14 +66,16 @@ namespace TechBench
         {
             var list = new List<UserCode>();
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return list;
-            // Do not swallow parse failures: a failed load that looks empty would let Save
-            // overwrite a full shop file with a single new entry.
+            // Do not swallow parse failures or treat a wrong-shaped file as empty: either would let
+            // Upsert+Save rewrite a full shop file from a single new entry.
             var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
             var root = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
             object codes;
-            if (root == null || !root.TryGetValue("codes", out codes)) return list;
+            if (root == null || !root.TryGetValue("codes", out codes) || codes == null)
+                throw new InvalidDataException("user-codes.json is missing a codes array: " + path);
             var arr = codes as ArrayList;
-            if (arr == null) return list;
+            if (arr == null)
+                throw new InvalidDataException("user-codes.json codes value is not an array: " + path);
             foreach (object item in arr)
             {
                 var d = item as Dictionary<string, object>;
@@ -140,15 +142,8 @@ namespace TechBench
 
         public static void SaveTo(string path, List<UserCode> codes)
         {
-            string dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            // Keep a single rolling backup: this file is hand-editable and losing it loses shop knowledge.
-            try
-            {
-                if (File.Exists(path)) File.Copy(path, path + ".bak", true);
-            }
-            catch { }
-            File.WriteAllText(path, ToJson(codes), new UTF8Encoding(false));
+            // Atomic temp→replace keeps path.bak (same helper as work orders / settings).
+            WorkOrderStore.AtomicWriteText(path, ToJson(codes), new UTF8Encoding(false));
         }
 
         /// <summary>Indented output because this file is meant to stay hand-editable.</summary>

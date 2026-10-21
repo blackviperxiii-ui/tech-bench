@@ -126,6 +126,7 @@ namespace J1939Reader
         volatile bool _wantConnected;
         volatile bool _autoReconnect = true;
         volatile bool _autoRefresh = true;
+        volatile bool _allowTscHold;
         volatile int _tscRpm;
         volatile int _viewSa = -1;
         volatile bool _busy;
@@ -144,6 +145,8 @@ namespace J1939Reader
 
         public bool AutoReconnect { get { return _autoReconnect; } set { _autoReconnect = value; } }
         public bool AutoRefresh { get { return _autoRefresh; } set { _autoRefresh = value; } }
+        /// <summary>UI Safety toggle. TSC1 holds (rpm &gt; 0) are refused while false.</summary>
+        public bool AllowTscHold { get { return _allowTscHold; } set { _allowTscHold = value; } }
         public bool WantConnected { get { return _wantConnected; } }
 
         /// <summary>Which module's DM1/DM2 the UI is showing; -1 follows the engine.</summary>
@@ -226,7 +229,13 @@ namespace J1939Reader
 
         public void SetTsc1(int rpm)
         {
-            _tscRpm = rpm < 0 ? 0 : rpm;
+            int next = rpm < 0 ? 0 : rpm;
+            if (next > 0 && !_allowTscHold)
+            {
+                next = 0;
+                Log("TSC1 refused — Safety toggle is off");
+            }
+            _tscRpm = next;
             Enqueue(new BusCommand(BusCmdKind.SetTsc1, _tscRpm));
         }
 
@@ -302,6 +311,13 @@ namespace J1939Reader
         /// </summary>
         void ServiceBus(DateTime now)
         {
+            if (_tscRpm > 0 && !_allowTscHold)
+            {
+                _tscRpm = 0;
+                try { _rp.SendTsc1(0, EngineSaLocked()); }
+                catch { }
+                Log("TSC1 released — Safety toggle is off");
+            }
             if (_tscRpm > 0 && (now - _lastTsc).TotalMilliseconds >= TscHeartbeatMs)
             {
                 _lastTsc = now;
@@ -423,10 +439,19 @@ namespace J1939Reader
                     Log("Pinged ECM for VIN / software / component / hours / DM1");
                     break;
                 case BusCmdKind.SetTsc1:
-                    _rp.SendTsc1(c.Arg, EngineSaLocked());
-                    Log(c.Arg <= 0
-                        ? "TSC1 release — ECM has its own throttle back"
-                        : "TSC1 request " + c.Arg + " RPM (heartbeat while held)");
+                    {
+                        int tscArg = c.Arg;
+                        if (tscArg > 0 && !_allowTscHold)
+                        {
+                            tscArg = 0;
+                            _tscRpm = 0;
+                            Log("TSC1 refused — Safety toggle is off");
+                        }
+                        _rp.SendTsc1(tscArg, EngineSaLocked());
+                        Log(tscArg <= 0
+                            ? "TSC1 release — ECM has its own throttle back"
+                            : "TSC1 request " + tscArg + " RPM (heartbeat while held)");
+                    }
                     break;
                 case BusCmdKind.Dm13:
                     _rp.SendDm13(c.Flag);

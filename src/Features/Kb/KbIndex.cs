@@ -302,18 +302,96 @@ namespace TechBench
                 string mfg = S(Get(d, "manufacturer"));
                 string ctl = S(Get(d, "controller"));
                 string local = S(Get(d, "local_path"));
+                string filename = S(Get(d, "filename"));
+                // Only expose an openable Path when it resolves under the KB tree.
+                string openPath = ResolveDocumentPath(Root, local, filename);
                 Add(new Hit
                 {
                     Kind = "MANUAL",
                     Title = title,
                     Subtitle = mfg + (ctl.Length > 0 ? "  ·  " + ctl : ""),
                     Body = local,
-                    Path = local,
-                    Hay = (title + " " + mfg + " " + ctl + " " + S(Get(d, "filename")) + " " + S(Get(d, "category"))).ToLowerInvariant()
+                    Path = openPath ?? "",
+                    Hay = (title + " " + mfg + " " + ctl + " " + filename + " " + S(Get(d, "category"))).ToLowerInvariant()
                 }, title);
                 n++;
             }
             return n;
+        }
+
+        /// <summary>
+        /// Resolve a KB document path that is allowed to open. Absolute paths outside the KB
+        /// root are refused (Body may still show the recorded path). Relative paths and
+        /// basename lookups under the KB (and kb/manuals/) are accepted when present.
+        /// </summary>
+        public static string ResolveDocumentPath(string kbRoot, string localPath, string filename)
+        {
+            string under = PathUnderRoot(kbRoot, localPath);
+            if (under != null) return under;
+            string name = Path.GetFileName(string.IsNullOrWhiteSpace(filename) ? localPath : filename);
+            if (string.IsNullOrEmpty(name)) return null;
+            under = PathUnderRoot(kbRoot, name);
+            if (under != null && File.Exists(under)) return under;
+            under = PathUnderRoot(kbRoot, Path.Combine("manuals", name));
+            if (under != null && File.Exists(under)) return under;
+            return null;
+        }
+
+        /// <summary>True when path resolves under kbRoot (or equals it).</summary>
+        public static bool IsPathUnderRoot(string kbRoot, string path)
+        {
+            return PathUnderRoot(kbRoot, path) != null;
+        }
+
+        static string PathUnderRoot(string kbRoot, string path)
+        {
+            if (string.IsNullOrWhiteSpace(kbRoot) || string.IsNullOrWhiteSpace(path)) return null;
+            string rootFull = GetFullPathSafe(kbRoot);
+            if (rootFull == null) return null;
+            string candidate;
+            try
+            {
+                if (IsAbsolutePath(path))
+                {
+                    // Drive/UNC paths must not be joined onto the KB root (Mono on Linux
+                    // treats "C:\..." as relative).
+                    candidate = GetFullPathSafe(path);
+                    if (candidate == null) return null;
+                }
+                else
+                    candidate = Path.GetFullPath(Path.Combine(rootFull, path));
+            }
+            catch
+            {
+                return null;
+            }
+            string prefix = rootFull.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? rootFull
+                : rootFull + Path.DirectorySeparatorChar;
+            if (!candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(candidate, rootFull, StringComparison.OrdinalIgnoreCase))
+                return null;
+            return candidate;
+        }
+
+        /// <summary>True for rooted paths, Windows drive paths, and UNC — even under Mono on Linux.</summary>
+        internal static bool IsAbsolutePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            if (Path.IsPathRooted(path)) return true;
+            string p = path.Trim();
+            if (p.Length >= 3 && char.IsLetter(p[0]) && p[1] == ':'
+                && (p[2] == '\\' || p[2] == '/'))
+                return true;
+            if (p.StartsWith(@"\\", StringComparison.Ordinal) || p.StartsWith("//", StringComparison.Ordinal))
+                return true;
+            return false;
+        }
+
+        static string GetFullPathSafe(string path)
+        {
+            try { return Path.GetFullPath(path); }
+            catch { return null; }
         }
 
         int LoadFilters(JavaScriptSerializer ser, string path)

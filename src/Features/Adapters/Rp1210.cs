@@ -349,10 +349,13 @@ namespace J1939Reader
             if (!IsConnected) return false;
             if (_command == null)
             {
-                // No SendCommand export: announce the address by hand and hope the driver lets it send.
-                SendRaw(J1939Clear.Rp1210Message(0xEE00, 255, ToolName, 6));
-                ClaimStatus = "Driver has no RP1210_SendCommand; announced SA " + OurSa + " by hand.";
-                return true;
+                // No Protect_J1939_Address without SendCommand — do not pretend the claim succeeded.
+                // Callers treat true as "address protected"; a hand announce is not a claim.
+                try { SendRaw(J1939Clear.Rp1210Message(0xEE00, 255, ToolName, 6)); }
+                catch { }
+                ClaimStatus = "Address claim for SA " + OurSa
+                    + " FAILED: driver has no RP1210_SendCommand (announced by hand; not protected).";
+                return false;
             }
             byte[] cmd = new byte[10];
             cmd[0] = OurSa;

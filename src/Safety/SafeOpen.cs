@@ -16,7 +16,8 @@ namespace TechBench
             ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
             ".hta", ".cpl", ".reg", ".lnk", ".jar",
             ".appref-ms", ".application", ".gadget", ".msc", ".psc1", ".scf",
-            ".url", ".vb", ".ws", ".inf", ".dll", ".sys"
+            ".url", ".vb", ".ws", ".inf", ".dll", ".sys",
+            ".chm", ".docm", ".xlsm", ".pptm", ".dotm", ".xltm", ".ppsm"
         };
 
         /// <summary>True when this path must not be passed to shell execute. Null and empty are not launched.</summary>

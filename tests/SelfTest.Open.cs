@@ -20,7 +20,8 @@ static partial class SelfTest
             ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
             ".hta", ".cpl", ".reg", ".lnk", ".jar",
             ".appref-ms", ".application", ".gadget", ".msc", ".psc1", ".scf",
-            ".url", ".vb", ".ws", ".inf", ".dll", ".sys"
+            ".url", ".vb", ".ws", ".inf", ".dll", ".sys",
+            ".chm", ".docm", ".xlsm", ".pptm", ".dotm", ".xltm", ".ppsm"
         };
         for (int i = 0; i < blocked.Length; i++)
         {
@@ -74,6 +75,35 @@ static partial class SelfTest
         string kbSrc = File.Exists(kbPath) ? File.ReadAllText(kbPath) : "";
         Check("LaunchPolicy delegates to SafeOpen",
             kbSrc.IndexOf("SafeOpen.IsBlockedLaunchPath", StringComparison.Ordinal) >= 0, "KbIndex");
+        Check("KbIndex resolves manuals under root only",
+            kbSrc.IndexOf("ResolveDocumentPath", StringComparison.Ordinal) >= 0
+            && kbSrc.IndexOf("IsPathUnderRoot", StringComparison.Ordinal) >= 0, "KbIndex resolve");
+
+        string kb = Path.Combine(Path.GetTempPath(), "tb-kb-doc-" + Guid.NewGuid().ToString("N"));
+        string outsideDir = Path.Combine(Path.GetTempPath(), "tb-kb-out-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(kb, "manuals"));
+        Directory.CreateDirectory(outsideDir);
+        string inside = Path.Combine(kb, "manuals", "unit.pdf");
+        File.WriteAllText(inside, "pdf");
+        Eq("relative manual under KB resolves",
+            KbIndex.ResolveDocumentPath(kb, "manuals/unit.pdf", "unit.pdf"),
+            Path.GetFullPath(inside));
+        string outside = Path.Combine(outsideDir, "secret.pdf");
+        File.WriteAllText(outside, "x");
+        Check("absolute path outside KB refused",
+            KbIndex.ResolveDocumentPath(kb, outside, "secret.pdf") == null, "outside");
+        Check("Windows drive path is treated as absolute",
+            KbIndex.IsAbsolutePath(@"C:\Users\other\secret.pdf"), "drive");
+        Check("Windows drive path outside KB refused",
+            KbIndex.ResolveDocumentPath(kb, @"C:\Users\other\secret.pdf", "nope.pdf") == null, "drive outside");
+        File.WriteAllText(Path.Combine(kb, "secret.pdf"), "x");
+        Eq("basename under KB root resolves when present",
+            KbIndex.ResolveDocumentPath(kb, outside, "secret.pdf"),
+            Path.GetFullPath(Path.Combine(kb, "secret.pdf")));
+        Check("IsPathUnderRoot rejects escape",
+            !KbIndex.IsPathUnderRoot(kb, Path.Combine(kb, "..", "escape.pdf")), "escape");
+        try { Directory.Delete(kb, true); } catch { }
+        try { Directory.Delete(outsideDir, true); } catch { }
     }
 
     static void ManifestVersionTests()
