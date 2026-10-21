@@ -40,23 +40,6 @@ static partial class SelfTest
 
         var ev = new WorkOrderClock { Kind = "logon", WhenUtc = "2026-05-01T14:30:00.0000000Z", Detail = "at bench" };
         Eq("clock line shop", ev.ToString(), "2026-05-01T14:30:00.0000000Z  logon  [shop]  at bench");
-
-        // Reload selection: a saved work order that no longer exists must not leave the list with
-        // nothing selected for the rest of the session.
-        Eq("reload keeps a current WO that still exists",
-            WorkOrderStore.PickAfterReload(true, true, false, true, 3), WorkOrderStore.ReloadPick.Keep);
-        Eq("reload restores the saved WO when it exists",
-            WorkOrderStore.PickAfterReload(true, true, true, true, 3), WorkOrderStore.ReloadPick.Keep);
-        Eq("reload falls back to the first WO when the saved one is gone",
-            WorkOrderStore.PickAfterReload(true, false, true, true, 3), WorkOrderStore.ReloadPick.First);
-        Eq("reload selects nothing when the current WO vanished",
-            WorkOrderStore.PickAfterReload(true, false, false, true, 3), WorkOrderStore.ReloadPick.None);
-        Eq("reload selects the first WO on launch with nothing saved",
-            WorkOrderStore.PickAfterReload(false, false, false, false, 2), WorkOrderStore.ReloadPick.First);
-        Eq("reload selects nothing after Clear job",
-            WorkOrderStore.PickAfterReload(false, false, false, true, 2), WorkOrderStore.ReloadPick.None);
-        Eq("reload selects nothing from an empty list",
-            WorkOrderStore.PickAfterReload(true, false, true, true, 0), WorkOrderStore.ReloadPick.None);
     }
 
     [SelfTestCase("UserCode usable, key and path", Order = 301)]

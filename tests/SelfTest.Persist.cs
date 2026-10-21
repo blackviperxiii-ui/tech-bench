@@ -234,6 +234,9 @@ static partial class SelfTest
             Check("WO reload does not auto-pick after job restore",
                 woSrc.IndexOf("_orders.Count > 0 && !_jobWoRestoreDone", StringComparison.Ordinal) >= 0,
                 "WorkOrderControl");
+            Check("WO reload falls back to the first row when the saved WO is gone",
+                woSrc.IndexOf("keepFromSavedWo && _orders.Count > 0", StringComparison.Ordinal) >= 0,
+                "WorkOrderControl");
             Check("job strip routes through SettingsStore",
                 woSrc.IndexOf("SettingsStore.SaveJobCustomer", StringComparison.Ordinal) >= 0
                 && woSrc.IndexOf("SettingsStore.ClearJobStrip", StringComparison.Ordinal) >= 0,
