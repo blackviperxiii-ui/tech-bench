@@ -1,6 +1,7 @@
 // Offline checks for crash log writing (TB1d).
 using System;
 using System.IO;
+using System.Threading;
 using TechBench;
 
 static partial class SelfTest
@@ -32,6 +33,21 @@ static partial class SelfTest
             int exit = program.IndexOf("Environment.Exit(1)", StringComparison.Ordinal);
             Check("Crash handler exits after the dialog returns",
                 show >= 0 && exit > show, "Program.Crash");
+
+            // A background-thread crash lands on an MTA thread; the dialog and clipboard need STA.
+            string seen = "not run";
+            string thrown = "none";
+            var mta = new Thread(delegate()
+            {
+                CrashForm.RunOnSta(delegate { seen = Thread.CurrentThread.GetApartmentState().ToString(); });
+                try { CrashForm.RunOnSta(delegate { throw new InvalidOperationException("sta marker"); }); }
+                catch (InvalidOperationException e) { thrown = e.Message; }
+            });
+            mta.SetApartmentState(ApartmentState.MTA);
+            mta.Start();
+            mta.Join();
+            Eq("crash dialog runs on STA from an MTA thread", seen, "STA");
+            Eq("crash dialog failure reaches the caller", thrown, "sta marker");
         }
         finally
         {

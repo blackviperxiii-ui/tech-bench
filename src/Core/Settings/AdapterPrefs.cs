@@ -88,11 +88,15 @@ namespace TechBench
             SettingsStore.WriteText(path, ser.Serialize(data));
         }
 
-        /// <summary>Merges non-null fields into the on-disk prefs file.</summary>
+        /// <summary>
+        /// Merges the given fields into the on-disk prefs file. A null or empty adapter id leaves the
+        /// saved one alone: a page switch on a PC with no RP1210 adapter installed must not wipe the
+        /// id the INLINE 7 inner page restores against when the adapter is back.
+        /// </summary>
         public static void Merge(string adapterId, int? shellPage, int? innerPage)
         {
             AdapterPrefsData d = Load();
-            if (adapterId != null) d.AdapterId = adapterId;
+            if (!string.IsNullOrEmpty(adapterId)) d.AdapterId = adapterId;
             if (shellPage.HasValue) d.ShellPage = ClampShell(shellPage.Value);
             if (innerPage.HasValue) d.InnerPage = ClampInner(innerPage.Value);
             Save(d);
