@@ -75,7 +75,11 @@ namespace TechBench
                 return cur.Customer ?? "";
             }
             AppSettings disk = AppSettings.Load();
-            disk.Customer = (customer ?? "").Trim();
+            string next = (customer ?? "").Trim();
+            // The job strip pushes the header on every keystroke in Model and Serial too; only a
+            // changed customer is worth a temp, replace and .bak cycle.
+            if (string.Equals(disk.Customer ?? "", next, StringComparison.Ordinal)) return next;
+            disk.Customer = next;
             string path = AppSettings.PathOverride ?? AppSettings.PathName();
             disk.SaveTo(path);
             return disk.Customer;
@@ -107,7 +111,7 @@ namespace TechBench
             disk.SaveTo(path);
         }
 
-        /// <summary>Merge adapter prefs fields and persist (null adapterId means leave unchanged).</summary>
+        /// <summary>Merge adapter prefs fields and persist (null or empty adapterId means leave unchanged).</summary>
         public static void MergeAdapterPrefs(string adapterId, int? shellPage, int? innerPage)
         {
             AdapterPrefs.Merge(adapterId, shellPage, innerPage);

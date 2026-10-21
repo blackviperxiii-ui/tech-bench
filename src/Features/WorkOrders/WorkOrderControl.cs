@@ -219,12 +219,31 @@ namespace TechBench
             }
         }
 
+        /// <summary>Which row Reload selects once the list is rebuilt.</summary>
+        internal enum ReloadPick { Keep, First, None }
+
+        /// <summary>
+        /// Pure selection rule for <see cref="Reload"/>. A kept key that still exists wins. With rows
+        /// on hand, a launch with nothing saved selects the first row, and so does a saved work order
+        /// that is gone (deleted or on another share). A current work order that vanished, or a list
+        /// after Clear job, selects nothing.
+        /// </summary>
+        internal static ReloadPick PickAfterReload(bool keepSet, bool keepFound, bool keepFromSavedWo, bool restoreDone, int count)
+        {
+            if (keepSet && keepFound) return ReloadPick.Keep;
+            if (count == 0) return ReloadPick.None;
+            if (keepSet) return keepFromSavedWo ? ReloadPick.First : ReloadPick.None;
+            return restoreDone ? ReloadPick.None : ReloadPick.First;
+        }
+
         public void Reload(bool fromDisk)
         {
             string keep = _current == null ? "" : _current.Key();
+            bool keepFromSavedWo = false;
             if (keep.Length == 0 && !_jobWoRestoreDone && !string.IsNullOrWhiteSpace(_appSettings.LastWo))
             {
                 keep = _appSettings.LastWo.Trim();
+                keepFromSavedWo = true;
                 _jobWoRestoreDone = true;
             }
             if (fromDisk) _settings = ShopSettings.Load();
@@ -234,24 +253,21 @@ namespace TechBench
             _list.Items.Clear();
             foreach (WorkOrder wo in _orders) _list.Items.Add(wo.ListLabel());
             _list.EndUpdate();
-            if (keep.Length > 0)
+            bool keepFound = keep.Length > 0 && AppSettings.MatchWorkOrderKey(_orders, keep).Length > 0;
+            switch (PickAfterReload(keep.Length > 0, keepFound, keepFromSavedWo, _jobWoRestoreDone, _orders.Count))
             {
-                if (AppSettings.MatchWorkOrderKey(_orders, keep).Length == 0)
-                {
+                case ReloadPick.Keep:
+                    TrySelectKey(keep);
+                    break;
+                case ReloadPick.First:
+                    _list.SelectedIndex = 0;
+                    break;
+                default:
                     _list.SelectedIndex = -1;
                     _current = null;
                     ClearFields();
                     RaiseChanged();
-                }
-                else
-                    TrySelectKey(keep);
-            }
-            else if (_orders.Count > 0 && !_jobWoRestoreDone) _list.SelectedIndex = 0;
-            else
-            {
-                _current = null;
-                ClearFields();
-                RaiseChanged();
+                    break;
             }
             PaintStatus();
         }
