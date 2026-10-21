@@ -222,9 +222,11 @@ namespace TechBench
         public void Reload(bool fromDisk)
         {
             string keep = _current == null ? "" : _current.Key();
+            bool keepFromSavedWo = false;
             if (keep.Length == 0 && !_jobWoRestoreDone && !string.IsNullOrWhiteSpace(_appSettings.LastWo))
             {
                 keep = _appSettings.LastWo.Trim();
+                keepFromSavedWo = true;
                 _jobWoRestoreDone = true;
             }
             if (fromDisk) _settings = ShopSettings.Load();
@@ -234,21 +236,18 @@ namespace TechBench
             _list.Items.Clear();
             foreach (WorkOrder wo in _orders) _list.Items.Add(wo.ListLabel());
             _list.EndUpdate();
-            if (keep.Length > 0)
-            {
-                if (AppSettings.MatchWorkOrderKey(_orders, keep).Length == 0)
-                {
-                    _list.SelectedIndex = -1;
-                    _current = null;
-                    ClearFields();
-                    RaiseChanged();
-                }
-                else
-                    TrySelectKey(keep);
-            }
-            else if (_orders.Count > 0 && !_jobWoRestoreDone) _list.SelectedIndex = 0;
+            bool keepFound = keep.Length > 0 && AppSettings.MatchWorkOrderKey(_orders, keep).Length > 0;
+            if (keepFound)
+                TrySelectKey(keep);
+            // The saved work order is gone (deleted, or on another share): behave like a launch with
+            // nothing saved and pick the first row, instead of leaving the list unselected for good.
+            else if (keepFromSavedWo && _orders.Count > 0)
+                _list.SelectedIndex = 0;
+            else if (keep.Length == 0 && _orders.Count > 0 && !_jobWoRestoreDone)
+                _list.SelectedIndex = 0;
             else
             {
+                _list.SelectedIndex = -1;
                 _current = null;
                 ClearFields();
                 RaiseChanged();

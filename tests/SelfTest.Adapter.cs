@@ -73,6 +73,13 @@ static partial class SelfTest
             Eq("merge shell", merged.ShellPage, 3);
             Eq("merge inner", merged.InnerPage, 1);
 
+            // Page switch with no adapter installed: the shell passes "" and the saved id must survive.
+            AdapterPrefs.Merge("", 1, 2);
+            AdapterPrefsData noAdapter = AdapterPrefs.Load();
+            Eq("empty adapter id keeps the saved id", noAdapter.AdapterId, "OTHER");
+            Eq("empty adapter id still merges shell page", noAdapter.ShellPage, 1);
+            Eq("empty adapter id still merges inner page", noAdapter.InnerPage, 2);
+
             Check("exact adapter match", AdapterPrefs.SavedAdapterMatches("CMNSI7", "CMNSI7"), "no");
             Check("case-insensitive adapter match", AdapterPrefs.SavedAdapterMatches("cmnsi7", "CMNSI7"), "no");
             Check("empty saved id does not match", !AdapterPrefs.SavedAdapterMatches("", "CMNSI7"), "matched");

@@ -177,6 +177,14 @@ static partial class SelfTest
             // SettingsStore owns job-strip + adapter merge routing.
             Eq("SettingsStore.SaveJobCustomer", SettingsStore.SaveJobCustomer("Gamma LLC"), "Gamma LLC");
             Eq("job customer on disk via store", AppSettings.Load().Customer, "Gamma LLC");
+            // Typing in Model or Serial re-pushes the same customer; that must not rewrite settings.json.
+            File.Delete(settingsPath + ".bak");
+            Eq("same customer again returns it", SettingsStore.SaveJobCustomer(" Gamma LLC "), "Gamma LLC");
+            Check("same customer does not rewrite settings.json", !File.Exists(settingsPath + ".bak"), settingsPath + ".bak");
+            SettingsStore.SaveJobCustomer("Gamma Two");
+            Eq("changed customer still writes", AppSettings.Load().Customer, "Gamma Two");
+            Check("changed customer write keeps .bak", File.Exists(settingsPath + ".bak"), settingsPath + ".bak");
+            SettingsStore.SaveJobCustomer("Gamma LLC");
             Eq("SettingsStore.SaveJobWorkOrder", SettingsStore.SaveJobWorkOrder("99-01"), "99-01");
             Eq("last wo on disk via store", AppSettings.Load().LastWo, "99-01");
             SettingsStore.ClearJobStrip();
@@ -201,6 +209,9 @@ static partial class SelfTest
                 shellSrc.IndexOf("ShowPage(0, false)", StringComparison.Ordinal) >= 0
                 && shellSrc.IndexOf("ShowPage(shell, false)", StringComparison.Ordinal) >= 0,
                 "ShellForm missing persistShellPage:false on startup");
+            Check("shell page restore does not wait on an adapter match",
+                shellSrc.IndexOf("AdapterPrefsMatched", StringComparison.Ordinal) < 0,
+                "ShellForm gates the shell page on the RP1210 adapter");
             Check("shell wraps job fill with write gate",
                 shellSrc.IndexOf("SettingsWriteGate.BeginLoad()", StringComparison.Ordinal) >= 0
                 && shellSrc.IndexOf("_filling = true", StringComparison.Ordinal) >= 0,
@@ -222,6 +233,9 @@ static partial class SelfTest
             string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Features", "WorkOrders", "WorkOrderControl.cs"));
             Check("WO reload does not auto-pick after job restore",
                 woSrc.IndexOf("_orders.Count > 0 && !_jobWoRestoreDone", StringComparison.Ordinal) >= 0,
+                "WorkOrderControl");
+            Check("WO reload falls back to the first row when the saved WO is gone",
+                woSrc.IndexOf("keepFromSavedWo && _orders.Count > 0", StringComparison.Ordinal) >= 0,
                 "WorkOrderControl");
             Check("job strip routes through SettingsStore",
                 woSrc.IndexOf("SettingsStore.SaveJobCustomer", StringComparison.Ordinal) >= 0

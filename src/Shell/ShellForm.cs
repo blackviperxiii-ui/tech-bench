@@ -194,11 +194,10 @@ namespace TechBench
             try
             {
                 ShowPage(0, false);
-                if (_inline.AdapterPrefsMatched)
-                {
-                    int shell = AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage);
-                    if (shell != 0) ShowPage(shell, false);
-                }
+                // The shell page has nothing to do with the adapter, so it restores on a PC without
+                // one too. Only the INLINE 7 inner page waits for the saved adapter to match.
+                int shell = AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage);
+                if (shell != 0) ShowPage(shell, false);
             }
             finally { SettingsWriteGate.EndLoad(); }
 
