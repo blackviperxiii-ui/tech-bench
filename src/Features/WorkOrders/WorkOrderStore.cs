@@ -13,6 +13,23 @@ namespace TechBench
     /// </summary>
     public static class WorkOrderStore
     {
+        /// <summary>Which row the work-order list selects once it is rebuilt.</summary>
+        public enum ReloadPick { Keep, First, None }
+
+        /// <summary>
+        /// Pure selection rule for the work-order list reload. A kept key that still exists wins.
+        /// With rows on hand, a launch with nothing saved selects the first row, and so does a saved
+        /// work order that is gone (deleted or on another share). A current work order that vanished,
+        /// or a list after Clear job, selects nothing.
+        /// </summary>
+        public static ReloadPick PickAfterReload(bool keepSet, bool keepFound, bool keepFromSavedWo, bool restoreDone, int count)
+        {
+            if (keepSet && keepFound) return ReloadPick.Keep;
+            if (count == 0) return ReloadPick.None;
+            if (keepSet) return keepFromSavedWo ? ReloadPick.First : ReloadPick.None;
+            return restoreDone ? ReloadPick.None : ReloadPick.First;
+        }
+
         public const string ShopRel = "data\\shop";
         public const string SharedTech = "_shared";
         public const string WoRel = "work-orders";
