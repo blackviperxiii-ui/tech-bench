@@ -237,20 +237,20 @@ namespace TechBench
             foreach (WorkOrder wo in _orders) _list.Items.Add(wo.ListLabel());
             _list.EndUpdate();
             bool keepFound = keep.Length > 0 && AppSettings.MatchWorkOrderKey(_orders, keep).Length > 0;
-            switch (WorkOrderStore.PickAfterReload(keep.Length > 0, keepFound, keepFromSavedWo, _jobWoRestoreDone, _orders.Count))
+            if (keepFound)
+                TrySelectKey(keep);
+            // The saved work order is gone (deleted, or on another share): behave like a launch with
+            // nothing saved and pick the first row, instead of leaving the list unselected for good.
+            else if (keepFromSavedWo && _orders.Count > 0)
+                _list.SelectedIndex = 0;
+            else if (keep.Length == 0 && _orders.Count > 0 && !_jobWoRestoreDone)
+                _list.SelectedIndex = 0;
+            else
             {
-                case WorkOrderStore.ReloadPick.Keep:
-                    TrySelectKey(keep);
-                    break;
-                case WorkOrderStore.ReloadPick.First:
-                    _list.SelectedIndex = 0;
-                    break;
-                default:
-                    _list.SelectedIndex = -1;
-                    _current = null;
-                    ClearFields();
-                    RaiseChanged();
-                    break;
+                _list.SelectedIndex = -1;
+                _current = null;
+                ClearFields();
+                RaiseChanged();
             }
             PaintStatus();
         }
