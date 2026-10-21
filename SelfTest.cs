@@ -296,6 +296,16 @@ ProtocolDescription=ISO 15765
         Eq("boundary-spanning FMI", bamMon.Engine.Active[1].Fmi, 9);
 
         Check("null frame ignored", !bamMon.Feed(null, t), "accepted");
+
+        // MarkCleared empties the list but must not blank lamps (HUD "healthy silent").
+        var lamps = new BusMonitor();
+        lamps.Feed(F(0xF004, 0, 0, 0, 0, 0x00, 0x19, 0, 0, 0), t);
+        lamps.Feed(F(0xFECA, 0, 0x10, 0xFF, 0x7E, 0x14, 0x00, 0x01, 0xFF, 0xFF), t);
+        Eq("pre-clear red stop", lamps.Engine.Red, true);
+        Eq("pre-clear active count", lamps.Engine.Active.Count, 1);
+        lamps.MarkCleared(0, true, false, t);
+        Eq("MarkCleared empties active list", lamps.Engine.Active.Count, 0);
+        Eq("MarkCleared keeps red lamp until fresh DM1", lamps.Engine.Red, true);
     }
 
     [SelfTestCase("disconnected snapshot", Order = 140)]
@@ -976,6 +986,21 @@ ProtocolDescription=ISO 15765
         Check("corrupt user-codes.json throws instead of looking empty", threw, "returned empty list");
         Check("corrupt file left in place so a failed load cannot wipe the shop file",
             File.ReadAllText(corrupt).Contains("not json"), "was rewritten");
+
+        File.WriteAllText(corrupt, "{\"title\":\"no codes key\"}");
+        bool shapeThrew = false;
+        try { UserCodes.Load(root); }
+        catch (InvalidDataException) { shapeThrew = true; }
+        catch { shapeThrew = true; }
+        Check("wrong-shaped user-codes.json throws instead of looking empty", shapeThrew, "returned empty list");
+        File.WriteAllText(corrupt, "{\"codes\":\"not-an-array\"}");
+        shapeThrew = false;
+        try { UserCodes.Load(root); }
+        catch { shapeThrew = true; }
+        Check("non-array codes value throws", shapeThrew, "returned empty list");
+        File.WriteAllText(corrupt, "{\"codes\":[]}");
+        Eq("empty codes array loads as empty list", UserCodes.Load(root).Count, 0);
+
         UserCodes.Save(root, upserted);
 
         // The KB loader has to be able to read what the editor writes.

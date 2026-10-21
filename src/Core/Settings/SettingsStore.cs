@@ -44,7 +44,7 @@ namespace TechBench
             return _loadDepth <= 0;
         }
 
-        /// <summary>Atomic JSON/text write. No-op while loading. Keeps path.bak on replace.</summary>
+        /// <summary>Atomic JSON/text write. No-op while loading. Keeps path.bak on replace. Rethrows after log so callers do not assume success.</summary>
         public static void WriteText(string path, string text)
         {
             if (!AllowWrite()) return;
@@ -56,6 +56,7 @@ namespace TechBench
             catch (Exception ex)
             {
                 SessionIo.LogError("SettingsStore.WriteText", ex);
+                throw;
             }
         }
 

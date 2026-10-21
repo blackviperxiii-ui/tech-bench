@@ -118,6 +118,8 @@ namespace TechBench
             {
                 try { show(); } catch { }
             }
+            // Crash copy says the app needs to close. Title-bar X must not leave RP1210 / TSC1 live.
+            Environment.Exit(1);
         }
     }
 }

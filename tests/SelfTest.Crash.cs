@@ -26,6 +26,12 @@ static partial class SelfTest
             string clip = CrashForm.BuildClipboardText("SelfTest", ex, path);
             Check("clipboard text includes exception", clip.IndexOf("self-test crash marker", StringComparison.Ordinal) >= 0, clip);
             Check("clipboard text includes log path", clip.IndexOf(expected, StringComparison.Ordinal) >= 0, clip);
+
+            string program = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Shell", "Program.cs"));
+            int show = program.IndexOf("form.ShowDialog()", StringComparison.Ordinal);
+            int exit = program.IndexOf("Environment.Exit(1)", StringComparison.Ordinal);
+            Check("Crash handler exits after the dialog returns",
+                show >= 0 && exit > show, "Program.Crash");
         }
         finally
         {
