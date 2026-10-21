@@ -463,7 +463,7 @@ namespace TechBench
         /// Copy one file onto dest with no .bak. Bytes land in a sibling dest.tmp-guid first,
         /// then replace (or move) into place. The temp is removed if the copy fails.
         /// </summary>
-        static void AtomicCopyFile(string src, string dest)
+        internal static void AtomicCopyFile(string src, string dest)
         {
             string folder = Path.GetDirectoryName(dest);
             if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
