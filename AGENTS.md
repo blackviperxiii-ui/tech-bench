@@ -13,7 +13,7 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Never commit secrets, `.env*`, tokens, keys/certs, or legacy settings files (`id-settings*.json`).
 
 ## Merge / release
-- Agents stop at green + Ready. Squash-merge, tag, and release only on Jeremy's explicit word.
-- No `dyl-ready-pr` merge or babysit. No auto-merge.
+- PRs go into `beta`; agents squash-merge their own PR as soon as CI is green, no review hold (Jeremy, 2026-10-24).
+- Promoting `beta` → `main`, tagging, and releasing only on Jeremy's explicit word.
 
 - **pstack:** Always load and follow the pstack skills in .cursor/skills (start with poteto-mode); never use vstack.
