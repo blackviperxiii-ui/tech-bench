@@ -1,0 +1,10 @@
+[package]
+name = "tb-core"
+version = "0.1.0"
+description = "Tech Bench portable core: J1939 decode, BAM reassembly and names (Rust port of src/Core/J1939)."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# No external crates: std only, so the same code builds for native targets and wasm32.
+[dependencies]
