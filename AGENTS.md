@@ -17,4 +17,3 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Promoting `beta` → `main`, tagging, and releasing only on Viper's explicit word.
 - Never use `dyl-ready-pr` merge or babysit. No field tests.
 
-- **pstack:** Always load and follow the pstack skills in .cursor/skills (start with poteto-mode); never use vstack.
