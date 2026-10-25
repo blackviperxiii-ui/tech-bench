@@ -69,6 +69,65 @@ impl Value {
     }
 }
 
+impl Value {
+    /// Compact JSON text. Object members keep their order.
+    pub fn to_json(&self) -> String {
+        let mut out = String::new();
+        write_value(self, &mut out);
+        out
+    }
+}
+
+fn write_value(v: &Value, out: &mut String) {
+    match v {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Number(n) => out.push_str(n),
+        Value::String(s) => write_string(s, out),
+        Value::Array(items) => {
+            out.push('[');
+            for (i, x) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_value(x, out);
+            }
+            out.push(']');
+        }
+        Value::Object(members) => {
+            out.push('{');
+            for (i, (k, x)) in members.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_string(k, out);
+                out.push(':');
+                write_value(x, out);
+            }
+            out.push('}');
+        }
+    }
+}
+
+fn write_string(s: &str, out: &mut String) {
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            // Like JavaScriptSerializer: control characters and HTML-sensitive characters as \uXXXX.
+            c if (c as u32) < 0x20 || matches!(c, '<' | '>' | '&' | '\'') => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+}
+
 /// `S(Get(d, key))`: text of a member, empty when missing.
 pub fn s(v: &Value, key: &str) -> String {
     v.get(key).map(Value::text).unwrap_or_default()
@@ -322,6 +381,27 @@ mod tests {
         assert!(parse(r#"{"a":1} x"#).is_err());
         assert!(parse(r#"{"a":"unterminated}"#).is_err());
         assert!(parse(&"[".repeat(500)).is_err());
+    }
+
+    #[test]
+    fn writes_and_reads_back() {
+        let v = Value::Object(vec![
+            ("a".into(), Value::String("q\"\\\n<&>'\u{1}é".into())),
+            (
+                "b".into(),
+                Value::Array(vec![
+                    Value::Bool(true),
+                    Value::Null,
+                    Value::Number("12".into()),
+                ]),
+            ),
+        ]);
+        let text = v.to_json();
+        assert_eq!(
+            text,
+            r#"{"a":"q\"\\\n\u003c\u0026\u003e\u0027\u0001é","b":[true,null,12]}"#
+        );
+        assert_eq!(parse(&text).unwrap(), v);
     }
 
     #[test]
