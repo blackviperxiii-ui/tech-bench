@@ -6,3 +6,4 @@
 
 pub mod fmt;
 pub mod j1939;
+pub mod search;

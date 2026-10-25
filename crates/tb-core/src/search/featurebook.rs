@@ -1,0 +1,124 @@
+//! INLINE 7 status rows and the Guidanz feature list (port of `src/Features/Search/FeatureBook.cs`).
+//! Text is copied verbatim from the C# app. These rows are status only: nothing here writes to an ECU.
+
+use crate::fmt::fixed;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwitchRow {
+    pub id: String,
+    pub name: String,
+    pub state: String,
+    pub short: String,
+    pub detail: String,
+}
+
+impl std::fmt::Display for SwitchRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:<10}  {}  —  {}", self.state, self.name, self.short)
+    }
+}
+
+fn row(id: &str, name: &str, state: &str, short: &str, detail: &str) -> SwitchRow {
+    SwitchRow {
+        id: id.to_string(),
+        name: name.to_string(),
+        state: state.to_string(),
+        short: short.to_string(),
+        detail: detail.to_string(),
+    }
+}
+
+/// Live status rows for the INLINE 7 page. `rpm` below 0 means no EEC1 yet.
+#[allow(clippy::too_many_arguments)]
+pub fn live(
+    connected: bool,
+    red: bool,
+    amber: bool,
+    has_inducement: bool,
+    has_tank_fmi9: bool,
+    has_1569: bool,
+    rpm: f64,
+    def_txt: &str,
+) -> Vec<SwitchRow> {
+    if !connected {
+        return vec![row("link", "INLINE connection", "OFF", "Not talking to the ECM.", "Connect with Guidanz / J1939 tool / USB-Link Explorer closed. This row is live status, not a switch you flip.")];
+    }
+    let mut list = Vec::with_capacity(7);
+    list.push(row(
+        "red",
+        "Red Stop lamp",
+        if red { "ON" } else { "off" },
+        if red { "ECM is commanding no-fuel / shutdown." } else { "No Red Stop — no lamp-only reset needed." },
+        "Red Stop is NOT its own code. It is bit 4–5 of DM1 byte 0. The ECM turns it ON when a red-stop DTC is active (on this unit: SPN 5246 inducement, 1569 protection, 5245 timer).\r\n\r\nReset all codes after the fault is gone and this lamp goes off by itself.\r\nThere is no legal 'Red Stop off' toggle. Forcing the lamp off while those SPNs are still active would hide a no-fuel command, not tell you if the repair worked.",
+    ));
+    list.push(row(
+        "amber",
+        "Amber warning lamp",
+        if amber { "ON" } else { "off" },
+        if amber { "A warning / derate path is active." } else { "No amber warning." },
+        "Amber is the DM1 warning lamp (bits 2–3), not a separate DTC. On this machine it is usually the DEF tank FMI 9s (1761/3031/3364).\r\n\r\nIt clears when those SPNs go inactive and you reset. No independent Amber-off switch — same lamp byte as Red Stop.",
+    ));
+    list.push(row(
+        "induc",
+        "SCR inducement (SPN 5246)",
+        if has_inducement { "LOCKED" } else { "off" },
+        if has_inducement { "Most-severe inducement — will not fuel." } else { "Not reporting severe inducement." },
+        "T4F aftertreatment protection. Stages go warning → derate → idle/no-restart. LOCKED means the ECM is protecting the SCR by refusing to fuel. Keep DEF working. Do not add a switch to disable this. After the tank header is on the bus, Clear codes after repair sends DM11/DM3 and re-reads DEF/SCR. It does not reset dosing. There is no public SAE routine that resets DEF dosing without disabling SCR.",
+    ));
+    list.push(row(
+        "tank",
+        "DEF tank header (level/temp/quality)",
+        if has_tank_fmi9 { "NOT TALKING" } else { "check data" },
+        if has_tank_fmi9 { "FMI 9 on 1761/3031/3364 — module offline." } else { "No FMI 9 on tank SPNs in the last DM1." },
+        "The tank sender reports DEF level, temperature, and quality. The DEF pump is a different part. NOT TALKING means power/ground/CAN at the header, not 'wrong percentage'. DEF fluid in the tank does not count until this row is healthy. Disabling this sender lets the ECM dose blind and can melt the SCR.",
+    ));
+    list.push(row(
+        "defval",
+        "DEF tank broadcast",
+        if def_txt.is_empty() { "—" } else { def_txt },
+        "What PGN FE56 is actually publishing.",
+        "n/a (not talking) matches FMI 9. A real percentage and temp means the header is alive. That is the gate before a code clear / Guidanz reset will stick.",
+    ));
+    list.push(row(
+        "prot",
+        "Engine protection derate (SPN 1569)",
+        if has_1569 { "ON" } else { "off" },
+        if has_1569 { "Torque/fuel limited or no-start from protection logic." } else { "Not active in DM1." },
+        "Result of oil / coolant / DEF-empty / inducement logic. Turning 'engine protection' off in Guidanz (industrial password) is a real Features & Parameters item — it does NOT belong as a hidden DEF bypass. This app will not write that parameter. Fix the cause, then clear.",
+    ));
+    let run = if rpm < 0.0 {
+        "—"
+    } else if rpm >= 400.0 {
+        "RUNNING"
+    } else if rpm >= 50.0 {
+        "CRANKING"
+    } else {
+        "STOPPED"
+    };
+    let short = if rpm < 0.0 {
+        "No EEC1 yet.".to_string()
+    } else {
+        format!("RPM {}", fixed(rpm, 0))
+    };
+    list.push(row("run", "Engine speed state", run, &short, "From EEC1. STOPPED = key on, not spinning. CRANKING = starter rolling. RUNNING = fired. This is status only."));
+    list
+}
+
+/// Cummins Features & Parameters items this app explains but never writes.
+pub fn guidanz_features() -> Vec<SwitchRow> {
+    vec![
+        row("ep", "Engine Protection Shutdown", "Guidanz", "Industrial feature: stop the engine on low oil / high coolant / etc.", "Cummins Features & Parameters (INSITE/Guidanz), not a J1939 lamp bit this app can flip.\r\n\r\nON (normal): ECM shuts down or derates when oil pressure, coolant temp, or similar protections trip. That saves the engine.\r\n\r\nOFF: engine may keep running through a protection fault. Some industrial calibrations allow this with a dealer password for specific applications. Turning it off is not a DEF workaround and will not clear SPN 5246.\r\n\r\nThis app does not write this switch. Use Guidanz with a Cummins login if the shop process calls for it."),
+        row("lop", "Low Oil Pressure Shutdown", "Guidanz", "Subset of engine protection.", "When ON, low oil pressure at speed will stop or derate the engine. At 0 RPM, oil pressure is normally 0 — that is not this trip. Do not disable to mask a real oil-pressure fault."),
+        row("hct", "High Coolant Temperature Shutdown", "Guidanz", "Subset of engine protection.", "When ON, overheat will derate/stop. Coolant near ambient with the engine sitting is normal. Not related to DEF inducement."),
+        row("idle", "Idle Shutdown Timer", "Guidanz", "Shuts the engine off after a set idle time.", "Saves fuel on a compressor that was left idling. If it is ON and too short, the unit can die after warmup and look like a no-start on the next crank. It does not set Red Stop or 5246. Adjust only in Guidanz."),
+        row("warm", "Engine Warm-Up / Idle Hold", "Guidanz", "Holds elevated idle until coolant is up.", "Normal on T4 industrial. Not a no-start lock. If it will not leave idle after it is warm, that is a different fault (VGT, EGR, inducement)."),
+        row("pto", "PTO / compressor speed control", "Guidanz", "How the ECM answers speed requests from the compressor controller.", "On a Bobcat/Doosan portable the compressor controller (SA 48) asks for RPM on J1939. PTO/speed-control features in Guidanz change how that request is honored. Wrong settings can mean 'cranks but will not run up' after it fires — not Red Stop during crank. Do not confuse with DEF inducement."),
+        row("fan", "Fan Control", "Guidanz", "ECM-controlled cooling fan.", "On/off or variable fan. A fan stuck on or off is a heat/noise issue, not a crank/no-fire."),
+        row("acc", "Accelerator type / throttle source", "Guidanz", "Pedal vs J1939 vs switched idle.", "Portable compressors usually have no foot pedal; the compressor controller is the throttle. If this is set to 'pedal' and there is no pedal, it may not fuel after start. Still not a DEF tank FMI 9."),
+        row("max", "Maximum / low idle speed", "Guidanz", "RPM governors.", "Limits how fast or slow it will run after it fires. Will not create a no-inject Red Stop during crank."),
+        row("start", "Starter lockout / restart delay", "Guidanz", "Prevents grinding the starter.", "Can block a second crank too soon. If the starter is already spinning the engine (RPM 150+), this is not your no-fire."),
+        row("def", "Aftertreatment / DEF / SCR", "DO NOT DISABLE", "Must stay enabled. This app will not add an off switch.", "DEF quality, level, temp, pump, and dosing are how a T4F Cummins keeps the SCR brick in range.\r\n\r\nIf you disable these 'switches' in a tune or with a delete:\r\n- Inducement logic is gone but so is dosing control\r\n- SCR catalyst and DPF can overheat or plug\r\n- Next regen or limp event can melt aftertreatment or push debris into the turbo\r\n- You also fail emissions law for tampering\r\n\r\nThis machine must keep DEF working. The correct path is: make the tank header talk (real level/temp/quality), then clear / Guidanz aftertreatment reset. There is no safe off switch here."),
+        row("vgt", "VGT / turbo actuator", "Guidanz", "Variable geometry turbo position control.", "Stuck VGT can smoke, lack power, or hard-start when hot. It is not the FMI 9 tank-header bundle. Diagnose in Guidanz after the engine will fire."),
+        row("egr", "EGR valve", "Guidanz", "Exhaust gas recirculation.", "Stuck EGR can rough-run or derate. Separate from DEF tank sender. Do not disable EGR as a 'fix' for inducement."),
+    ]
+}
