@@ -56,3 +56,6 @@ packages/
 *.suo
 *.part
 TestResults/
+
+# Rust workspace (crates/)
+target/
