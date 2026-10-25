@@ -23,7 +23,7 @@ pub fn is_absolute_path(path: &str) -> bool {
 
 /// `Path.GetFullPath` without touching the disk: absolute against the current directory, with
 /// `.` and `..` folded away.
-fn full_path(path: &Path) -> Option<PathBuf> {
+pub(crate) fn full_path(path: &Path) -> Option<PathBuf> {
     let joined = if path.is_absolute() {
         path.to_path_buf()
     } else {
