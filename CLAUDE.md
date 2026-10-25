@@ -23,4 +23,3 @@ C# WinForms shop tool, .NET Framework 4, **x86 only** (RP1210 drivers are 32-bit
 - **J1939:** no DEF/SCR reset and no calibration or parameter writes. Keep the existing guards. New ECU actions need Jeremy's OK and a confirm dialog; irreversible engine commands need human checks.
 - **Updater:** keep the v1.2.9 rules (`docs/specs/v1.2.9.md`); `Updater.DefaultManifestUrl` stays unchanged.
 
-- **pstack:** Always load and follow the pstack skills in .cursor/skills (start with poteto-mode); never use vstack.
