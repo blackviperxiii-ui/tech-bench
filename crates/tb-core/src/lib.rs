@@ -6,4 +6,6 @@
 
 pub mod fmt;
 pub mod j1939;
+pub mod json;
+pub mod kb;
 pub mod search;
