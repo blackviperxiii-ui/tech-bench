@@ -1,0 +1,153 @@
+# Tauri desktop self-update, end to end on Windows: build Tech Bench 0.1.1 and 0.1.0 (NSIS),
+# install 0.1.0, point it at a local update feed that offers 0.1.1, and run `--update-smoke`.
+# Pass means the app found 0.1.1, the plugin checked its signature, the installer replaced the
+# app, and the new app reports 0.1.1 with nothing newer on the feed.
+# The signing key is generated fresh in this job and thrown away: no secrets are used, and the
+# shipped config has no updater section (production key and feed are the user's to set up).
+name: updater
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  update-from-previous:
+    name: update from previous version (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add i686-pc-windows-msvc
+
+      - name: Bridge sidecar (32-bit)
+        shell: pwsh
+        run: |
+          cargo build -p tb-rp1210-bridge --release --target i686-pc-windows-msvc --locked
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          Copy-Item target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe src-tauri/binaries/tb-rp1210-bridge-x86_64-pc-windows-msvc.exe
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Throwaway signing key and local feed config
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'upd'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $pw = [guid]::NewGuid().ToString('N')
+          npx tauri signer generate --ci -p $pw -w (Join-Path $dir 'key') | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$pw"
+          Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY=$(Join-Path $dir 'key')"
+          $pub = (Get-Content (Join-Path $dir 'key.pub') -Raw).Trim()
+          foreach ($v in '0.1.0', '0.1.1') {
+            @{
+              version = $v
+              bundle = @{ createUpdaterArtifacts = $true }
+              plugins = @{
+                updater = @{
+                  pubkey = $pub
+                  endpoints = @('http://127.0.0.1:8765/latest.json')
+                  dangerousInsecureTransportProtocol = $true
+                  windows = @{ installMode = 'passive' }
+                }
+              }
+            } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $dir "conf-$v.json")
+          }
+
+      - name: Build 0.1.1 (the update)
+        shell: pwsh
+        run: |
+          npx tauri build --ci --bundles nsis --config "$env:RUNNER_TEMP/upd/conf-0.1.1.json"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $feed = Join-Path $env:RUNNER_TEMP 'feed'
+          New-Item -ItemType Directory -Force $feed | Out-Null
+          $setup = Get-Item 'target/release/bundle/nsis/*_0.1.1_x64-setup.exe'
+          Copy-Item $setup.FullName (Join-Path $feed 'techbench-0.1.1-setup.exe')
+          $sig = (Get-Content "$($setup.FullName).sig" -Raw).Trim()
+          @{
+            version = '0.1.1'
+            notes = 'CI update test'
+            pub_date = '2026-01-01T00:00:00Z'
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = $sig
+                url = 'http://127.0.0.1:8765/techbench-0.1.1-setup.exe'
+              }
+            }
+          } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $feed 'latest.json')
+          Get-Content (Join-Path $feed 'latest.json')
+
+      - name: Build 0.1.0 (the installed version)
+        shell: pwsh
+        run: |
+          npx tauri build --ci --bundles nsis --config "$env:RUNNER_TEMP/upd/conf-0.1.0.json"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Install 0.1.0, update it from the local feed
+        shell: pwsh
+        run: |
+          $setup = Get-Item 'target/release/bundle/nsis/*_0.1.0_x64-setup.exe'
+          $i = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($i.ExitCode -ne 0) { Write-Host "ERROR: 0.1.0 setup exited $($i.ExitCode)"; exit 1 }
+          $appDir = Join-Path $env:LOCALAPPDATA 'Tech Bench'
+          $exe = Get-ChildItem $appDir -Filter *.exe | Where-Object { $_.Name -notmatch '^uninstall|tb-rp1210-bridge' } | Select-Object -First 1
+          if (-not $exe) { Write-Host "ERROR: no app exe in $appDir"; Get-ChildItem $appDir; exit 1 }
+          $before = (Get-Item $exe.FullName).VersionInfo.ProductVersion
+          Write-Host "installed: $($exe.Name) $before"
+          if ($before -notlike '0.1.0*') { Write-Host "ERROR: expected 0.1.0 installed"; exit 1 }
+
+          $server = Start-Process -FilePath python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', (Join-Path $env:RUNNER_TEMP 'feed') -PassThru
+          Start-Sleep -Seconds 3
+
+          $out = Join-Path $env:RUNNER_TEMP 'update-smoke.txt'
+          $env:TECHBENCH_SMOKE_OUT = $out
+          $env:TECHBENCH_HOME = Join-Path $env:RUNNER_TEMP 'tbhome'
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--update-smoke' -Wait -PassThru
+          Write-Host "0.1.0 --update-smoke exited $($p.ExitCode)"
+
+          # The installer runs on after the old app exits. Its relaunch of the app goes through
+          # the shell without this job's environment, so wait for the new exe, then run it here.
+          $deadline = (Get-Date).AddMinutes(4)
+          while ((Get-Date) -lt $deadline) {
+            $v = (Get-Item $exe.FullName -ErrorAction SilentlyContinue).VersionInfo.ProductVersion
+            if ($v -like '0.1.1*') { break }
+            Start-Sleep -Seconds 5
+          }
+          Start-Sleep -Seconds 10
+          $after = (Get-Item $exe.FullName).VersionInfo.ProductVersion
+          Write-Host "installed after update: $($exe.Name) $after"
+          $q = Start-Process -FilePath $exe.FullName -ArgumentList '--update-smoke' -Wait -PassThru
+          Write-Host "0.1.1 --update-smoke exited $($q.ExitCode)"
+          Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          if (Test-Path $out) { Get-Content $out } else { Write-Host '(no smoke output)' }
+
+          $fail = $false
+          foreach ($want in '^UPDATE current 0\.1\.0$', '^UPDATE found 0\.1\.1$', '^UPDATE current 0\.1\.1$', '^UPDATE newest$') {
+            if (-not ((Test-Path $out) -and (Select-String -Path $out -Pattern $want -Quiet))) {
+              Write-Host "ERROR: smoke output is missing $want"; $fail = $true
+            }
+          }
+          if ($p.ExitCode -ne 0) { Write-Host "ERROR: the 0.1.0 app exited $($p.ExitCode)"; $fail = $true }
+          if ($q.ExitCode -ne 0) { Write-Host "ERROR: the 0.1.1 app exited $($q.ExitCode)"; $fail = $true }
+          if ($after -notlike '0.1.1*') { Write-Host "ERROR: expected 0.1.1 installed, got $after"; $fail = $true }
+          if ($fail) { exit 1 }
+          Write-Host 'UPDATE PASS: 0.1.0 updated itself to 0.1.1 from a signed local feed'

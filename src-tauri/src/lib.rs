@@ -19,6 +19,7 @@ mod job;
 mod livebus;
 mod shopadd;
 mod shopsync;
+mod update;
 mod workorders;
 
 /// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
@@ -184,7 +185,7 @@ fn smoke_report(ok: bool, detail: String, smoke: State<'_, Smoke>, app: AppHandl
 /// Prints a smoke line, and appends it to TECHBENCH_SMOKE_OUT when set: Windows release
 /// builds have no console, so CI reads the file instead. Android's stdout goes nowhere, so
 /// there it goes to logcat under the `TechBench` tag.
-fn smoke_line(line: &str) {
+pub(crate) fn smoke_line(line: &str) {
     println!("{line}");
     #[cfg(target_os = "android")]
     android_log(line);
@@ -299,9 +300,20 @@ fn install_panic_hook() {
 pub fn run() {
     install_panic_hook();
     let smoke = smoke_requested();
-    tauri::Builder::default()
+    #[cfg_attr(mobile, allow(unused_variables))]
+    let update_smoke = std::env::args().any(|a| a == "--update-smoke");
+    let context = tauri::generate_context!();
+    let updates = cfg!(desktop) && update::configured(&context);
+    #[cfg_attr(mobile, allow(unused_mut))]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    #[cfg(desktop)]
+    if updates {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    builder
+        .manage(update::UpdaterOn(updates))
         .manage(Kb(Mutex::new(KbIndex::new())))
         .manage(Smoke(AtomicBool::new(smoke)))
         .manage(workorders::WoState(Mutex::new(None)))
@@ -316,6 +328,11 @@ pub fn run() {
                 if smoke {
                     smoke_line(&format!("SMOKE kb: {}", kb.status));
                 }
+            }
+            #[cfg(desktop)]
+            if update_smoke {
+                update::run_smoke(app.handle().clone());
+                return Ok(());
             }
             if !smoke {
                 shopsync::start_watcher(app.handle().clone());
@@ -368,9 +385,11 @@ pub fn run() {
             livebus::session_save,
             workorders::wo_attach_report,
             smoke_mode,
-            smoke_report
+            smoke_report,
+            update::update_check,
+            update::update_install
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running Tech Bench")
         .run(|app, event| {
             if let RunEvent::Exit = event {
