@@ -256,3 +256,22 @@ button { font: inherit; }
 .job-sync.conflict { color: #c0392b; border-color: #c0392b; }
 .sheet-foot button:disabled { opacity: 0.55; cursor: default; }
 .detail.history { min-height: 90px; max-height: 260px; font-size: 13px; }
+
+.live .bar select { min-width: 220px; }
+.hud { display: flex; flex-wrap: wrap; gap: 6px 24px; align-items: baseline; }
+.hud.red { color: #c62828; }
+.hud-rpm { font-size: 22px; font-weight: 600; }
+.hud-mon { margin: 4px 0; font-size: 14px; }
+/* The bridge spaces HUD fields with runs of spaces, as the WinForms labels do. */
+.live .status, .hud span, .hud-mon { white-space: pre-wrap; }
+.live-codes .hit .title { white-space: pre-wrap; }
+.live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.live-codes h3, .live h3 { font-size: 14px; margin: 10px 0 4px; }
+.toggles { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; gap: 4px; }
+.toggles label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.live-log { white-space: pre-wrap; }
+.sheet.confirm { width: min(560px, 100%); }
+.confirm-text { white-space: pre-wrap; }
+.confirm .sheet-foot button { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.confirm .sheet-foot button.secondary { background: var(--panel); color: var(--text); border-color: var(--line); }
+@media (max-width: 720px) { .live-grid { grid-template-columns: 1fr; } }

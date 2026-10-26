@@ -8,13 +8,14 @@ use crate::rp1210::Rp1210;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tb_core::fmt::fixed;
 use tb_core::j1939::clear::{
     destinations, dm13_tx, refresh_dm_frames, request_tx, tsc1_dest, tsc1_tx, J1939Tx,
     COMPRESSOR_SA, DEF_TANK,
 };
 use tb_core::j1939::code_clear::{ClearKind, ClearLink, CodeClearRun};
 use tb_core::j1939::guard::SendPolicy;
-use tb_core::j1939::monitor::{BusMonitor, BusSnapshot};
+use tb_core::j1939::monitor::{fmt_reading, BusMonitor, BusSnapshot};
 use tb_core::j1939::Dtc;
 use tb_core::rp1210::Rp1210Api;
 
@@ -166,7 +167,8 @@ fn dtcs(list: &[Dtc]) -> Value {
     Value::Array(
         list.iter()
             .map(|d| {
-                json!({"spn": d.spn, "fmi": d.fmi, "occ": d.occ, "name": d.name, "fmiText": d.fmi_text})
+                json!({"spn": d.spn, "fmi": d.fmi, "occ": d.occ, "name": d.name, "fmiText": d.fmi_text,
+                        "text": d.to_string()})
             })
             .collect(),
     )
@@ -188,6 +190,68 @@ pub fn snapshot_json(s: &BusSnapshot) -> Value {
         "lastResetReport": s.last_reset_report, "resetSeq": s.reset_seq, "defSa": s.def_sa,
         "active": dtcs(&s.active), "prev": dtcs(&s.prev), "faultModules": s.fault_modules,
     })
+}
+
+fn on_off(v: bool) -> &'static str {
+    if v {
+        "ON"
+    } else {
+        "off"
+    }
+}
+
+/// The INLINE 7 HUD lines, worded as `Inline7Control.Refresh` writes them.
+pub fn hud_json(s: &BusSnapshot, want_connected: bool) -> Value {
+    let status = if s.busy {
+        format!("Working: {}…", s.busy_what)
+    } else if s.connected {
+        let stale = if s.stale {
+            format!(
+                "  —  NO FRAMES for {}s, readings below are stale",
+                fixed(s.quiet_ms as f64 / 1000.0, 0)
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            "Connected  {}  device {}  {}  {} frames/s{stale}",
+            s.adapter_name, s.device_id, s.protocol, s.fps
+        )
+    } else if want_connected {
+        format!("Connecting… {}", s.last_error)
+    } else {
+        "Disconnected — close Guidanz / J1939 tool / USB-Link Explorer before Connect.".into()
+    };
+    let rpm = if s.rpm.is_nan() {
+        "RPM: —".to_string()
+    } else {
+        format!(
+            "RPM: {}{}",
+            fixed(s.rpm, 0),
+            if s.stale { " (stale)" } else { "" }
+        )
+    };
+    let mut lamps = format!("Red Stop: {}   Amber: {}", on_off(s.red), on_off(s.amber));
+    if s.protect {
+        lamps.push_str("   Protect: ON");
+    }
+    if s.mil {
+        lamps.push_str("   MIL: ON");
+    }
+    let tsc = if s.tsc_rpm > 0 {
+        format!("    TSC1 holding {} RPM", s.tsc_rpm)
+    } else {
+        "    TSC1 released".to_string()
+    };
+    let mon = format!(
+        "Coolant: {}    Oil: {}    Battery: {}    Fuel rate: {}{tsc}",
+        fmt_reading(s.coolant_c, " C", 0),
+        s.oil_text,
+        fmt_reading(s.battery_v, " V", 2),
+        fmt_reading(s.fuel_lph, " L/h", 2)
+    );
+    json!({"status": status, "rpm": rpm, "lamps": lamps, "def": format!("DEF: {}", s.def_text),
+           "mon": mon})
 }
 
 impl Bus {
@@ -512,7 +576,9 @@ impl Bus {
                     self.live.view_sa = v;
                 }
                 let s = self.snapshot();
-                Ok(snapshot_json(&s))
+                let mut v = snapshot_json(&s);
+                v["hud"] = hud_json(&s, self.live.want_connected);
+                Ok(v)
             }
             "busLists" => Ok(json!({
                 "pgns": self.mon.pgn_rows().iter().map(|r| json!({

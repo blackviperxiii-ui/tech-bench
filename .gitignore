@@ -62,3 +62,6 @@ target/
 node_modules/
 app/dist/
 src-tauri/gen/
+
+# 32-bit RP1210 bridge staged for the Windows bundle (tauri.windows.conf.json externalBin)
+src-tauri/binaries/
