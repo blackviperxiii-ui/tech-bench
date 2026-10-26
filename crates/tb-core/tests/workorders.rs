@@ -1,4 +1,6 @@
 //! Ported from tests/SelfTest.WorkOrders.cs (WorkOrder helpers and media path confinement).
+//! Uses the filesystem, so it is native only (wasm32-unknown-unknown has no fs).
+#![cfg(not(target_arch = "wasm32"))]
 
 use std::fs;
 use tb_core::workorders::{resolve_media_path, WorkOrder, WorkOrderClock};

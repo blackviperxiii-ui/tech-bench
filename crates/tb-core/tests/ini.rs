@@ -1,5 +1,9 @@
 //! Ported from tests/SelfTest.Ini.cs with the same literal expected values.
 
+// Under wasm-pack the same cases run through wasm-bindgen-test.
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 use tb_core::ini::Ini;
 
 fn p(text: &str) -> Ini {

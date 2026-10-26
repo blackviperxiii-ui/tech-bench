@@ -1,5 +1,9 @@
 //! Ported from SelfTest.cs BamTests, plus the stale-transfer timeout the C# reads off the clock.
 
+// Under wasm-pack the same cases run through wasm-bindgen-test.
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 use tb_core::j1939::{BamAssembler, J1939Frame};
 
 fn cm(sa: i32, size: usize, pkts: u8, pgn: i32) -> J1939Frame {

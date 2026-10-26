@@ -1,5 +1,7 @@
 //! Ported from SelfTest.cs KbTests / SpnHitsTests / BundledKbTests and tests/SelfTest.Open.cs
 //! (KB document path confinement). Same fixtures, same literal expected values.
+//! Uses the filesystem, so it is native only (wasm32-unknown-unknown has no fs).
+#![cfg(not(target_arch = "wasm32"))]
 
 use std::fs;
 use std::path::{Path, PathBuf};
