@@ -41,6 +41,35 @@ pub fn key_of(c: &UserCode) -> String {
     )
 }
 
+/// `UserCodes.Fingerprint`: hash of every field as written (untrimmed), so two shards that
+/// agree on brand + code but differ in any text are told apart.
+pub fn fingerprint(c: &UserCode) -> String {
+    let mut sb = String::new();
+    for f in [
+        &c.brand,
+        &c.code,
+        &c.title,
+        &c.description,
+        &c.severity,
+        &c.controller,
+        &c.reset,
+        &c.safety,
+    ] {
+        sb.push_str(f);
+        sb.push('\n');
+    }
+    for x in &c.causes {
+        sb.push_str(x);
+        sb.push('\n');
+    }
+    sb.push_str("---\n");
+    for x in &c.checks {
+        sb.push_str(x);
+        sb.push('\n');
+    }
+    crate::sha256::hash_text(&sb)
+}
+
 fn str_list(d: &Value, key: &str) -> Vec<String> {
     d.get(key)
         .map(Value::items)

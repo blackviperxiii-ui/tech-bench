@@ -159,3 +159,22 @@ export function localStamp(d = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
+
+/** Shop sync screen state (SyncForm): settings, the status text and the last run's conflicts. */
+export interface SyncView {
+  techId: string;
+  syncFolder: string;
+  text: string;
+  conflicts: string[];
+  /** Job-strip chip once a sync has run; null before the first run. */
+  chip: string | null;
+}
+
+export const syncView = () => invoke<SyncView>("sync_view");
+export const syncSave = (techId: string, syncFolder: string) =>
+  invoke<SyncView>("sync_save", { techId, syncFolder });
+export const syncRun = () => invoke<SyncView>("sync_run");
+/** null when the tech answers No on the confirm. */
+export const syncResolve = (index: number, choice: "local" | "remote" | "both") =>
+  invoke<SyncView | null>("sync_resolve", { index, choice });
+export const syncPickFolder = () => invoke<string | null>("sync_pick_folder");

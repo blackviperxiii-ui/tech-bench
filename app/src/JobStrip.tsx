@@ -12,6 +12,8 @@ interface Props {
   header: Header;
   onHeader: (h: Header) => void;
   onPick: (wo: WorkOrder | null) => void;
+  /** The last shop sync's chip and whether it found conflicts; before a sync, the WO list's. */
+  sync: { chip: string; conflict: boolean } | null;
   onSync: () => void;
   onSearchJob: () => void;
   onAddCode: () => void;
@@ -26,6 +28,7 @@ export function JobStrip({
   header,
   onHeader,
   onPick,
+  sync,
   onSync,
   onSearchJob,
   onAddCode,
@@ -72,8 +75,8 @@ export function JobStrip({
       {field("customer", "Customer", "140px")}
       {field("model", "Model", "120px")}
       {field("serial", "Serial", "130px")}
-      <button className="job-sync" onClick={onSync} title="Work orders">
-        {data ? data.syncChip : "Sync: idle"}
+      <button className={sync?.conflict ? "job-sync conflict" : "job-sync"} onClick={onSync} title="Shop sync">
+        {sync?.chip ?? (data ? data.syncChip : "Sync: idle")}
       </button>
       <button className="job-btn" onClick={onSearchJob}>
         Search this job

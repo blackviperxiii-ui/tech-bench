@@ -138,7 +138,7 @@ pub fn user_name() -> String {
         .unwrap_or_default()
 }
 
-fn exe_dir() -> PathBuf {
+pub(crate) fn exe_dir() -> PathBuf {
     std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
@@ -163,7 +163,7 @@ pub(crate) fn writable_kb(kb_root: &str) -> String {
     }
 }
 
-fn with_store<T>(
+pub(crate) fn with_store<T>(
     app: &AppHandle,
     state: &State<'_, WoState>,
     kb: &State<'_, Kb>,

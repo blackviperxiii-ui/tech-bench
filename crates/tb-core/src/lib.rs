@@ -13,5 +13,6 @@ pub mod launch;
 pub mod rtf;
 pub mod search;
 pub mod settings;
+pub mod sha256;
 pub mod time;
 pub mod workorders;

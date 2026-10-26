@@ -240,3 +240,18 @@ button { font: inherit; }
 }
 .sheet-foot button:not(.primary) { background: var(--panel); color: var(--text); border-color: var(--line); }
 .sheet-foot .error { margin-right: auto; color: #c0392b; font-size: 13px; }
+
+.sync-form .row { display: flex; gap: 6px; }
+.sync-form .row input { flex: 1; min-width: 0; }
+.sync-form .row button, .sheet-body .bar button { font-size: 14px; }
+.sync-form .row button {
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+}
+.sync-status { white-space: pre-wrap; min-height: 72px; max-height: 160px; overflow: auto; font: inherit; font-size: 13px; margin: 0; }
+.sync-conflicts {
+  width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px;
+}
+.job-sync.conflict { color: #c0392b; border-color: #c0392b; }
+.sheet-foot button:disabled { opacity: 0.55; cursor: default; }
