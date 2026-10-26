@@ -1,10 +1,11 @@
 //! In-memory KB index: loads the shipped JSON, notes and files, and ranks search hits
 //! (port of `KbIndex` in `src/Features/Kb/KbIndex.cs`).
 //!
-//! Shop-sync shards (`_shop/<tech>/...`, `_resolved/...`) are not loaded here yet; they come with
-//! the ShopSync port. Everything a single install reads from its own `data/` folder is.
+//! Shop shards (`data/shop/<tech>/...` and `data/shop/_resolved/...`) load the same way the
+//! WinForms index reads them; copying shards to a sync folder is not ported yet.
 
 use super::paths::{file_name, resolve_document_path};
+use super::shop;
 use crate::j1939::Names;
 use crate::json::{self, s, Value};
 use std::collections::{HashMap, HashSet};
@@ -166,7 +167,8 @@ impl KbIndex {
         let mut pgn = HashMap::new();
         let mut sa = HashMap::new();
 
-        let r = self.load_codes(&data.join("kb.json"), "", None);
+        let none = HashSet::new();
+        let r = self.load_codes(&data.join("kb.json"), "", &none, &none, None);
         let mut n_code = self.track("kb.json", r);
         let r = self.load_passwords(&data.join("passwords").join("ifix-passwords.json"));
         let n_pwd = self.track("ifix-passwords.json", r);
@@ -183,14 +185,64 @@ impl KbIndex {
             &mut sa,
             false,
         );
-        let n_names = self.track("j1939-names.json", r);
+        let mut n_names = self.track("j1939-names.json", r);
         let r = self.load_note_dir(&data.join("notes"), "");
-        let n_notes = self.track("notes", r);
+        let mut n_notes = self.track("notes", r);
         let r = self.load_file_dir(&data.join("files"), "");
-        let n_files = self.track("files", r);
+        let mut n_files = self.track("files", r);
+
+        let kb = Path::new(root);
+        let shop_root = shop::shop_root(kb);
+        let skip = shop::resolved_keys(kb);
+        let keep_both = shop::keep_both_keys(kb);
         let mut seen_user = HashSet::new();
-        let r = self.load_codes(&data.join("user-codes.json"), "", Some(&mut seen_user));
+        let r = self.load_codes(
+            &shop_root.join("_resolved").join("user-codes.json"),
+            "resolved",
+            &none,
+            &none,
+            Some(&mut seen_user),
+        );
+        n_code += self.track("_resolved\\user-codes.json", r);
+        for tech in shop::tech_ids(kb) {
+            let shard = shop::shard_dir(kb, &tech);
+            let r = self.load_codes(
+                &shard.join("user-codes.json"),
+                &tech,
+                &skip,
+                &keep_both,
+                Some(&mut seen_user),
+            );
+            n_code += self.track(&format!("{tech}\\user-codes.json"), r);
+            let r = merge_names(
+                &shard.join("j1939-names.json"),
+                &mut spn,
+                &mut pgn,
+                &mut sa,
+                false,
+            );
+            n_names += self.track(&format!("{tech}\\j1939-names.json"), r);
+            let r = self.load_note_dir(&shard.join("notes"), &tech);
+            n_notes += self.track(&format!("{tech}\\notes"), r);
+            let r = self.load_file_dir(&shard.join("files"), &tech);
+            n_files += self.track(&format!("{tech}\\files"), r);
+        }
+        let r = self.load_codes(
+            &data.join("user-codes.json"),
+            "",
+            &none,
+            &none,
+            Some(&mut seen_user),
+        );
         n_code += self.track("user-codes.json", r);
+        let r = merge_names(
+            &shop_root.join("_resolved").join("j1939-names.json"),
+            &mut spn,
+            &mut pgn,
+            &mut sa,
+            true,
+        );
+        n_names += self.track("_resolved\\j1939-names.json", r);
         self.names.load(Some(spn), Some(pgn), Some(sa));
 
         self.status = format!(
@@ -376,12 +428,15 @@ impl KbIndex {
         Ok(n)
     }
 
-    /// Fault codes from `kb.json` or a `user-codes.json`. With `seen`, a brand+code already loaded
-    /// from an earlier user-codes file is skipped.
+    /// Fault codes from `kb.json` or a `user-codes.json`. A brand+code in `skip` (already resolved)
+    /// or in `seen` (loaded from an earlier user-codes file) is skipped unless it is in
+    /// `keep_both`.
     fn load_codes(
         &mut self,
         path: &Path,
         author: &str,
+        skip: &HashSet<String>,
+        keep_both: &HashSet<String>,
         mut seen: Option<&mut HashSet<String>>,
     ) -> LoadResult {
         let Some(root) = read_root(path)? else {
@@ -398,7 +453,10 @@ impl KbIndex {
                 brand.trim().to_lowercase(),
                 code.trim().to_lowercase()
             );
-            if seen.as_ref().is_some_and(|seen| seen.contains(&key)) {
+            let kept = keep_both.contains(&key);
+            if !kept
+                && (skip.contains(&key) || seen.as_ref().is_some_and(|seen| seen.contains(&key)))
+            {
                 continue;
             }
             let (title, desc) = (s(d, "title"), s(d, "description"));

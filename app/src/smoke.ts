@@ -2,6 +2,7 @@ import {
   cheatsheet,
   explainCode,
   jobTitle,
+  kbCodeSeed,
   kbOpen,
   kbSearch,
   shopSettingsGet,
@@ -39,6 +40,9 @@ export async function runSmoke(workOrders: boolean) {
       guard = String(e);
     }
     const guardOk = guard.includes("won't open program or script files");
+    // Add code seed for the found hit (read-only: no saved user code yet, so the title seeds).
+    const seed = await kbCodeSeed("CODE", first);
+    const seedOk = seed.title === first && seed.code === "";
     let woOk = true;
     let woText = "work orders: skipped (no TECHBENCH_HOME)";
     if (workOrders) {
@@ -58,10 +62,10 @@ export async function runSmoke(workOrders: boolean) {
       woText = `tech: "${tech}"; work order: "${listed?.label ?? "(not listed)"}"; chip: "${list.syncChip}"; tag: "${tag}"`;
     }
     await smokeReport(
-      searchOk && sheetOk && codeOk && guardOk && woOk,
+      searchOk && sheetOk && codeOk && guardOk && seedOk && woOk,
       `search ${SMOKE_KIND} "${SMOKE_QUERY}": ${r.total} hit(s), first "${first}"; ` +
         `cheat sheet: "${sheet[0]?.text ?? ""}"; explain: "${codeLine}"; ` +
-        `open guard: ${guardOk ? "refused .exe" : `"${guard}"`}; ${woText}`,
+        `open guard: ${guardOk ? "refused .exe" : `"${guard}"`}; code seed: "${seed.title}"; ${woText}`,
     );
   } catch (e) {
     await smokeReport(false, `smoke failed: ${String(e)}`);

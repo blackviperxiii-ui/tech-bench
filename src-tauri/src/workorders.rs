@@ -148,7 +148,7 @@ fn exe_dir() -> PathBuf {
 /// The KB root when its shop tree is writable, else "" (no shop shard copy). The WinForms
 /// installer is per-user so its KB is writable; a per-machine MSI or a Linux package is not,
 /// and a save must not fail just because the shop copy cannot be written.
-fn writable_kb(kb_root: &str) -> String {
+pub(crate) fn writable_kb(kb_root: &str) -> String {
     if kb_root.is_empty() {
         return String::new();
     }

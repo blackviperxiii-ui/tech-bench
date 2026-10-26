@@ -159,7 +159,7 @@ button { font: inherit; }
 .sheet-body p { margin: 4px 0; }
 .ref-row { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .ref-key { font-weight: 600; }
-.sheet-foot { display: flex; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--line); }
+.sheet-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
 
 .bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .bar button {
@@ -230,3 +230,13 @@ button { font: inherit; }
   border: 1px solid var(--line); background: var(--panel); color: var(--text);
 }
 .settings-foot { margin-top: 12px; }
+
+.kb-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.kb-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.kb-form label.wide { grid-column: 1 / -1; }
+.kb-form input, .kb-form textarea {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; resize: vertical;
+}
+.sheet-foot button:not(.primary) { background: var(--panel); color: var(--text); border-color: var(--line); }
+.sheet-foot .error { margin-right: auto; color: #c0392b; font-size: 13px; }
