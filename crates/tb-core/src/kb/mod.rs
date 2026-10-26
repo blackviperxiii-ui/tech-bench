@@ -2,5 +2,7 @@
 
 pub mod index;
 pub mod paths;
+pub mod shop;
+pub mod user_codes;
 
 pub use index::{Hit, KbIndex, MAX_RESULTS};
