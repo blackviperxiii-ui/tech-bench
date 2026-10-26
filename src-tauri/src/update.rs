@@ -5,8 +5,8 @@
 //! while the adapter bridge is running.
 //!
 //! `--update-smoke` (CI only): check the configured feed, then download and install what it
-//! offers, writing `UPDATE …` lines through the smoke output. On Windows the installer
-//! relaunches the app with the same arguments, so the new version reports in and stops.
+//! offers, writing `UPDATE …` lines through the smoke output. Run again after the update, the
+//! new version reports `UPDATE newest` and stops.
 
 // Phones update from the app store; only the commands' refusals are used there.
 #![cfg_attr(mobile, allow(dead_code, unused_imports))]
