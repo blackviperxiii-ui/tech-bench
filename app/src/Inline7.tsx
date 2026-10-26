@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
-import { explainCode, guidanzFeatures, historySummary, type SwitchRow } from "./api";
+import { useCallback, useEffect, useState } from "react";
+import { busCaps, explainCode, guidanzFeatures, historySummary, type BusCaps, type SwitchRow } from "./api";
+import { LiveBus } from "./LiveBus";
 
 /**
- * INLINE 7 page, offline parts: the CodeBook explainer for any SPN/FMI and the Guidanz feature
- * reference. Live J1939 needs the 32-bit RP1210 adapter, so it stays in the Windows build for now.
+ * INLINE 7 page: live J1939 over the RP1210 bridge where this build has one (Windows), then the
+ * offline parts that work everywhere: the CodeBook explainer, unit history and the Guidanz
+ * feature reference.
  */
 export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number }) {
   const [spn, setSpn] = useState("");
@@ -13,6 +15,13 @@ export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number
   const [row, setRow] = useState(-1);
 
   const [history, setHistory] = useState({ text: "", folder: "" });
+  const [caps, setCaps] = useState<BusCaps | null>(null);
+
+  useEffect(() => {
+    busCaps()
+      .then(setCaps)
+      .catch((e) => setCaps({ available: false, fake: false, reason: String(e) }));
+  }, []);
 
   // Inline7Control.RefreshHistory: follows the job tag, and a sync may bring other techs' visits.
   useEffect(() => {
@@ -27,14 +36,7 @@ export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number
       .catch(() => setRows([]));
   }, []);
 
-  function explain(e: React.FormEvent) {
-    e.preventDefault();
-    const s = Number.parseInt(spn, 10);
-    const f = Number.parseInt(fmi, 10);
-    if (!Number.isInteger(s) || s < 0 || !Number.isInteger(f) || f < 0 || f > 31) {
-      setHelp("SPN must be a whole number and FMI 0 to 31.");
-      return;
-    }
+  const show = useCallback((s: number, f: number) => {
     explainCode(s, f)
       .then((r) => {
         // Same layout as Inline7Control.ShowCode.
@@ -43,16 +45,42 @@ export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number
         setHelp(text);
       })
       .catch((err) => setHelp(`Error: ${String(err)}`));
+  }, []);
+
+  /** A live code was clicked: fill the form too, so the tech sees which code is explained. */
+  const pick = useCallback(
+    (s: number, f: number) => {
+      setSpn(String(s));
+      setFmi(String(f));
+      show(s, f);
+    },
+    [show],
+  );
+
+  function explain(e: React.FormEvent) {
+    e.preventDefault();
+    const s = Number.parseInt(spn, 10);
+    const f = Number.parseInt(fmi, 10);
+    if (!Number.isInteger(s) || s < 0 || !Number.isInteger(f) || f < 0 || f > 31) {
+      setHelp("SPN must be a whole number and FMI 0 to 31.");
+      return;
+    }
+    show(s, f);
   }
 
   const sel = rows[row];
 
   return (
     <section className="inline7">
-      <p className="notice">
-        Live bus needs the Windows build: the INLINE 7 adapter only has 32-bit Windows RP1210
-        drivers. Code lookup and the feature reference below work everywhere.
-      </p>
+      <h2>Live bus</h2>
+      {caps?.available ? (
+        <LiveBus caps={caps} onCode={pick} onReport={setHelp} />
+      ) : (
+        <p className="notice">
+          {caps?.reason ?? "Checking for the adapter bridge…"} Code lookup, unit history and the
+          feature reference below work everywhere.
+        </p>
+      )}
 
       <h2>Explain a code</h2>
       <form className="code-form" onSubmit={explain}>

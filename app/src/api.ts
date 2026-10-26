@@ -182,3 +182,58 @@ export const syncPickFolder = () => invoke<string | null>("sync_pick_folder");
 /** Unit history (History.Summary) for a job tag, from the saved session DTC files. */
 export const historySummary = (job: string) =>
   invoke<{ text: string; folder: string }>("history_summary", { job });
+
+/** Whether this build can reach an RP1210 adapter (through the 32-bit bridge sidecar). */
+export interface BusCaps {
+  available: boolean;
+  /** Running on the bridge's built-in fake adapter (tests only, no hardware). */
+  fake: boolean;
+  reason: string;
+}
+
+export interface LiveDtc {
+  spn: number;
+  fmi: number;
+  occ: number;
+  name: string;
+  fmiText: string;
+  /** "SPN 1761  FMI 9  occ 1  …", as the WinForms lists show it. */
+  text: string;
+}
+
+export interface BusAdapter {
+  id: string;
+  name: string;
+  dll: string;
+  inline7: boolean;
+  describe: string;
+}
+
+/** The bridge's snapshot; readings are null when the bus has not sent them. */
+export interface BusSnap {
+  connected: boolean;
+  busy: boolean;
+  busyWhat: string;
+  tscRpm: number;
+  defText: string;
+  aftText: string;
+  red: boolean;
+  amber: boolean;
+  vin: string;
+  sw: string;
+  compId: string;
+  hours: string;
+  rpm: number | null;
+  lastResetReport: string;
+  resetSeq: number;
+  active: LiveDtc[];
+  prev: LiveDtc[];
+  faultModules: string[];
+  /** HUD lines worded as the WinForms INLINE 7 page writes them. */
+  hud: { status: string; rpm: string; lamps: string; def: string; mon: string };
+}
+
+export const busCaps = () => invoke<BusCaps>("bus_caps");
+/** One named bridge command; the bridge has no raw-frame command and guards every send. */
+export const busCall = <T>(cmd: string, args?: Record<string, unknown>) =>
+  invoke<T>("bus_call", { cmd, args: args ?? null });

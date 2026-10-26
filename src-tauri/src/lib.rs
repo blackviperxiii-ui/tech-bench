@@ -1,6 +1,6 @@
 //! Tauri 2 shell for Tech Bench. Commands expose tb-core to the React UI in app/.
-//! No bus access and no ECU actions (those stay in the WinForms
-//! build until the RP1210 sidecar lands with its guards). The only writes are work-order packets
+//! Live bus goes through the 32-bit RP1210 bridge sidecar (`livebus`), which owns the adapter
+//! and checks every frame against the tb-core send guard. The other writes are work-order packets,
 //! the shop/job settings files the WinForms app also writes, Add code / note / file into this
 //! tech's KB shop shard, and shop sync between the KB and a sync folder.
 
@@ -10,11 +10,12 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, RunEvent, State};
 use tb_core::kb::{KbIndex, MAX_RESULTS};
 use tb_core::search::{codebook, featurebook};
 
 mod job;
+mod livebus;
 mod shopadd;
 mod shopsync;
 mod workorders;
@@ -232,6 +233,7 @@ pub fn run() {
         .manage(workorders::WoState(Mutex::new(None)))
         .manage(shopsync::LastSync(Mutex::new(None)))
         .manage(shopsync::WatchBase(Mutex::new(None)))
+        .manage(livebus::Bridge(Mutex::new(None)))
         .setup(move |app| {
             let root = kb_root(app.handle());
             {
@@ -288,9 +290,16 @@ pub fn run() {
             shopsync::sync_resolve,
             shopsync::sync_pick_folder,
             shopsync::history_summary,
+            livebus::bus_caps,
+            livebus::bus_call,
             smoke_mode,
             smoke_report
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Tech Bench");
+        .build(tauri::generate_context!())
+        .expect("error while running Tech Bench")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                livebus::shut_down(&app.state::<livebus::Bridge>());
+            }
+        });
 }
