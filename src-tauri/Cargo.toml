@@ -15,7 +15,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tb-core = { path = "../crates/tb-core" }
+tb-rp1210-bridge = { path = "../crates/tb-rp1210-bridge" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

@@ -6,6 +6,7 @@
 //! `tb_core::j1939::guard` right before `RP1210_SendMessage`.
 
 pub mod bus;
+pub mod client;
 #[cfg(windows)]
 pub mod dll;
 pub mod driver;
