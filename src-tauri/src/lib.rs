@@ -10,6 +10,10 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tb_core::kb::{KbIndex, MAX_RESULTS};
+use tb_core::search::{codebook, featurebook};
+
+/// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
+const CHEATSHEET_RTF: &str = include_str!("../../assets/cheatsheet.rtf");
 
 /// How long `--smoke` waits for the UI to report before failing.
 const SMOKE_TIMEOUT: Duration = Duration::from_secs(90);
@@ -70,6 +74,65 @@ fn kb_search(query: String, kind: String, kb: State<'_, Kb>) -> SearchResult {
         total,
         status: kb.status.clone(),
     }
+}
+
+#[derive(Serialize)]
+struct ParaDto {
+    text: String,
+    bold: bool,
+    big: bool,
+}
+
+#[tauri::command]
+fn cheatsheet() -> Vec<ParaDto> {
+    tb_core::rtf::paragraphs(CHEATSHEET_RTF)
+        .into_iter()
+        .map(|p| ParaDto {
+            text: p.text,
+            bold: p.bold,
+            big: p.big,
+        })
+        .collect()
+}
+
+#[derive(Serialize)]
+struct Explained {
+    text: String,
+    kb: Option<String>,
+}
+
+/// CodeBook explainer for one SPN/FMI plus the KB's own entry for that SPN, if any.
+#[tauri::command]
+fn explain_code(spn: i32, fmi: i32, kb: State<'_, Kb>) -> Explained {
+    let kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
+    Explained {
+        text: codebook::explain(spn, fmi, &kb.names),
+        kb: kb.spn_text(spn, fmi),
+    }
+}
+
+#[derive(Serialize)]
+struct SwitchRowDto {
+    id: String,
+    name: String,
+    state: String,
+    short: String,
+    detail: String,
+}
+
+/// The INLINE 7 Guidanz feature reference (status text only; nothing is written to an ECU).
+#[tauri::command]
+fn guidanz_features() -> Vec<SwitchRowDto> {
+    featurebook::guidanz_features()
+        .into_iter()
+        .map(|r| SwitchRowDto {
+            id: r.id,
+            name: r.name,
+            state: r.state,
+            short: r.short,
+            detail: r.detail,
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -168,6 +231,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             kb_info,
             kb_search,
+            cheatsheet,
+            explain_code,
+            guidanz_features,
             smoke_mode,
             smoke_report
         ])

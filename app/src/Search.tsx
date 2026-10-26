@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { KINDS, kbInfo, kbSearch, type Hit, type KbInfo } from "./api";
 
 /** Port of SearchControl.cs: query + kind, hit list, detail pane, status line. */
-export function Search() {
+export function Search({ focusTick = 0 }: { focusTick?: number }) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<string>("ALL");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -11,6 +11,12 @@ export function Search() {
   const [info, setInfo] = useState<KbInfo | null>(null);
   const [error, setError] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
+  const queryRef = useRef<HTMLInputElement>(null);
+
+  // Ctrl+F / F3 from anywhere: focus and select the query.
+  useEffect(() => {
+    if (focusTick > 0) queryRef.current?.select();
+  }, [focusTick]);
 
   useEffect(() => {
     kbInfo()
@@ -77,6 +83,7 @@ export function Search() {
     <section className="search">
       <div className="search-bar">
         <input
+          ref={queryRef}
           className="query"
           type="search"
           placeholder="Code, SPN, model, serial, filter…"
