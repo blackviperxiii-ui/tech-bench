@@ -1,6 +1,8 @@
 //! Ported from tests/SelfTest.Persist.cs and the AdapterPrefs cases in tests/SelfTest.Adapter.cs.
 //! The C# source-level checks on ShellForm / Inline7Control / WorkOrderControl are WinForms
 //! wiring and are not ported; the Tauri shell gets its own startup tests.
+//! Uses the filesystem, so it is native only (wasm32-unknown-unknown has no fs).
+#![cfg(not(target_arch = "wasm32"))]
 
 use std::fs;
 use std::path::PathBuf;

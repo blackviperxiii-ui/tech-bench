@@ -1,5 +1,9 @@
 //! Ported from tests/SelfTest.Adapter.cs NameTests and tests/SelfTest.Session.cs SaLabel cases.
 
+// Under wasm-pack the same cases run through wasm-bindgen-test.
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 use std::collections::HashMap;
 use tb_core::j1939::decode::parse_dm;
 use tb_core::j1939::Names;

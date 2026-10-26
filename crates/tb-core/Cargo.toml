@@ -6,5 +6,9 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# No external crates: std only, so the same code builds for native targets and wasm32.
+# No external runtime crates: std only, so the same code builds for native targets and wasm32.
 [dependencies]
+
+# Test-only: lets `wasm-pack test --node` run the same test files on wasm32.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"

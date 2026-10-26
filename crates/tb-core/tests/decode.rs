@@ -1,6 +1,10 @@
 //! Ported from tests/SelfTest.Decode.cs and SelfTest.cs (AftertreatmentTests, NormalizePgn).
 //! Same inputs, same literal expected values as the C# SelfTest.
 
+// Under wasm-pack the same cases run through wasm-bindgen-test.
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 use tb_core::j1939::decode::*;
 use tb_core::j1939::Names;
 
