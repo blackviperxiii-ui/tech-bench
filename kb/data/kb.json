@@ -3,7 +3,7 @@
     "name": "Air Compressor Troubleshooting Knowledge Base",
     "version": "1.0.0",
     "created": "2026-08-11T16:38:06.373Z",
-    "location": "C:\\Users\\jerem\\Documents\\air-compressor-kb",
+    "location": "C:\\Users\\user\\Documents\\air-compressor-kb",
     "purpose": "Local offline-friendly DB of compressor fault codes, controller tips, and symptom playbooks for field service with Grok.",
     "disclaimer": "NOT a substitute for OEM manuals, training, or site safety procedures. Codes vary by software revision and options. Verify against the manual for the exact serial/controller before parts replacement. Always LOTO and depressurize.",
     "how_to_use_with_grok": [
