@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { woClock, woList, woSave, woShare, type WorkOrder, type WoList } from "./api";
+import { useState } from "react";
+import { woAddPhotos, woClock, woOpenMedia, woSave, woShare, type WorkOrder, type WoList } from "./api";
 
-const IDLE_STATUS =
+export const IDLE_STATUS =
   "Work orders are saved on this PC and in the shop folder. Share with shop copies one for other techs.";
 
 export function blankWorkOrder(techId: string): WorkOrder {
@@ -46,32 +46,27 @@ const FIELDS: [Field, string][] = [
   ["description", "Complaint"],
 ];
 
+export interface WorkOrdersProps {
+  data: WoList | null;
+  current: WorkOrder | null;
+  /** Pick (or un-pick) the open work order; the shell persists it and fills the job strip. */
+  onSelect: (wo: WorkOrder | null) => void;
+  /** Field edits to the open work order (not saved until Save). */
+  onEdit: (wo: WorkOrder) => void;
+  /** Re-list and select `key`. */
+  reload: (key?: string) => Promise<void>;
+  onClearJob: () => Promise<void>;
+  onShopSettings: () => void;
+}
+
 /** Port of WorkOrderControl.cs: list, header fields, notes, report, pictures, shop clock. */
-export function WorkOrders() {
-  const [data, setData] = useState<WoList | null>(null);
-  const [current, setCurrent] = useState<WorkOrder | null>(null);
+export function WorkOrders({ data, current, onSelect, onEdit, reload, onClearJob, onShopSettings }: WorkOrdersProps) {
   const [status, setStatus] = useState(IDLE_STATUS);
   const [busy, setBusy] = useState(false);
-
-  const reload = useCallback(async (selectKey?: string) => {
-    try {
-      const d = await woList();
-      setData(d);
-      if (selectKey) {
-        const hit = d.orders.find((o) => o.key.toUpperCase() === selectKey.toUpperCase());
-        if (hit) setCurrent(hit);
-      }
-    } catch (e) {
-      setStatus(`Could not list work orders: ${String(e)}`);
-    }
-  }, []);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
+  const [media, setMedia] = useState("");
 
   function edit(field: Field | "notes", value: string) {
-    setCurrent((c) => (c ? { ...c, [field]: value } : c));
+    if (current) onEdit({ ...current, [field]: value });
   }
 
   /** Trim the header like WorkOrderControl.Flush; notes stay as typed. */
@@ -81,14 +76,15 @@ export function WorkOrders() {
     return out;
   }
 
-  async function run(action: (wo: WorkOrder) => Promise<string>) {
+  async function run(action: (wo: WorkOrder) => Promise<string | null>) {
     if (!current) {
       setStatus("Pick a work order first.");
       return;
     }
     setBusy(true);
     try {
-      setStatus(await action(flushed(current)));
+      const msg = await action(flushed(current));
+      if (msg !== null) setStatus(msg);
     } catch (e) {
       setStatus(String(e));
     } finally {
@@ -96,32 +92,59 @@ export function WorkOrders() {
     }
   }
 
+  /** After a write: re-list, then show the saved copy. */
+  async function settle(saved: WorkOrder) {
+    await reload(saved.key);
+    onSelect(saved);
+  }
+
   const save = () =>
     run(async (wo) => {
       const saved = await woSave(wo);
-      await reload(saved.key);
-      setCurrent(saved);
+      await settle(saved);
       return `Saved WO ${saved.key}`;
     });
 
   const share = () =>
     run(async (wo) => {
       const r = await woShare(wo);
-      await reload(r.wo.key);
-      setCurrent(r.wo);
+      await settle(r.wo);
       return `Shared WO ${r.wo.key} → ${r.dest}`;
     });
 
   const clock = (kind: "logon" | "logoff") =>
     run(async (wo) => {
       const saved = await woClock(wo, kind);
-      await reload(saved.key);
-      setCurrent(saved);
+      await settle(saved);
       return `Shop ${kind} saved.`;
     });
 
+  const addPhoto = () =>
+    run(async (wo) => {
+      const r = await woAddPhotos(wo);
+      if (!r) return null;
+      await settle(r.wo);
+      return `Attached ${r.count} file(s).`;
+    });
+
+  const openMedia = (name: string) =>
+    run(async (wo) => {
+      if (!wo.folder) return "Save the work order first.";
+      await woOpenMedia(wo.folder, name);
+      return null;
+    });
+
+  async function clearJob() {
+    try {
+      await onClearJob();
+      setStatus("Cleared saved job (customer and work order).");
+    } catch (e) {
+      setStatus(String(e));
+    }
+  }
+
   function newOrder() {
-    setCurrent(blankWorkOrder(data?.techId ?? ""));
+    onSelect(blankWorkOrder(data?.techId ?? ""));
     setStatus("New local work order. Replace LOCAL-… with the real WO number when you have it.");
   }
 
@@ -134,6 +157,7 @@ export function WorkOrders() {
         <div className="bar">
           <button onClick={newOrder}>New</button>
           <button onClick={() => void reload(current?.key)}>Refresh</button>
+          <button onClick={() => void clearJob()}>Clear job</button>
         </div>
         <ul className="hits" role="listbox" aria-label="Work orders" tabIndex={0}>
           {orders.map((o) => (
@@ -143,7 +167,7 @@ export function WorkOrders() {
               aria-selected={isListed(o)}
               className={isListed(o) ? "hit sel" : "hit"}
               onClick={() => {
-                setCurrent(o);
+                onSelect(o);
                 setStatus(IDLE_STATUS);
               }}
             >
@@ -178,6 +202,10 @@ export function WorkOrders() {
           <button disabled={busy} onClick={() => clock("logoff")}>
             Log off
           </button>
+          <button disabled={busy} onClick={addPhoto}>
+            Add photo
+          </button>
+          <button onClick={onShopSettings}>Shop settings</button>
         </div>
         {current ? (
           <div className="wo-form">
@@ -195,16 +223,30 @@ export function WorkOrders() {
               Report
               <pre className="detail mini">{current.reportText}</pre>
             </label>
-            <label>
-              Pictures
-              <ul className="hits mini">
+            <div className="field">
+              <span>Pictures (double-click to open)</span>
+              <ul
+                className="hits mini"
+                role="listbox"
+                aria-label="Pictures"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && media && openMedia(media)}
+              >
                 {current.media.map((m) => (
-                  <li key={m} className="hit">
+                  <li
+                    key={m}
+                    role="option"
+                    aria-selected={m === media}
+                    className={m === media ? "hit sel" : "hit"}
+                    onClick={() => setMedia(m)}
+                    onDoubleClick={() => openMedia(m)}
+                  >
                     <span className="title">{m}</span>
                   </li>
                 ))}
+                {current.media.length === 0 && <li className="empty">No pictures yet. Press Add photo.</li>}
               </ul>
-            </label>
+            </div>
             <label>
               Clock
               <pre className="detail mini">

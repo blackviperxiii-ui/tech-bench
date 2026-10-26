@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { KINDS, kbInfo, kbSearch, type Hit, type KbInfo } from "./api";
+import { KINDS, kbInfo, kbOpen, kbSearch, type Hit, type KbInfo } from "./api";
 
 /** Port of SearchControl.cs: query + kind, hit list, detail pane, status line. */
-export function Search({ focusTick = 0 }: { focusTick?: number }) {
+export function Search({
+  focusTick = 0,
+  prefill = { text: "", tick: 0 },
+}: {
+  focusTick?: number;
+  /** "Search this job": replace the query (SearchControl.Prefill). */
+  prefill?: { text: string; tick: number };
+}) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<string>("ALL");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -17,6 +24,14 @@ export function Search({ focusTick = 0 }: { focusTick?: number }) {
   useEffect(() => {
     if (focusTick > 0) queryRef.current?.select();
   }, [focusTick]);
+
+  useEffect(() => {
+    if (prefill.tick > 0) {
+      setQuery(prefill.text);
+      setKind("ALL");
+      queryRef.current?.focus();
+    }
+  }, [prefill]);
 
   useEffect(() => {
     kbInfo()
@@ -47,6 +62,18 @@ export function Search({ focusTick = 0 }: { focusTick?: number }) {
   }, [query, kind]);
 
   const current = hits[sel];
+  const openable = current && ["MANUAL", "FILE", "NOTE"].includes(current.kind) && current.path !== "";
+
+  /** SearchControl.OpenSel: the file behind a manual / file / note hit, through the launch guard. */
+  async function openSel() {
+    if (!openable) return;
+    try {
+      await kbOpen(current.path);
+      setError("");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   function onQueryKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown" && hits.length > 0) {
@@ -62,6 +89,9 @@ export function Search({ focusTick = 0 }: { focusTick?: number }) {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSel((s) => Math.max(s - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      void openSel();
     }
   }
 
@@ -118,13 +148,21 @@ export function Search({ focusTick = 0 }: { focusTick?: number }) {
               aria-selected={i === sel}
               className={i === sel ? "hit sel" : "hit"}
               onClick={() => setSel(i)}
+              onDoubleClick={() => void openSel()}
             >
               <span className="kind">{h.kind}</span>
               <span className="title">{h.title}</span>
             </li>
           ))}
         </ul>
-        <pre className="detail">{detail}</pre>
+        <div className="detail-pane">
+          <pre className="detail">{detail}</pre>
+          {openable && (
+            <div className="bar">
+              <button onClick={() => void openSel()}>Open file (Enter)</button>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

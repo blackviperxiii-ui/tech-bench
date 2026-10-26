@@ -1,6 +1,7 @@
 //! Tauri 2 shell for Tech Bench. Commands expose tb-core to the React UI in app/.
 //! No bus access and no ECU actions (those stay in the WinForms
-//! build until the RP1210 sidecar lands with its guards). The only writes are work-order packets.
+//! build until the RP1210 sidecar lands with its guards). The only writes are work-order packets
+//! and the shop/job settings files the WinForms app also writes.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +13,7 @@ use tauri::{AppHandle, Manager, State};
 use tb_core::kb::{KbIndex, MAX_RESULTS};
 use tb_core::search::{codebook, featurebook};
 
+mod job;
 mod workorders;
 
 /// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
@@ -220,6 +222,8 @@ pub fn run() {
     install_panic_hook();
     let smoke = std::env::args().any(|a| a == "--smoke");
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Kb(Mutex::new(KbIndex::new())))
         .manage(Smoke(AtomicBool::new(smoke)))
         .manage(workorders::WoState(Mutex::new(None)))
@@ -254,6 +258,18 @@ pub fn run() {
             workorders::wo_save,
             workorders::wo_clock,
             workorders::wo_share,
+            workorders::wo_add_photos,
+            workorders::wo_open_media,
+            job::job_get,
+            job::job_set_header,
+            job::job_set_wo,
+            job::job_clear,
+            job::job_title,
+            job::shop_settings_get,
+            job::shop_settings_save,
+            job::pick_folder,
+            job::pick_assigned_file,
+            job::kb_open,
             smoke_mode,
             smoke_report
         ])

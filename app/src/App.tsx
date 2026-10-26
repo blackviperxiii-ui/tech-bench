@@ -1,20 +1,50 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheatSheet } from "./CheatSheet";
 import { Inline7 } from "./Inline7";
+import { JobStrip, type Header } from "./JobStrip";
 import { Search } from "./Search";
+import { ShopSettings } from "./ShopSettings";
 import { WorkOrders } from "./WorkOrders";
 import { runSmoke } from "./smoke";
-import { smokeMode } from "./api";
+import {
+  jobClear,
+  jobGet,
+  jobSetHeader,
+  jobSetWo,
+  jobTitle,
+  smokeMode,
+  woList,
+  type WoList,
+  type WorkOrder,
+} from "./api";
 
 /** Same main pages as ShellForm; screens not ported yet say so. */
 const PAGES = ["Search", "Work orders", "INLINE 7", "Settings"] as const;
 type Page = (typeof PAGES)[number];
 
+const NO_HEADER: Header = { customer: "", model: "", serial: "" };
+
 export function App() {
   const [page, setPage] = useState<Page>("Search");
   const [help, setHelp] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
+  const [prefill, setPrefill] = useState({ text: "", tick: 0 });
+  const [data, setData] = useState<WoList | null>(null);
+  const [current, setCurrent] = useState<WorkOrder | null>(null);
+  const [header, setHeader] = useState<Header>(NO_HEADER);
+  const loaded = useRef(false);
 
+  /** Re-list work orders; with `key`, select that order when it is listed. */
+  const reload = useCallback(async (key?: string) => {
+    const d = await woList();
+    setData(d);
+    if (key) {
+      const hit = d.orders.find((o) => o.key.toUpperCase() === key.toUpperCase());
+      if (hit) setCurrent(hit);
+    }
+  }, []);
+
+  // Startup: saved job (customer / model / serial), then the list with the last work order open.
   useEffect(() => {
     smokeMode()
       .then((m) => {
@@ -23,7 +53,75 @@ export function App() {
       .catch(() => {
         /* Not running inside Tauri (plain vite dev): no smoke mode. */
       });
-  }, []);
+    jobGet()
+      .then(async (j) => {
+        setHeader({ customer: j.customer, model: j.model, serial: j.serial });
+        await reload(j.lastWo);
+      })
+      .catch(() => {
+        /* Plain vite dev. */
+      })
+      .finally(() => {
+        loaded.current = true;
+      });
+  }, [reload]);
+
+  // Window title and job tag follow the open work order, else the typed model and serial.
+  useEffect(() => {
+    jobTitle(current, header.model, header.serial).catch(() => {});
+  }, [current, header.model, header.serial]);
+
+  // Persist the typed job after a short pause (not while startup is still filling it).
+  useEffect(() => {
+    if (!loaded.current) return;
+    const t = setTimeout(() => {
+      jobSetHeader(header.customer, header.model, header.serial).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [header]);
+
+  /** WorkOrderControl.PickFromList + ShellForm.ApplyWo: open it, remember it, fill the strip. */
+  function selectWo(wo: WorkOrder | null) {
+    setCurrent(wo);
+    if (wo && wo.key) jobSetWo(wo.key).catch(() => {});
+    if (wo) {
+      setHeader((h) => ({
+        customer: wo.customer || h.customer,
+        model: wo.model || h.model,
+        serial: wo.serial || h.serial,
+      }));
+    }
+  }
+
+  /** Strip edits go into the open work order too (WorkOrderControl.ApplyHeader). */
+  function editHeader(h: Header) {
+    setHeader(h);
+    setCurrent((c) =>
+      c ? { ...c, model: h.model, serial: h.serial, customer: h.customer.trim() ? h.customer : c.customer } : c,
+    );
+  }
+
+  /** Form edits to customer / model / serial show in the strip as well. */
+  function editWo(wo: WorkOrder) {
+    setCurrent(wo);
+    setHeader((h) => ({
+      customer: wo.customer.trim() ? wo.customer : h.customer,
+      model: wo.model,
+      serial: wo.serial,
+    }));
+  }
+
+  async function clearJob() {
+    await jobClear();
+    setCurrent(null);
+    setHeader((h) => ({ ...h, customer: "" }));
+  }
+
+  function searchJob() {
+    // JobStrip.SearchQuery: the typed model and serial.
+    setPrefill((p) => ({ text: `${header.model} ${header.serial}`.trim(), tick: p.tick + 1 }));
+    setPage("Search");
+  }
 
   // Shortcuts from the cheat sheet: F1 help, Ctrl+F / F3 jump to the search box, Esc closes help.
   useEffect(() => {
@@ -62,17 +160,33 @@ export function App() {
           Cheat sheet (F1)
         </button>
       </nav>
-      <main className="page">
-        {page === "Search" && <Search focusTick={focusTick} />}
-        {page === "INLINE 7" && <Inline7 />}
-        {page === "Work orders" && <WorkOrders />}
-        {page === "Settings" && (
-          <div className="todo">
-            <h2>{page}</h2>
-            <p>Not ported yet. Use the Windows Tech Bench app for this screen for now.</p>
-          </div>
-        )}
-      </main>
+      <div className="main">
+        <JobStrip
+          data={data}
+          current={current}
+          header={header}
+          onHeader={editHeader}
+          onPick={selectWo}
+          onSync={() => setPage("Work orders")}
+          onSearchJob={searchJob}
+        />
+        <main className="page">
+          {page === "Search" && <Search focusTick={focusTick} prefill={prefill} />}
+          {page === "INLINE 7" && <Inline7 />}
+          {page === "Work orders" && (
+            <WorkOrders
+              data={data}
+              current={current}
+              onSelect={selectWo}
+              onEdit={editWo}
+              reload={reload}
+              onClearJob={clearJob}
+              onShopSettings={() => setPage("Settings")}
+            />
+          )}
+          {page === "Settings" && <ShopSettings onSaved={() => void reload(current?.key)} />}
+        </main>
+      </div>
       {help && <CheatSheet onClose={() => setHelp(false)} />}
     </div>
   );
