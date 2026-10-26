@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the iOS app for the simulator (unsigned; TECHBENCH_SMOKE=1 bakes the smoke in),
-# install it on a booted iPhone simulator and wait for the smoke line on its console.
+# install it on a booted iPhone simulator and wait for the smoke line in its Documents folder.
 set -euo pipefail
 
 # Xcode's "Build Rust Code" phase only works under a running `tauri ios build`, so build
@@ -20,8 +20,8 @@ xcrun simctl boot "$udid" || true
 xcrun simctl bootstatus "$udid" -b
 xcrun simctl install "$udid" "$app"
 
-log=$(mktemp)
-xcrun simctl launch --console "$udid" com.techbench.app >"$log" 2>&1 &
+# --smoke as a launch argument as well, in case the baked-in flag did not reach the Rust build.
+xcrun simctl launch "$udid" com.techbench.app --smoke
 data=$(xcrun simctl get_app_container "$udid" com.techbench.app data)
 out="$data/Documents/techbench-smoke.txt"
 echo "Smoke file: $out"
@@ -33,10 +33,12 @@ for _ in $(seq 1 90); do
 done
 cat "$out" 2>/dev/null || true
 if ! grep -q "SMOKE PASS" "$out" 2>/dev/null; then
-  echo "No SMOKE PASS. App console:"
-  tail -n 30 "$log" || true
+  echo "No SMOKE PASS. Data container:"
+  find "$data" -maxdepth 3 | head -n 30 || true
+  echo "Running app processes:"
+  xcrun simctl spawn "$udid" launchctl list | grep -i tech || true
   echo "System log for the app:"
   xcrun simctl spawn "$udid" log show --last 5m --style compact \
-    --predicate 'processImagePath CONTAINS[c] "techbench"' | tail -n 40 || true
+    --predicate 'process CONTAINS[c] "tech" OR processImagePath CONTAINS[c] "tech"' | tail -n 60 || true
   exit 1
 fi
