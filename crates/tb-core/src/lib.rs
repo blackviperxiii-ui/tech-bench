@@ -11,6 +11,7 @@ pub mod j1939;
 pub mod json;
 pub mod kb;
 pub mod launch;
+pub mod rp1210;
 pub mod rtf;
 pub mod search;
 pub mod settings;
