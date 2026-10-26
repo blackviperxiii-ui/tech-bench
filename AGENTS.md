@@ -13,8 +13,8 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Never commit secrets, `.env*`, tokens, keys/certs, or legacy settings files (`id-settings*.json`).
 
 ## Merge / release
-- PRs go into `beta`; agents squash-merge their own PR as soon as CI is green, no review hold (user, 2026-10-24).
-- Promoting `beta` → `main`, tagging, and releasing only on user's explicit word.
+- PRs go into `beta`; agents squash-merge their own PR as soon as CI is green, no review hold.
+- Promoting `beta` → `main`, tagging, and releasing only on the maintainer's explicit word.
 - Never use `dyl-ready-pr` merge or babysit. No field tests.
 
 
