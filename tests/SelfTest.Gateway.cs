@@ -20,7 +20,7 @@ static partial class SelfTest
             ClientId = "cid",
             ClientSecret = "oauth-secret",
             SubscriptionKey = "sub-key",
-            TechId = "viper"
+            TechId = "alex"
         };
         creds.Save();
         string stored = File.ReadAllText(IdSettings.PathName());
@@ -365,7 +365,7 @@ static partial class SelfTest
         };
         WorkOrderStore.Save(clash, s, kb);
         string localDir = Path.Combine(WorkOrderStore.LocalRoot(), "9001-01");
-        string shopDir = Path.Combine(WorkOrderStore.ShopTechDir(kb, "viper"), "9001-01");
+        string shopDir = Path.Combine(WorkOrderStore.ShopTechDir(kb, "alex"), "9001-01");
         WorkOrder shopWo = WorkOrderStore.Load(shopDir);
         Check("shop shard exists for merge", shopWo != null, shopDir);
         shopWo.Notes = "Remote notes B";
@@ -405,7 +405,7 @@ static partial class SelfTest
 
         var same = new WorkOrder { Number = "9002", Segment = "01", Notes = "Same notes" };
         WorkOrderStore.Save(same, s, kb);
-        string shop2 = Path.Combine(WorkOrderStore.ShopTechDir(kb, "viper"), "9002-01");
+        string shop2 = Path.Combine(WorkOrderStore.ShopTechDir(kb, "alex"), "9002-01");
         WorkOrder shopSame = WorkOrderStore.Load(shop2);
         string newer = DateTime.UtcNow.AddHours(3).ToString("o");
         shopSame.UpdatedUtc = newer;

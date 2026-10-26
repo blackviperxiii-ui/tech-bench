@@ -13,7 +13,7 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Never commit secrets, `.env*`, tokens, keys/certs, or the IntelliDealer key.
 
 ## Merge / release
-- Agents stop at green + Ready. Squash-merge, tag, and release only on Viper's explicit word.
+- Agents stop at green + Ready. Squash-merge, tag, and release only on the maintainer's explicit word.
 - No `dyl-ready-pr` merge or babysit. No auto-merge.
 
 - **vstack:** Always load and follow the vstack skills in .cursor/skills (start with viper-mode); never use pstack.
