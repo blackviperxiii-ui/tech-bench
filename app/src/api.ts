@@ -267,3 +267,14 @@ export const busReport = (job: string, history: string, now = localNow()) =>
   invoke<string>("bus_call", { cmd: "report", args: { job, when: now.local.slice(0, 16), history } });
 export const woAttachReport = (wo: WorkOrder, text: string) =>
   invoke<WorkOrder>("wo_attach_report", { wo, text });
+
+/** Self-update (desktop): the running version and what the configured feed offers. */
+export interface UpdateInfo {
+  current: string;
+  available: string | null;
+  notes: string;
+}
+
+export const updateCheck = () => invoke<UpdateInfo>("update_check");
+/** Downloads, verifies and installs, then restarts; refused while the live bus is running. */
+export const updateInstall = () => invoke<void>("update_install");

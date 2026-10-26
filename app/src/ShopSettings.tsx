@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { pickAssignedFile, pickFolder, shopSettingsGet, shopSettingsSave } from "./api";
+import {
+  pickAssignedFile,
+  pickFolder,
+  shopSettingsGet,
+  shopSettingsSave,
+  updateCheck,
+  updateInstall,
+  type UpdateInfo,
+} from "./api";
 
 /** Port of ShopSettingsForm.cs: tech name, shop share folder, optional assigned WO file. */
 export function ShopSettings({ onSaved }: { onSaved: () => void }) {
@@ -7,6 +15,9 @@ export function ShopSettings({ onSaved }: { onSaved: () => void }) {
   const [share, setShare] = useState("");
   const [assigned, setAssigned] = useState("");
   const [status, setStatus] = useState("");
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateText, setUpdateText] = useState("");
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     shopSettingsGet()
@@ -29,6 +40,36 @@ export function ShopSettings({ onSaved }: { onSaved: () => void }) {
       onSaved();
     } catch (e) {
       setStatus(`Could not save: ${String(e)}`);
+    }
+  }
+
+  async function check() {
+    setUpdating(true);
+    setUpdateText("Checking…");
+    try {
+      const u = await updateCheck();
+      setUpdate(u);
+      setUpdateText(
+        u.available
+          ? `Version ${u.available} is available (this is ${u.current}).${u.notes ? `\n${u.notes}` : ""}`
+          : `Tech Bench ${u.current} is the newest version.`,
+      );
+    } catch (e) {
+      setUpdate(null);
+      setUpdateText(String(e));
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function install() {
+    setUpdating(true);
+    setUpdateText(`Downloading ${update?.available ?? "the update"}… Tech Bench restarts when it is installed.`);
+    try {
+      await updateInstall();
+    } catch (e) {
+      setUpdateText(String(e));
+      setUpdating(false);
     }
   }
 
@@ -86,6 +127,21 @@ export function ShopSettings({ onSaved }: { onSaved: () => void }) {
       <div className="status" role="status">
         {status}
       </div>
+
+      <h2>Updates</h2>
+      <div className="bar">
+        <button disabled={updating} onClick={() => void check()}>
+          Check for updates
+        </button>
+        {update?.available && (
+          <button className="primary" disabled={updating} onClick={() => void install()}>
+            Install {update.available}
+          </button>
+        )}
+      </div>
+      <pre className="detail mini" aria-label="Update status">
+        {updateText || "Updates are signed; Tech Bench checks the signature before installing."}
+      </pre>
     </section>
   );
 }
