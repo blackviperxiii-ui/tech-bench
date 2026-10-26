@@ -1509,7 +1509,7 @@ ProtocolDescription=ISO 15765
         ShopSync.SettingsFolderOverride = settings;
         try
         {
-            Eq("sanitize drops junk", ShopSync.SanitizeTechId("Viper S."), "Viper-S");
+            Eq("sanitize drops junk", ShopSync.SanitizeTechId("Alex S."), "Alex-S");
             Eq("sanitize empty", ShopSync.SanitizeTechId("@@@"), "tech");
 
             string kbA = MkRoot();

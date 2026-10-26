@@ -26,7 +26,7 @@
 
 - v1.2.13: always-apply `.cursor/rules/vstack.mdc` plus AGENTS.md/CLAUDE.md line: always use vstack skills (viper-mode first), never pstack. Agent-tooling only — stamp stayed 1.2.12 (no lockstep bump).
 
-- v1.2.12: vendor vstack skills (`242d4f9`) under `.cursor/skills/` for Cursor Cloud agents; CodeBot keeps them in sync. Lockstep version bump.
+- v1.2.12: vendor vstack skills (`242d4f9`) under `.cursor/skills/` for Cursor Cloud agents. Lockstep version bump.
 
 - Rearch stage 6m: move Safety sources (`CodeClear`, `J1939Clear`, `Updater`, `SafeOpen`, `IdGateway`, `IdSettings`, `ShopSync`) to `src/Safety/` (path-only; needs-human-review; SelfTest.Feed path updated).
 - Rearch stage 6l: move `Inline7Control.cs` to `src/Features/Inline7/` (path-only; clear-code UI flagged; SelfTest.Persist path updated).
