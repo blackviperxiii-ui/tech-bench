@@ -40,3 +40,32 @@ fn load_shop_settings_file() {
     assert_eq!(ShopSettings::load(&dir, "fallback").tech_id, "fallback");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn save_round_trip_and_collect() {
+    let dir = std::env::temp_dir().join(format!("tb-shop-save-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let s = ShopSettings::collect(" user B. ", "  S:\\shop  ", " C:\\wo\\id-work-orders.csv ");
+    assert_eq!(
+        s,
+        ShopSettings {
+            tech_id: "user-B".into(),
+            share_folder: "S:\\shop".into(),
+            assigned_file: "C:\\wo\\id-work-orders.csv".into(),
+        }
+    );
+    let path = dir.join("sub").join("shop-settings.json");
+    s.save_to(&path).unwrap();
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        r#"{"TechId":"user-B","ShareFolder":"S:\\shop","AssignedFile":"C:\\wo\\id-work-orders.csv"}"#
+    );
+    assert_eq!(ShopSettings::load_from(&path), Some(s.clone()));
+    // A second save keeps the first as .bak.
+    ShopSettings::collect("next", "", "")
+        .save_to(&path)
+        .unwrap();
+    assert!(dir.join("sub").join("shop-settings.json.bak").exists());
+    assert_eq!(ShopSettings::load(&dir.join("sub"), "x").tech_id, "next");
+    let _ = fs::remove_dir_all(&dir);
+}
