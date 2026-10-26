@@ -134,12 +134,21 @@ pub fn shop_settings_save(
 /// Folder picker for the share folder. Async so the native dialog never blocks the main thread.
 #[tauri::command]
 pub async fn pick_folder(app: AppHandle) -> Option<String> {
-    app.dialog()
-        .file()
-        .set_title("Folder other techs can read (USB, network, or OneDrive)")
-        .blocking_pick_folder()
-        .and_then(|p| p.into_path().ok())
-        .map(|p| p.to_string_lossy().into_owned())
+    #[cfg(desktop)]
+    {
+        app.dialog()
+            .file()
+            .set_title("Folder other techs can read (USB, network, or OneDrive)")
+            .blocking_pick_folder()
+            .and_then(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+    // Phones have no folder picker; shop folders are a desktop feature.
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        None
+    }
 }
 
 #[tauri::command]
