@@ -59,3 +59,6 @@ TestResults/
 
 # Rust workspace (crates/)
 target/
+node_modules/
+app/dist/
+src-tauri/gen/

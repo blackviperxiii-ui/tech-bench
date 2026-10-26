@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/tb-core"]
+members = ["crates/tb-core", "src-tauri"]
 
 [workspace.package]
 edition = "2021"
