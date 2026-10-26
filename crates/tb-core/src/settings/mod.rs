@@ -3,6 +3,8 @@
 //! (port of `src/Core/Settings/{AppSettings,AdapterPrefs,SettingsStore,SettingsWriteGate}.cs`).
 
 pub mod atomic;
+pub mod shop;
 pub mod store;
 
+pub use shop::ShopSettings;
 pub use store::{match_work_order_key, AdapterPrefsData, AppSettings, SettingsStore};
