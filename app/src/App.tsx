@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheatSheet } from "./CheatSheet";
 import { Inline7 } from "./Inline7";
@@ -90,6 +91,24 @@ export function App() {
         loaded.current = true;
       });
   }, [reload, quietSync]);
+
+  // ShopWatcher: the shell polls the shop folders and says when they settle after a change.
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let gone = false;
+    listen("shop-changed", () => quietSync())
+      .then((un) => {
+        if (gone) un();
+        else stop = un;
+      })
+      .catch(() => {
+        /* Plain vite dev. */
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, [quietSync]);
 
   // Window title and job tag follow the open work order, else the typed model and serial.
   useEffect(() => {

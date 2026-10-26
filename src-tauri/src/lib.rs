@@ -231,6 +231,7 @@ pub fn run() {
         .manage(Smoke(AtomicBool::new(smoke)))
         .manage(workorders::WoState(Mutex::new(None)))
         .manage(shopsync::LastSync(Mutex::new(None)))
+        .manage(shopsync::WatchBase(Mutex::new(None)))
         .setup(move |app| {
             let root = kb_root(app.handle());
             {
@@ -240,6 +241,9 @@ pub fn run() {
                 if smoke {
                     smoke_line(&format!("SMOKE kb: {}", kb.status));
                 }
+            }
+            if !smoke {
+                shopsync::start_watcher(app.handle().clone());
             }
             if smoke {
                 std::thread::spawn(|| {
