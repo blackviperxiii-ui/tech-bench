@@ -93,14 +93,14 @@ static partial class SelfTest
             Eq("key", wo.Key(), "44551-01");
             Check("job tag has WO", wo.JobTag().Contains("WO 44551-01"), wo.JobTag());
 
-            var s = new ShopSettings { TechId = "viper", ShareFolder = share };
+            var s = new ShopSettings { TechId = "user", ShareFolder = share };
             WorkOrderStore.Save(wo, s, kb);
             string packet = Path.Combine(WorkOrderStore.LocalRoot(), "44551-01");
             Check("wo.json written", File.Exists(Path.Combine(packet, "wo.json")), packet);
             Check("notes.txt written", File.ReadAllText(Path.Combine(packet, "notes.txt")).Contains("4-pin"), "notes");
             Check("shop shard packet",
-                File.Exists(Path.Combine(WorkOrderStore.ShopTechDir(kb, "viper"), "44551-01", "wo.json")),
-                "missing data\\shop\\viper\\work-orders");
+                File.Exists(Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "44551-01", "wo.json")),
+                "missing data\\shop\\user\\work-orders");
 
             WorkOrder loaded = WorkOrderStore.Load(packet);
             Check("reload packet", loaded != null, packet);
@@ -139,7 +139,7 @@ static partial class SelfTest
             Check("bak still parses",
                 bakWo != null && bakWo.Number == "44551" && (bakWo.Notes ?? "").IndexOf("4-pin", StringComparison.Ordinal) >= 0,
                 bakWo == null ? "null" : (bakWo.Notes ?? ""));
-            string shopPacket = Path.Combine(WorkOrderStore.ShopTechDir(kb, "viper"), "44551-01");
+            string shopPacket = Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "44551-01");
             Check("shop copy ignores wo.json.bak", !File.Exists(Path.Combine(shopPacket, "wo.json.bak")), "json bak copied");
             Check("shop copy ignores notes.txt.bak", !File.Exists(Path.Combine(shopPacket, "notes.txt.bak")), "notes bak copied");
             Check("shop copy has no tmp sidecar", !HasPacketTemp(shopPacket), shopPacket);
@@ -373,7 +373,7 @@ static partial class SelfTest
         };
         WorkOrderStore.Save(clash, s, kb);
         string localDir = Path.Combine(WorkOrderStore.LocalRoot(), "9001-01");
-        string shopDir = Path.Combine(WorkOrderStore.ShopTechDir(kb, "viper"), "9001-01");
+        string shopDir = Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "9001-01");
         WorkOrder shopWo = WorkOrderStore.Load(shopDir);
         Check("shop shard exists for merge", shopWo != null, shopDir);
         shopWo.Notes = "Remote notes B";
@@ -413,7 +413,7 @@ static partial class SelfTest
 
         var same = new WorkOrder { Number = "9002", Segment = "01", Notes = "Same notes" };
         WorkOrderStore.Save(same, s, kb);
-        string shop2 = Path.Combine(WorkOrderStore.ShopTechDir(kb, "viper"), "9002-01");
+        string shop2 = Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "9002-01");
         WorkOrder shopSame = WorkOrderStore.Load(shop2);
         string newer = DateTime.UtcNow.AddHours(3).ToString("o");
         shopSame.UpdatedUtc = newer;

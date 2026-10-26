@@ -3,15 +3,15 @@
 The detail behind the always-on list in `CLAUDE.md` and `.cursor/rules/tech-bench.mdc`. Those files stay one line per topic; this file is not loaded every turn, so read it when you start a task. If a rule here and an always-on line disagree, stop and ask.
 
 ## 1. Repo state
-- The repo is **public by Viper's choice**. Don't add exposure: no mirrors, forks, gists, public feeds or pasted internals elsewhere. Never add secrets.
-- Visibility changes and history rewrites are Viper's call only.
+- The repo is **public by user's choice**. Don't add exposure: no mirrors, forks, gists, public feeds or pasted internals elsewhere. Never add secrets.
+- Visibility changes and history rewrites are user's call only.
 - The password DB (`kb/data/passwords/ifix-passwords.json`) is an open owner decision. Don't edit, move, untrack or rewrite history for it. `build.bat` and `test.bat` still embed it.
 
 ## 2. Branch protection on `main`
 - Repository ruleset **"Protect main"** targets `refs/heads/main`: changes only through a PR (0 required approvals, no code-owner, last-push or thread-resolution requirement), required status check `installer` (GitHub Actions) with the branch **up to date** before merge, and no force-push or deletion. The bypass list is empty, admins included.
-- A direct push to `main` fails with `GH013: Repository rule violations`. That is expected; never push to `main`. Promote via PR only when Viper says so.
-- Check the live rules with `gh api repos/blackviperxiii-ui/tech-bench/rules/branches/main`. Changing the ruleset is Viper's call.
-- Merge methods are not restricted by the ruleset. Viper's rule is squash and merge. Into `beta`, agents squash-merge on green; into `main` only on his word.
+- A direct push to `main` fails with `GH013: Repository rule violations`. That is expected; never push to `main`. Promote via PR only when user says so.
+- Check the live rules with `gh api repos/blackviperxiii-ui/tech-bench/rules/branches/main`. Changing the ruleset is user's call.
+- Merge methods are not restricted by the ruleset. user's rule is squash and merge. Into `beta`, agents squash-merge on green; into `main` only on his word.
 
 ## 3. Fresh base
 ```
@@ -20,12 +20,12 @@ git rev-parse origin/beta          # record this SHA; it goes in the PR body and
 git switch -c cursor/<topic> origin/beta
 ```
 - Before touching an existing branch: `git fetch origin` and `git merge-base --is-ancestor origin/beta HEAD`. If that fails, bring the branch current with `beta` first (merge `origin/beta` in; don't force-push shared branches).
-- Re-check `origin/beta` right before you squash-merge into `beta`. Re-check `origin/main` only when Viper asks for a promote/tag/release. A PR into a protected branch that is behind shows `BEHIND`/`BLOCKED` until it's updated.
+- Re-check `origin/beta` right before you squash-merge into `beta`. Re-check `origin/main` only when user asks for a promote/tag/release. A PR into a protected branch that is behind shows `BEHIND`/`BLOCKED` until it's updated.
 - Never plan, review or screenshot from a stale checkout or from old images in `docs/`.
 
 ## 4. Merging and releases
 - Open every PR into `beta`. Squash-merge it yourself (`gh pr merge <n> --squash`) as soon as CI (`installer`) is green on its head, with no review hold. Re-check that the branch is current with `beta` first.
-- Only promoting `beta` → `main`, tagging, and releasing need Viper's explicit word for that version.
+- Only promoting `beta` → `main`, tagging, and releasing need user's explicit word for that version.
 - When he says promote/release: after the promote merge, wait for `main` CI (`installer`) to go green, download that run's artifact (`TechBench-Setup-<ver>.exe`, `TechBench.exe`, `latest.json`), and attach it with `gh release create v<ver> ... --target main`. The API creates the tag. Installs are manual through shop Setup (`docs/shop-rollout.md`).
 - There's no public feed and no dist repo. Don't create or upload to `tech-bench-dist`. Never use or ask for `DIST_REPO_TOKEN` or any PAT.
 - No field tests. Never run or schedule field tests on real engines or the shop floor; prove with CI / `test.bat` and document skips.
@@ -39,9 +39,9 @@ git switch -c cursor/<topic> origin/beta
   2. `app.manifest`: `<assemblyIdentity version="X.Y.Z.0" ...>`.
   3. `tests/SelfTest.Feed.cs`: `Eq("stamped version", AppVersion.Number, "X.Y.Z")`.
   4. `README.md`: the `Current stamp: **X.Y.Z**` line.
-  On Viper's box, `/workspace/tech-bench-tools/lockstep-version-bump.sh <repo> X.Y.Z` applies and verifies all 4; `--check` only reports them.
+  On user's box, `/workspace/tech-bench-tools/lockstep-version-bump.sh <repo> X.Y.Z` applies and verifies all 4; `--check` only reports them.
 - New `.cs` files go in `sources/core.list` or `sources/app.list` (membership: root name or `src\...` path). `tools/gen-rsp.bat` (and `tools/gen-rsp.sh` on Linux) write `sources/*.rsp`; `tests/*.cs` are picked up by glob into `selftest.rsp`. SelfTest fails on drift. Do not hand-edit generated `.rsp` files. Stage 6 moves feature code into `src/` one folder per PR; safety files last and separately.
-- No `.github/` changes (workflow, settings) without Viper's OK.
+- No `.github/` changes (workflow, settings) without user's OK.
 
 ## 6. Tests and CI
 - CI (`.github/workflows/windows-installer.yml`, job `installer`, windows-latest, on every push): `test.bat`, then `release.bat`, then `tools\assert-pe-i386.ps1` on `TechBench.exe` and `-Native` on the Setup exe, then `tools\install-smoke.ps1 -Setup dist\TechBench-Setup-<ver>.exe`.
@@ -81,9 +81,9 @@ git switch -c cursor/<topic> origin/beta
 - If you see a real secret in the tree or in history, stop and report it masked so it can be rotated. Don't rewrite history yourself.
 
 ## 13. Safety rails (don't weaken)
-- J1939/INLINE 7: the code clear sends DM11/DM3 requests only, then reads DM1/DM2/FE56 back. No DEF/SCR reset or disable, no lamp override, no calibration or parameter writes, no proprietary or UDS routines, until Viper decides otherwise.
+- J1939/INLINE 7: the code clear sends DM11/DM3 requests only, then reads DM1/DM2/FE56 back. No DEF/SCR reset or disable, no lamp override, no calibration or parameter writes, no proprietary or UDS routines, until user decides otherwise.
 - Keep the existing guards: code clears sit behind their confirm dialogs, and the TSC1 speed holds sit behind the Safety toggle. The existing TSC1, DM13 and Ping ECM controls stay as they are; don't widen them.
-- Any new ECU action needs Viper's OK and a confirm dialog. Irreversible engine commands need a human check on a real engine; CI can't prove them.
+- Any new ECU action needs user's OK and a confirm dialog. Irreversible engine commands need a human check on a real engine; CI can't prove them.
 - Updater (v1.2.9, `docs/specs/v1.2.9.md`): 64 KiB manifest cap and 32 MiB payload cap enforced while streaming; manual redirects, at most 5, same host only, never https to http; payload on the manifest's host and port; SHA-256 checked before staging; `.part` cleanup; no credentials or token ever sent; nothing applied while an INLINE 7 session is live. `Updater.DefaultManifestUrl` is unchanged.
 - No installs, new dependencies or NuGet packages without asking. No spending, and no code signing.
 
@@ -103,6 +103,6 @@ git switch -c cursor/<topic> origin/beta
 - **Semgrep:** before a **code** PR counts Ready, run Semgrep on the touched area (or the repo). Fix findings or justify them under `Skipped / not verified` / Notes. Docs-only PRs may mark Semgrep N/A, but still keep this gate in the playbook.
 - **`dyl-review`:** quick by default for PR review drafts; deep only when asked. Never posts to the PR by itself.
 - **Continual Learning:** keep this repo's `AGENTS.md` current via the continual-learning / `agents-memory-updater` flow. No secrets in `AGENTS.md`.
-- **Banned:** do **not** use `dyl-ready-pr` **merge** or **babysit** steps. Agents squash-merge into `beta` on green `installer`; only beta→main / tag / release needs Viper. No merge queues that bypass the installer gate.
+- **Banned:** do **not** use `dyl-ready-pr` **merge** or **babysit** steps. Agents squash-merge into `beta` on green `installer`; only beta→main / tag / release needs user. No merge queues that bypass the installer gate.
 
 
