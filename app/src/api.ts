@@ -87,6 +87,9 @@ export interface WoList {
   conflicts: string[];
   techId: string;
   folder: string;
+  /** Job-strip pick list from tb-core: "(no work order)" then each label. */
+  pickRows: string[];
+  syncChip: string;
 }
 
 export const woList = () => invoke<WoList>("wo_list");
@@ -94,3 +97,38 @@ export const woSave = (wo: WorkOrder) => invoke<WorkOrder>("wo_save", { wo });
 export const woClock = (wo: WorkOrder, kind: "logon" | "logoff") =>
   invoke<WorkOrder>("wo_clock", { wo, kind });
 export const woShare = (wo: WorkOrder) => invoke<{ wo: WorkOrder; dest: string }>("wo_share", { wo });
+export const woAddPhotos = (wo: WorkOrder) =>
+  invoke<{ wo: WorkOrder; count: number } | null>("wo_add_photos", { wo });
+export const woOpenMedia = (folder: string, name: string) =>
+  invoke<void>("wo_open_media", { folder, name });
+
+/** The saved job in settings.json (shared with the WinForms app). */
+export interface Job {
+  customer: string;
+  model: string;
+  serial: string;
+  lastWo: string;
+}
+
+export const jobGet = () => invoke<Job>("job_get");
+export const jobSetHeader = (customer: string, model: string, serial: string) =>
+  invoke<void>("job_set_header", { customer, model, serial });
+export const jobSetWo = (key: string) => invoke<void>("job_set_wo", { key });
+export const jobClear = () => invoke<void>("job_clear");
+/** Job tag from tb-core; also sets the window title. */
+export const jobTitle = (wo: WorkOrder | null, model: string, serial: string) =>
+  invoke<string>("job_title", { wo, model, serial });
+
+export interface Shop {
+  techId: string;
+  shareFolder: string;
+  assignedFile: string;
+  path: string;
+}
+
+export const shopSettingsGet = () => invoke<Shop>("shop_settings_get");
+export const shopSettingsSave = (techId: string, shareFolder: string, assignedFile: string) =>
+  invoke<Shop>("shop_settings_save", { techId, shareFolder, assignedFile });
+export const pickFolder = () => invoke<string | null>("pick_folder");
+export const pickAssignedFile = () => invoke<string | null>("pick_assigned_file");
+export const kbOpen = (path: string) => invoke<void>("kb_open", { path });

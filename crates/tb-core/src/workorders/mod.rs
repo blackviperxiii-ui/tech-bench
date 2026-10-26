@@ -1,5 +1,6 @@
 //! Work orders: the WO-keyed job packet, its media path guard, and the file-backed store.
 
+pub mod job_strip;
 pub mod model;
 pub mod store;
 

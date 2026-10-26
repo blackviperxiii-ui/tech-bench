@@ -6,8 +6,10 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use tb_core::settings::ShopSettings;
-use tb_core::workorders::{WorkOrder, WorkOrderClock, WorkOrderStore};
+use tb_core::workorders::job_strip;
+use tb_core::workorders::{resolve_media_path, WorkOrder, WorkOrderClock, WorkOrderStore};
 
 use crate::Kb;
 
@@ -130,7 +132,7 @@ pub fn settings_folder(app: &AppHandle) -> PathBuf {
         .join("TechBench")
 }
 
-fn user_name() -> String {
+pub fn user_name() -> String {
     std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_default()
@@ -182,6 +184,9 @@ pub struct WoList {
     conflicts: Vec<String>,
     tech_id: String,
     folder: String,
+    /// Job-strip pick list: the no-work-order row, then each order's label.
+    pick_rows: Vec<String>,
+    sync_chip: String,
 }
 
 #[tauri::command]
@@ -195,6 +200,8 @@ pub fn wo_list(
         Ok(WoList {
             orders: orders.iter().map(WoDto::from).collect(),
             conflicts: store.conflicts.iter().map(|c| c.to_string()).collect(),
+            pick_rows: job_strip::pick_items(&orders, "").0,
+            sync_chip: job_strip::sync_chip(store.conflicts.len(), &shop.tech_id),
             tech_id: shop.tech_id.clone(),
             folder: store.local_root.to_string_lossy().into_owned(),
         })
@@ -265,4 +272,62 @@ pub fn wo_share(
             dest: dest.to_string_lossy().into_owned(),
         })
     })
+}
+
+/// Add photo: pick pictures, copy each into the packet's media folder, save.
+#[tauri::command]
+pub async fn wo_add_photos(
+    wo: WoDto,
+    app: AppHandle,
+    state: State<'_, WoState>,
+    kb: State<'_, Kb>,
+) -> Result<Option<Attached>, String> {
+    let Some(files) = app
+        .dialog()
+        .file()
+        .set_title("Attach photo or screenshot")
+        .add_filter("Pictures", &["png", "jpg", "jpeg", "bmp", "gif"])
+        .add_filter("All files", &["*"])
+        .blocking_pick_files()
+    else {
+        return Ok(None);
+    };
+    let paths: Vec<PathBuf> = files
+        .into_iter()
+        .filter_map(|f| f.into_path().ok())
+        .collect();
+    with_store(&app, &state, &kb, |store, shop, kb_root| {
+        let mut w = WorkOrder::from(wo);
+        let mut attached = 0;
+        for p in &paths {
+            if store
+                .attach_file(&mut w, p, shop, kb_root)
+                .map_err(|e| e.to_string())?
+                .is_some()
+            {
+                attached += 1;
+            }
+        }
+        store
+            .save(&mut w, shop, kb_root)
+            .map_err(|e| e.to_string())?;
+        Ok(Some(Attached {
+            wo: WoDto::from(&w),
+            count: attached,
+        }))
+    })
+}
+
+#[derive(Serialize)]
+pub struct Attached {
+    wo: WoDto,
+    count: usize,
+}
+
+/// Open one of the packet's media files, only when the name stays inside its media folder.
+#[tauri::command]
+pub fn wo_open_media(folder: String, name: String, app: AppHandle) -> Result<(), String> {
+    let path = resolve_media_path(&folder, &name)
+        .ok_or("Media name is not a file inside this work order's media folder.")?;
+    crate::job::safe_open(&app, &path)
 }
