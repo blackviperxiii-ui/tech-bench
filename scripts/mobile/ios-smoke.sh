@@ -21,12 +21,22 @@ xcrun simctl bootstatus "$udid" -b
 xcrun simctl install "$udid" "$app"
 
 log=$(mktemp)
-xcrun simctl launch --console-pty "$udid" com.techbench.app >"$log" 2>&1 &
+xcrun simctl launch --console "$udid" com.techbench.app >"$log" 2>&1 &
+data=$(xcrun simctl get_app_container "$udid" com.techbench.app data)
+out="$data/Documents/techbench-smoke.txt"
+echo "Smoke file: $out"
 for _ in $(seq 1 90); do
-  if grep -q "SMOKE PASS\|SMOKE FAIL" "$log"; then
+  if grep -q "SMOKE PASS\|SMOKE FAIL" "$out" 2>/dev/null; then
     break
   fi
   sleep 2
 done
-grep "SMOKE" "$log" || tail -n 20 "$log"
-grep -q "SMOKE PASS" "$log"
+cat "$out" 2>/dev/null || true
+if ! grep -q "SMOKE PASS" "$out" 2>/dev/null; then
+  echo "No SMOKE PASS. App console:"
+  tail -n 30 "$log" || true
+  echo "System log for the app:"
+  xcrun simctl spawn "$udid" log show --last 5m --style compact \
+    --predicate 'processImagePath CONTAINS[c] "techbench"' | tail -n 40 || true
+  exit 1
+fi

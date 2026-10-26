@@ -188,6 +188,23 @@ fn smoke_line(line: &str) {
     println!("{line}");
     #[cfg(target_os = "android")]
     android_log(line);
+    // An iOS app's console is not reliable in CI; the simulator smoke reads this file from the
+    // app's data container instead (HOME is that container on iOS).
+    #[cfg(target_os = "ios")]
+    if let Some(home) = std::env::var_os("HOME") {
+        use std::io::Write;
+        let path = std::path::Path::new(&home)
+            .join("Documents")
+            .join("techbench-smoke.txt");
+        let _ = std::fs::create_dir_all(path.parent().unwrap_or(std::path::Path::new(&home)));
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(f, "{line}");
+        }
+    }
     if let Some(path) = std::env::var_os("TECHBENCH_SMOKE_OUT") {
         use std::io::Write;
         if let Ok(mut f) = std::fs::OpenOptions::new()
