@@ -1,8 +1,8 @@
 //! Tauri 2 shell for Tech Bench. Commands expose tb-core to the React UI in app/.
 //! No bus access and no ECU actions (those stay in the WinForms
 //! build until the RP1210 sidecar lands with its guards). The only writes are work-order packets
-//! the shop/job settings files the WinForms app also writes, and Add code / note / file into this
-//! tech's KB shop shard.
+//! the shop/job settings files the WinForms app also writes, Add code / note / file into this
+//! tech's KB shop shard, and shop sync between the KB and a sync folder.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +16,7 @@ use tb_core::search::{codebook, featurebook};
 
 mod job;
 mod shopadd;
+mod shopsync;
 mod workorders;
 
 /// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
@@ -229,6 +230,7 @@ pub fn run() {
         .manage(Kb(Mutex::new(KbIndex::new())))
         .manage(Smoke(AtomicBool::new(smoke)))
         .manage(workorders::WoState(Mutex::new(None)))
+        .manage(shopsync::LastSync(Mutex::new(None)))
         .setup(move |app| {
             let root = kb_root(app.handle());
             {
@@ -276,6 +278,11 @@ pub fn run() {
             shopadd::kb_add_code,
             shopadd::kb_add_note,
             shopadd::kb_add_file,
+            shopsync::sync_view,
+            shopsync::sync_save,
+            shopsync::sync_run,
+            shopsync::sync_resolve,
+            shopsync::sync_pick_folder,
             smoke_mode,
             smoke_report
         ])

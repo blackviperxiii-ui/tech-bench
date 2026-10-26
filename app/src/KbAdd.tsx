@@ -16,7 +16,7 @@ const CODE_FIELDS: [CodeField, string, "line" | "text"][] = [
   ["safety", "Safety", "text"],
 ];
 
-function Dialog({
+export function Dialog({
   title,
   onClose,
   children,

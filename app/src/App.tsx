@@ -5,6 +5,7 @@ import { JobStrip, type Header } from "./JobStrip";
 import { AddCode, AddNote } from "./KbAdd";
 import { Search } from "./Search";
 import { ShopSettings } from "./ShopSettings";
+import { ShopSync } from "./ShopSync";
 import { WorkOrders } from "./WorkOrders";
 import { runSmoke } from "./smoke";
 import {
@@ -15,7 +16,9 @@ import {
   jobTitle,
   kbAddFile,
   smokeMode,
+  syncRun,
   woList,
+  type SyncView,
   type Hit,
   type WoList,
   type WorkOrder,
@@ -40,6 +43,10 @@ export function App() {
   const [adding, setAdding] = useState<"code" | "note" | null>(null);
   const [kbTick, setKbTick] = useState(0);
   const [addError, setAddError] = useState("");
+  const [sync, setSync] = useState<SyncView | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  /** Smoke runs never sync: the installed KB stays untouched. */
+  const smokeOn = useRef(true);
 
   /** Re-list work orders; with `key`, select that order when it is listed. */
   const reload = useCallback(async (key?: string) => {
@@ -51,11 +58,22 @@ export function App() {
     }
   }, []);
 
-  // Startup: saved job (customer / model / serial), then the list with the last work order open.
+  /** ShellForm.RunSync(false): a quiet sync; a failure shows on the chip, not in a dialog. */
+  const quietSync = useCallback(() => {
+    if (smokeOn.current) return;
+    syncRun()
+      .then(setSync)
+      .catch((e) => setSync({ techId: "", syncFolder: "", text: String(e), conflicts: [], chip: String(e) }));
+  }, []);
+
+  // Startup: saved job (customer / model / serial), then the list with the last work order open,
+  // then one quiet sync (ShellForm.Shown).
   useEffect(() => {
     smokeMode()
       .then((m) => {
+        smokeOn.current = m.on;
         if (m.on) void runSmoke(m.workOrders);
+        else quietSync();
       })
       .catch(() => {
         /* Not running inside Tauri (plain vite dev): no smoke mode. */
@@ -71,7 +89,7 @@ export function App() {
       .finally(() => {
         loaded.current = true;
       });
-  }, [reload]);
+  }, [reload, quietSync]);
 
   // Window title and job tag follow the open work order, else the typed model and serial.
   useEffect(() => {
@@ -128,6 +146,7 @@ export function App() {
 
   /** After Add code / note / file: the index is reloaded; show the new entry in Search. */
   function showAdded(query: string) {
+    quietSync();
     setAdding(null);
     setAddError("");
     setKbTick((t) => t + 1);
@@ -194,7 +213,8 @@ export function App() {
           header={header}
           onHeader={editHeader}
           onPick={selectWo}
-          onSync={() => setPage("Work orders")}
+          sync={sync?.chip ? { chip: sync.chip, conflict: sync.conflicts.length > 0 } : null}
+          onSync={() => setSyncOpen(true)}
           onSearchJob={searchJob}
           onAddCode={() => setAdding("code")}
           onAddNote={() => setAdding("note")}
@@ -240,6 +260,17 @@ export function App() {
         />
       )}
       {adding === "note" && <AddNote onClose={() => setAdding(null)} onSaved={showAdded} />}
+      {syncOpen && (
+        <ShopSync
+          onSynced={setSync}
+          onClose={() => {
+            // SyncForm closed: the KB may have new shop entries and work orders.
+            setSyncOpen(false);
+            setKbTick((t) => t + 1);
+            void reload(current?.key);
+          }}
+        />
+      )}
     </div>
   );
 }

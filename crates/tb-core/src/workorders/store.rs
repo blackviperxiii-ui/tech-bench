@@ -23,8 +23,9 @@ use std::path::{Path, PathBuf};
 pub const SHARED_TECH: &str = "_shared";
 pub const WO_REL: &str = "work-orders";
 
-/// One packet that two sources disagree on (the work-order kind of C# `ShopConflict`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Two copies that disagree (C# `ShopConflict`): a work-order packet here, a file, note or
+/// shop code in [`crate::kb::sync`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ShopConflict {
     pub kind: String,
     pub key: String,

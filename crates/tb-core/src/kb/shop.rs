@@ -1,6 +1,6 @@
 //! The shop shards under `<kb>/data/shop/<tech>/` that Add code / Add note / Add file write and the
-//! index reads (the shard half of `src/Safety/ShopSync.cs`; copying shards to a sync folder is not
-//! ported yet).
+//! index reads (the shard half of `src/Safety/ShopSync.cs`; copying them to a sync folder is
+//! [`super::sync`]).
 
 use super::user_codes::{self, key_of, UserCode};
 use crate::json::{self, s};
