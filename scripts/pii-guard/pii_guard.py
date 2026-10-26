@@ -15,7 +15,8 @@ if os.path.exists(af):
     ALLOW_PATHS = [l.strip() for l in open(af) if l.strip() and not l.startswith("#")]
 TOK = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+|[A-Za-z]+")
 PERSONAL_MAIL = re.compile(r"[\w.+-]+@(?:gmail|googlemail|yahoo|hotmail|outlook|live|icloud|aol|proton|protonmail|pm)\.(?:com|me|net)\b", re.I)
-HOME = re.compile(r"/(?:home|Users)/([A-Za-z_][A-Za-z0-9_-]*)")
+# Windows paths too: C:\Users\name, C:\\Users\\name in JSON, and C:/Users/name.
+HOME = re.compile(r"[/\\](?:home|Users)[/\\]+([A-Za-z_][A-Za-z0-9_-]*)", re.I)
 sha = lambda s: hashlib.sha256(s.encode()).hexdigest()
 def blocked(text):
     for t in TOK.findall(text):
