@@ -1,6 +1,8 @@
 import {
   busCall,
   busCaps,
+  busReport,
+  sessionSave,
   cheatsheet,
   type BusAdapter,
   type BusSnap,
@@ -13,6 +15,7 @@ import {
   shopSettingsGet,
   shopSettingsSave,
   smokeReport,
+  woAttachReport,
   woList,
   woSave,
 } from "./api";
@@ -62,16 +65,20 @@ export async function runSmoke(workOrders: boolean) {
       const tag = await jobTitle(saved, "", "");
       // Scratch home: no saved sessions yet, so unit history says so.
       const hist = (await historySummary(tag)).text.split("\n")[0];
+      // Attach report: the text lands on the order and as a media file in its packet.
+      const att = await woAttachReport(saved, "TECH BENCH — DIAGNOSTIC REPORT\r\n");
+      const attOk = att.reportText.startsWith("TECH BENCH") && att.media.includes("diagnostic-report.txt");
       woOk =
         tech === "smoke-tech" &&
         saved.key === "SMOKE-1-01" &&
         listed?.label === "SMOKE-1-01  Smoke Co" &&
         list.syncChip === "Sync · smoke-tech · click" &&
         tag === "WO SMOKE-1-01" &&
-        hist === "No saved sessions yet.";
-      woText = `tech: "${tech}"; work order: "${listed?.label ?? "(not listed)"}"; chip: "${list.syncChip}"; tag: "${tag}"; history: "${hist}"`;
+        hist === "No saved sessions yet." &&
+        attOk;
+      woText = `tech: "${tech}"; work order: "${listed?.label ?? "(not listed)"}"; chip: "${list.syncChip}"; tag: "${tag}"; history: "${hist}"; attach: ${attOk ? "diagnostic-report.txt" : JSON.stringify(att.media)}`;
     }
-    const bus = await smokeBus();
+    const bus = await smokeBus(workOrders);
     await smokeReport(
       searchOk && sheetOk && codeOk && guardOk && seedOk && woOk && bus.ok,
       `search ${SMOKE_KIND} "${SMOKE_QUERY}": ${r.total} hit(s), first "${first}"; ` +
@@ -84,7 +91,7 @@ export async function runSmoke(workOrders: boolean) {
 }
 
 /** Live bus through the bridge sidecar, only on its fake adapter (never real hardware). */
-async function smokeBus(): Promise<{ ok: boolean; text: string }> {
+async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: string }> {
   const caps = await busCaps();
   if (!caps.fake) return { ok: true, text: `live bus: skipped (${caps.available ? "no fake adapter" : caps.reason})` };
   if (!caps.available) return { ok: false, text: `live bus: ${caps.reason}` };
@@ -98,15 +105,29 @@ async function smokeBus(): Promise<{ ok: boolean; text: string }> {
     await new Promise((r) => setTimeout(r, 100));
   }
   const held = await busCall<number>("tsc1", { rpm: 800 });
+  const report = await busReport("SMOKE UNIT", "");
+  const reportOk = report.includes("Job:      SMOKE UNIT\r\n") && report.includes("  RPM:      800\r\n");
+  // Save writes into the session folder, so only under a scratch TECHBENCH_HOME. The saved
+  // DTCs then show up as unit history for the same job.
+  let saveText = "save: skipped (no TECHBENCH_HOME)";
+  let saveOk = true;
+  if (scratchHome) {
+    const saved = await sessionSave("SMOKE UNIT");
+    const hist = (await historySummary("SMOKE UNIT")).text;
+    saveOk = /SMOKE_UNIT_session_\d{8}_\d{6}\.txt$/.test(saved.path) && hist.includes("SPN 1761");
+    saveText = `saved "${saved.path.split(/[\\/]/).pop() ?? ""}"; history ${hist.includes("SPN 1761") ? "lists SPN 1761" : `"${hist.split("\n")[0]}"`}`;
+  }
   await busCall("disconnect");
   const code = s?.active[0]?.text ?? "(no active code)";
   const ok =
     adapters[0]?.id === "FAKE" &&
     s?.hud.rpm === "RPM: 800" &&
     code.startsWith("SPN 1761  FMI 9") &&
-    held === 0;
+    held === 0 &&
+    reportOk &&
+    saveOk;
   return {
     ok,
-    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}`,
+    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}`,
   };
 }

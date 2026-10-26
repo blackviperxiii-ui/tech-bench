@@ -18,6 +18,7 @@ import {
   kbAddFile,
   smokeMode,
   syncRun,
+  woAttachReport,
   woList,
   type SyncView,
   type Hit,
@@ -164,6 +165,15 @@ export function App() {
     }));
   }
 
+  /** Inline7Control.AfterReport: the report goes onto the open work order. */
+  async function attachReport(text: string): Promise<string> {
+    if (!current) throw new Error("Open or pick a work order first (job strip or Work orders page).");
+    const wo = await woAttachReport(current, text);
+    setCurrent(wo);
+    await reload(wo.key);
+    return `Diagnostic report attached to WO ${wo.key}`;
+  }
+
   async function clearJob() {
     await jobClear();
     setCurrent(null);
@@ -263,7 +273,9 @@ export function App() {
               onPrefilled={clearPrefill}
             />
           )}
-          {page === "INLINE 7" && <Inline7 jobTag={jobTag} syncTick={syncCount} />}
+          {page === "INLINE 7" && (
+            <Inline7 jobTag={jobTag} syncTick={syncCount} onSessionSaved={quietSync} onAttachReport={attachReport} />
+          )}
           {page === "Work orders" && (
             <WorkOrders
               data={data}

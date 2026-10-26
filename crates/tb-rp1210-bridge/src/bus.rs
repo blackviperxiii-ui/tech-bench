@@ -16,6 +16,7 @@ use tb_core::j1939::clear::{
 use tb_core::j1939::code_clear::{ClearKind, ClearLink, CodeClearRun};
 use tb_core::j1939::guard::SendPolicy;
 use tb_core::j1939::monitor::{fmt_reading, BusMonitor, BusSnapshot};
+use tb_core::j1939::report::{self, session_files, LocalNow, ReportData};
 use tb_core::j1939::Dtc;
 use tb_core::rp1210::Rp1210Api;
 
@@ -667,6 +668,41 @@ impl Bus {
                     "lines": tl.recent().iter().map(ToString::to_string).collect::<Vec<_>>(),
                     "csv": tl.csv(job),
                 }))
+            }
+            "session" => {
+                let txt = |k: &str| req.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+                let job = txt("job");
+                let now = LocalNow {
+                    local: txt("local"),
+                    stamp: txt("stamp"),
+                    iso: txt("iso"),
+                };
+                let s = self.snapshot();
+                let tl = &self.mon.module(s.view_sa).timeline;
+                let (recent, tl_csv) = (tl.recent(), tl.csv(&job));
+                let trend = tb_core::j1939::trend::TrendLog::csv(&self.mon.trend().copy());
+                let f = session_files(
+                    &s,
+                    &self.mon.sa_rows(),
+                    &self.mon.names,
+                    &recent,
+                    trend,
+                    tl_csv,
+                    &job,
+                    &now,
+                );
+                Ok(json!({
+                    "base": f.base, "body": f.body, "readingsCsv": f.readings_csv,
+                    "dtcCsv": f.dtc_csv, "trendCsv": f.trend_csv, "timelineCsv": f.timeline_csv,
+                }))
+            }
+            "report" => {
+                let txt = |k: &str| req.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+                let s = self.snapshot();
+                let recent = self.mon.module(s.view_sa).timeline.recent();
+                let mut d = ReportData::from_snapshot(&s, recent, &txt("job"), &txt("when"));
+                d.history_note = txt("history");
+                Ok(json!(report::text(&d)))
             }
             "log" => Ok(json!(self.drain_log())),
             other => Err(format!("unknown command \"{other}\"")),

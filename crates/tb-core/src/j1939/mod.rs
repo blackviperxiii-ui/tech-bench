@@ -8,6 +8,7 @@ pub mod decode;
 pub mod guard;
 pub mod monitor;
 pub mod names;
+pub mod report;
 pub mod timeline;
 pub mod trend;
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { busCall, type BusAdapter, type BusCaps, type BusSnap, type LiveDtc } from "./api";
+import { busCall, busReport, sessionSave, type BusAdapter, type BusCaps, type BusSnap, type LiveDtc } from "./api";
 
 /** How often the HUD asks the bridge for a snapshot (the WinForms UI timer is 250 ms). */
 const POLL_MS = 400;
@@ -50,7 +50,7 @@ function Confirm({ ask, close }: { ask: Ask; close: () => void }) {
             <>
               <button
                 type="button"
-                className="secondary"
+               
                 onClick={() => {
                   close();
                   ask.onYes?.();
@@ -58,12 +58,12 @@ function Confirm({ ask, close }: { ask: Ask; close: () => void }) {
               >
                 Yes
               </button>
-              <button type="button" ref={no} onClick={close}>
+              <button type="button" className="primary" ref={no} onClick={close}>
                 No
               </button>
             </>
           ) : (
-            <button type="button" ref={no} onClick={close}>
+            <button type="button" className="primary" ref={no} onClick={close}>
               OK
             </button>
           )}
@@ -89,19 +89,73 @@ function CodeList({ label, codes, onPick }: { label: string; codes: LiveDtc[]; o
   );
 }
 
+/** Report preview (JobReportPrint): Print uses the browser print dialog with print CSS. */
+function ReportSheet({
+  text,
+  close,
+  attach,
+}: {
+  text: string;
+  close: () => void;
+  attach: (text: string) => Promise<string>;
+}) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="overlay report-overlay" role="dialog" aria-modal="true" aria-label="Diagnostic report">
+      <div className="sheet">
+        <div className="sheet-body">
+          <pre className="report-text">{text}</pre>
+        </div>
+        <div className="sheet-foot">
+          <span className="muted foot-note" role="status">
+            {note}
+          </span>
+          <button
+            type="button"
+           
+            onClick={() => {
+              attach(text)
+                .then(setNote)
+                .catch((e) => setNote(`Could not attach report: ${e instanceof Error ? e.message : String(e)}`));
+            }}
+          >
+            Attach to work order
+          </button>
+          <button type="button" onClick={() => window.print()}>
+            Print
+          </button>
+          <button type="button" className="primary" onClick={close}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Live J1939 half of the INLINE 7 page (Inline7Control's toolbar, HUD and code lists), over the
  * RP1210 bridge. Every send is a named bridge command that the bridge checks against the guard.
  */
 export function LiveBus({
   caps,
+  jobTag,
+  history,
   onCode,
   onReport,
+  onSaved,
+  onAttach,
 }: {
   caps: BusCaps;
+  jobTag: string;
+  /** Unit history text for the report's UNIT HISTORY section. */
+  history: string;
   onCode: (spn: number, fmi: number) => void;
   onReport: (text: string) => void;
+  onSaved: () => void;
+  onAttach: (text: string) => Promise<string>;
 }) {
+  const [report, setReport] = useState<string | null>(null);
   const [adapters, setAdapters] = useState<BusAdapter[]>([]);
   const [adapter, setAdapter] = useState("");
   const [snap, setSnap] = useState<BusSnap | null>(null);
@@ -226,6 +280,25 @@ export function LiveBus({
     await run("dm13", { stop: on });
   }
 
+  async function save() {
+    try {
+      const r = await sessionSave(jobTag);
+      addLog([`Saved ${r.path}`]);
+      onSaved();
+    } catch (e) {
+      setAsk({ title: "Save", text: `Could not write the session file.\n\n${String(e)}` });
+    }
+  }
+
+  async function openReport() {
+    try {
+      // History.Summary only means something with a job tag (BuildReportData).
+      setReport(await busReport(jobTag, jobTag.trim() ? history : ""));
+    } catch (e) {
+      setAsk({ title: "Report", text: `Could not build the report.\n\n${String(e)}` });
+    }
+  }
+
   const hud = snap?.hud;
   const status = clearing ? `Working: ${clearing}…` : (hud?.status ?? "Starting the adapter bridge…");
 
@@ -266,6 +339,12 @@ export function LiveBus({
           onClick={() => setAsk({ title: "Clear previous", text: CLEAR_PREVIOUS, onYes: () => void clear("previous") })}
         >
           Clear previous
+        </button>
+        <button type="button" disabled={busy} onClick={() => void save()}>
+          Save
+        </button>
+        <button type="button" disabled={busy} onClick={() => void openReport()}>
+          Report
         </button>
       </div>
 
@@ -310,6 +389,7 @@ export function LiveBus({
         {log.join("\n")}
       </pre>
 
+      {report !== null && <ReportSheet text={report} close={() => setReport(null)} attach={onAttach} />}
       {ask && <Confirm ask={ask} close={() => setAsk(null)} />}
     </div>
   );

@@ -138,3 +138,61 @@ fn a_missing_bridge_is_a_plain_error() {
         "{err}"
     );
 }
+
+#[test]
+fn session_files_and_report_from_the_live_bus() {
+    let mut c = bridge();
+    c.call("connect", json!({"adapter": "FAKE"}), CALL_TIMEOUT)
+        .unwrap();
+    snapshot_until(&mut c, "both code lists", |s| {
+        s["rpm"] == json!(800.0)
+            && s["active"].as_array().is_some_and(|a| !a.is_empty())
+            && s["prev"].as_array().is_some_and(|a| !a.is_empty())
+    });
+    let f = c
+        .call(
+            "session",
+            json!({"job": "WO 7-01", "local": "2026-05-01 14:30:00", "stamp": "20260501_143000",
+                   "iso": "2026-05-01T14:30:00.0000000-05:00"}),
+            CALL_TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(f["base"], json!("WO_7_01_session_20260501_143000"));
+    let body = f["body"].as_str().unwrap();
+    assert!(
+        body.starts_with("Job  WO 7-01\r\nTech Bench session  2026-05-01 14:30:00\r\n"),
+        "{body}"
+    );
+    assert!(
+        body.contains("\r\nRPM 800  Red Stop off  Amber ON"),
+        "{body}"
+    );
+    let dtc = f["dtcCsv"].as_str().unwrap();
+    assert!(
+        dtc.contains("2026-05-01T14:30:00.0000000-05:00,\"WO 7-01\",active,1761,9,"),
+        "{dtc}"
+    );
+    assert!(dtc.contains(",previous,100,1,"), "{dtc}");
+    assert!(f["timelineCsv"]
+        .as_str()
+        .unwrap()
+        .starts_with("first_seen,last_seen,job,spn,fmi,"));
+
+    let report = c
+        .call(
+            "report",
+            json!({"job": "WO 7-01", "when": "2026-05-01 14:30", "history": "This unit has been here before"}),
+            CALL_TIMEOUT,
+        )
+        .unwrap();
+    let report = report.as_str().unwrap();
+    assert!(
+        report.starts_with("TECH BENCH — DIAGNOSTIC REPORT\r\n"),
+        "{report}"
+    );
+    assert!(report.contains("Job:      WO 7-01\r\nDate:     2026-05-01 14:30\r\n"));
+    assert!(report.contains("  RPM:      800\r\n"), "{report}");
+    assert!(report.contains("ACTIVE FAULTS (DM1)\r\n  SPN 1761  FMI 9"));
+    assert!(report.contains("UNIT HISTORY\r\n  This unit has been here before\r\n"));
+    c.quit();
+}

@@ -292,3 +292,15 @@ pub async fn sync_pick_folder(app: AppHandle) -> Option<String> {
         .and_then(|p| p.into_path().ok())
         .map(|p| p.to_string_lossy().into_owned())
 }
+
+/// `ShellForm`'s SessionSaved hook: share a saved session's `_dtcs.csv` as this tech's history.
+/// The UI runs a quiet sync afterwards.
+pub fn publish_session(
+    app: &AppHandle,
+    kb: &State<'_, Kb>,
+    dtc_csv: &std::path::Path,
+) -> Result<(), String> {
+    let root = kb_root(kb);
+    let tech = settings(app).tech_id;
+    sync::publish_history(std::path::Path::new(&root), &tech, dtc_csv).map_err(|e| e.to_string())
+}
