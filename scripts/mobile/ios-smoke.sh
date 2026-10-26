@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Build the generated Xcode project for the iOS simulator (unsigned; TECHBENCH_SMOKE=1 bakes the
-# smoke in), install it on a booted iPhone simulator and wait for the smoke line on its console.
+# Build the iOS app for the simulator (unsigned; TECHBENCH_SMOKE=1 bakes the smoke in),
+# install it on a booted iPhone simulator and wait for the smoke line on its console.
 set -euo pipefail
 
-proj=$(ls -d src-tauri/gen/apple/*.xcodeproj | head -n 1)
-scheme=$(xcodebuild -list -project "$proj" | awk '/Schemes:/{f=1;next} f&&/_iOS/{gsub(/^ +/,"");print;exit}')
-echo "Project: $proj  Scheme: $scheme"
-xcodebuild -project "$proj" -scheme "$scheme" -configuration debug \
-  -sdk iphonesimulator -arch arm64 -derivedDataPath build/ios \
-  CODE_SIGNING_ALLOWED=NO build | tail -n 20
-
-app=$(find build/ios/Build/Products -name '*.app' -maxdepth 2 | head -n 1)
+# Xcode's "Build Rust Code" phase only works under a running `tauri ios build`, so build
+# through the CLI; a simulator target gives an .app, no archive or signing.
+npx tauri ios build --debug --target aarch64-sim --ci
+app=$(find src-tauri/gen/apple/build -maxdepth 4 -name '*.app' -path '*sim*' | head -n 1)
+if [ -z "$app" ]; then
+  echo "No simulator .app found. Build folder:"
+  find src-tauri/gen/apple/build -maxdepth 4 | head -n 40
+  exit 1
+fi
 echo "App: $app"
 udid=$(xcrun simctl list devices available -j |
   python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
