@@ -1,13 +1,17 @@
 //! Shop sync screen (port of `src/Features/Sync/SyncForm.cs` and `ShellForm.RunSync`): this PC's
-//! tech name, the optional sync folder, a run, and the conflicts the tech settles by hand.
+//! tech name, the optional sync folder, a run, and the conflicts the tech settles by hand. Also
+//! the shop folder watcher (`ShopWatcher`), which polls instead of using a platform file watcher.
 
+use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tb_core::kb::shop::SyncSettings;
 use tb_core::kb::sync::{self, ShopSyncResult, NO_KB_STATUS};
+use tb_core::kb::watch::{watch_dirs, Snapshot};
 use tb_core::time::utc_now_o;
 use tb_core::workorders::job_strip;
 
@@ -16,6 +20,17 @@ use crate::Kb;
 
 /// The last sync result, so the chip and the screen agree until the next run.
 pub struct LastSync(pub Mutex<Option<ShopSyncResult>>);
+
+/// What the shop folders looked like after the last sync (or the last change the watcher
+/// reported), so a sync's own copies do not set off another sync.
+pub struct WatchBase(pub Mutex<Option<Snapshot>>);
+
+/// How often the watcher looks. A change is reported once two looks in a row agree, so a burst
+/// of writes settles first (the WinForms watcher waited 900 ms after the last event).
+const WATCH_POLL: Duration = Duration::from_secs(2);
+
+/// Event the UI listens for to run a quiet sync.
+pub const SHOP_CHANGED: &str = "shop-changed";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +49,46 @@ fn settings(app: &AppHandle) -> SyncSettings {
 
 fn kb_root(kb: &State<'_, Kb>) -> String {
     kb.0.lock().unwrap_or_else(|e| e.into_inner()).root.clone()
+}
+
+fn watched(app: &AppHandle) -> Vec<PathBuf> {
+    let root = kb_root(&app.state::<Kb>());
+    watch_dirs(&root, Some(&settings(app)))
+}
+
+fn set_base(app: &AppHandle, snap: Snapshot) {
+    *app.state::<WatchBase>()
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(snap);
+}
+
+/// Poll the shop folders in the background and emit [`SHOP_CHANGED`] when they settle after a
+/// change. Not started in smoke mode.
+pub fn start_watcher(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut pending: Option<Snapshot> = None;
+        loop {
+            std::thread::sleep(WATCH_POLL);
+            let now = Snapshot::take(&watched(&app));
+            let base = app
+                .state::<WatchBase>()
+                .0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            match base {
+                None => set_base(&app, now),
+                Some(b) if b == now => pending = None,
+                Some(_) if pending.as_ref() == Some(&now) => {
+                    set_base(&app, now);
+                    pending = None;
+                    let _ = app.emit(SHOP_CHANGED, ());
+                }
+                Some(_) => pending = Some(now),
+            }
+        }
+    });
 }
 
 fn view(app: &AppHandle, kb: &State<'_, Kb>, last: &State<'_, LastSync>, extra: &str) -> SyncView {
@@ -125,8 +180,8 @@ fn run_once(
         |r| r.conflicts.extend(wo_conflicts),
     )
     .map_err(|e| format!("Sync failed: {e}"))?;
-    let mut kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
-    kb.load(&root);
+    kb.0.lock().unwrap_or_else(|e| e.into_inner()).load(&root);
+    set_base(app, Snapshot::take(&watched(app)));
     Ok(r)
 }
 

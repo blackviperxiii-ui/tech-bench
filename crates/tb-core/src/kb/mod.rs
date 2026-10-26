@@ -5,5 +5,6 @@ pub mod paths;
 pub mod shop;
 pub mod sync;
 pub mod user_codes;
+pub mod watch;
 
 pub use index::{Hit, KbIndex, MAX_RESULTS};
