@@ -223,7 +223,7 @@ namespace TechBench
 
         /// <summary>
         /// Wrapping read-only box. WinForms WordWrap only breaks on spaces, so a KB path
-        /// like C:\Users\jerem\OneDrive\… still paints "OneDriv…" unless we insert breaks.
+        /// like C:\Users\user\OneDrive\… still paints "OneDriv…" unless we insert breaks.
         /// </summary>
         public static TextBox WrapText(string text)
         {
