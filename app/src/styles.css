@@ -82,7 +82,7 @@ html, body, #root { height: 100%; margin: 0; }
 .hit { display: flex; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
 .hit.sel { background: var(--accent-bg); }
 .hit .kind { flex: none; width: 74px; color: var(--muted); font-size: 12px; padding-top: 2px; }
-.hit .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hit .title { overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .detail {
   margin: 0;
   overflow: auto;
@@ -160,3 +160,42 @@ button { font: inherit; }
 .ref-row { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .ref-key { font-weight: 600; }
 .sheet-foot { display: flex; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--line); }
+
+.bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.bar button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.bar button:hover:not(:disabled) { border-color: var(--accent); }
+.bar button:disabled { opacity: 0.6; cursor: default; }
+
+.wo { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 10px; height: 100%; min-height: 0; }
+.wo-left { display: flex; flex-direction: column; min-height: 0; }
+.wo-left .hits { flex: 1; }
+.wo-right { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.wo-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.wo-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.wo-form label.wide { grid-column: 1 / -1; }
+.wo-form input, .wo-form textarea {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+.wo-form textarea { resize: vertical; }
+.detail.mini { min-height: 70px; max-height: 160px; font-size: 13px; color: var(--text); }
+.hits.mini { min-height: 70px; max-height: 160px; flex: none; }
+.empty { color: var(--muted); padding: 8px; }
+.notice ul { margin: 4px 0 0; padding-left: 18px; }
+
+@media (max-width: 720px) {
+  .wo { grid-template-columns: 1fr; grid-template-rows: 200px 1fr; }
+  .wo-form { grid-template-columns: 1fr; }
+}

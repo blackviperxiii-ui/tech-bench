@@ -1,6 +1,6 @@
 //! Tauri 2 shell for Tech Bench. Commands expose tb-core to the React UI in app/.
-//! Everything here is read-only: no bus access, no ECU actions (those stay in the WinForms
-//! build until the RP1210 sidecar lands with its guards).
+//! No bus access and no ECU actions (those stay in the WinForms
+//! build until the RP1210 sidecar lands with its guards). The only writes are work-order packets.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,13 +12,15 @@ use tauri::{AppHandle, Manager, State};
 use tb_core::kb::{KbIndex, MAX_RESULTS};
 use tb_core::search::{codebook, featurebook};
 
+mod workorders;
+
 /// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
 const CHEATSHEET_RTF: &str = include_str!("../../assets/cheatsheet.rtf");
 
 /// How long `--smoke` waits for the UI to report before failing.
 const SMOKE_TIMEOUT: Duration = Duration::from_secs(90);
 
-struct Kb(Mutex<KbIndex>);
+pub(crate) struct Kb(pub(crate) Mutex<KbIndex>);
 struct Smoke(AtomicBool);
 
 #[derive(Serialize)]
@@ -135,9 +137,22 @@ fn guidanz_features() -> Vec<SwitchRowDto> {
         .collect()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SmokeInfo {
+    on: bool,
+    /// Also round-trip a work order: only when TECHBENCH_HOME points the store at a scratch
+    /// folder, so a smoke run never writes into a real shop's work orders.
+    work_orders: bool,
+}
+
 #[tauri::command]
-fn smoke_mode(smoke: State<'_, Smoke>) -> bool {
-    smoke.0.load(Ordering::SeqCst)
+fn smoke_mode(smoke: State<'_, Smoke>) -> SmokeInfo {
+    let on = smoke.0.load(Ordering::SeqCst);
+    SmokeInfo {
+        on,
+        work_orders: on && std::env::var_os("TECHBENCH_HOME").is_some(),
+    }
 }
 
 #[tauri::command]
@@ -207,6 +222,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Kb(Mutex::new(KbIndex::new())))
         .manage(Smoke(AtomicBool::new(smoke)))
+        .manage(workorders::WoState(Mutex::new(None)))
         .setup(move |app| {
             let root = kb_root(app.handle());
             {
@@ -234,6 +250,10 @@ pub fn run() {
             cheatsheet,
             explain_code,
             guidanz_features,
+            workorders::wo_list,
+            workorders::wo_save,
+            workorders::wo_clock,
+            workorders::wo_share,
             smoke_mode,
             smoke_report
         ])

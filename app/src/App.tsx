@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CheatSheet } from "./CheatSheet";
 import { Inline7 } from "./Inline7";
 import { Search } from "./Search";
+import { WorkOrders } from "./WorkOrders";
 import { runSmoke } from "./smoke";
 import { smokeMode } from "./api";
 
@@ -16,8 +17,8 @@ export function App() {
 
   useEffect(() => {
     smokeMode()
-      .then((on) => {
-        if (on) void runSmoke();
+      .then((m) => {
+        if (m.on) void runSmoke(m.workOrders);
       })
       .catch(() => {
         /* Not running inside Tauri (plain vite dev): no smoke mode. */
@@ -64,7 +65,8 @@ export function App() {
       <main className="page">
         {page === "Search" && <Search focusTick={focusTick} />}
         {page === "INLINE 7" && <Inline7 />}
-        {(page === "Work orders" || page === "Settings") && (
+        {page === "Work orders" && <WorkOrders />}
+        {page === "Settings" && (
           <div className="todo">
             <h2>{page}</h2>
             <p>Not ported yet. Use the Windows Tech Bench app for this screen for now.</p>
