@@ -81,7 +81,7 @@ static partial class SelfTest
             ShopSettings.Load();
             Check("corrupt legacy file writes nothing", !File.Exists(shopPath), shopPath);
 
-            Eq("sanitize spaces and dots", ShopSettings.Sanitize(" Viper B. "), "Viper-B");
+            Eq("sanitize spaces and dots", ShopSettings.Sanitize(" user B. "), "user-B");
             Eq("sanitize empty", ShopSettings.Sanitize("***"), "tech");
         }
         finally

@@ -13,7 +13,11 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Never commit secrets, `.env*`, tokens, keys/certs, or legacy settings files (`id-settings*.json`).
 
 ## Merge / release
-- PRs go into `beta`; agents squash-merge their own PR as soon as CI is green, no review hold (Viper, 2026-10-24).
-- Promoting `beta` → `main`, tagging, and releasing only on Viper's explicit word.
+- PRs go into `beta`; agents squash-merge their own PR as soon as CI is green, no review hold (user, 2026-10-24).
+- Promoting `beta` → `main`, tagging, and releasing only on user's explicit word.
 - Never use `dyl-ready-pr` merge or babysit. No field tests.
 
+
+## No personal info (hard rule)
+
+Never put a real name, personal email, phone, address, employer, or real home-folder path in any file, commit message, PR, or issue. Anywhere a name is needed, write "user". Paths use `/home/user`. Commits use the GitHub no-reply email. `scripts/pii-guard/pii_guard.py` runs in CI (`pii-guard` check) and blocks violations; run it locally before pushing.

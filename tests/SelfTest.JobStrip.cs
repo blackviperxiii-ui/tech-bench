@@ -18,8 +18,8 @@ static partial class SelfTest
         Eq("no work order, model only", JobStrip.JobTag(null, "XAS 185", ""), "XAS 185");
         Eq("no work order, nothing typed", JobStrip.JobTag(null, null, null), "");
 
-        Eq("sync chip clean", JobStrip.SyncChip(0, "viper"), "Sync · viper · click");
-        Eq("sync chip conflicts", JobStrip.SyncChip(3, "viper"), "3 sync conflict(s) — click");
+        Eq("sync chip clean", JobStrip.SyncChip(0, "user"), "Sync · user · click");
+        Eq("sync chip conflicts", JobStrip.SyncChip(3, "user"), "3 sync conflict(s) — click");
         Eq("sync idle text", JobStrip.SyncIdle, "Sync: idle");
 
         var all = new List<WorkOrder>
