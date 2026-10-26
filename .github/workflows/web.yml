@@ -1,0 +1,71 @@
+# Web build of the recode (Phase 4): tb-core as wasm (crates/tb-wasm), work orders in IndexedDB,
+# no adapter. `npm run build:web` builds the wasm core and `vite build --mode web` into
+# app/dist-web; Playwright then runs a KB search and a work-order save and reopen on Chromium,
+# Firefox and WebKit. Builds and tests only: nothing is deployed and no secrets are used.
+name: web
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  web:
+    name: web (vite build + Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          rustup target add wasm32-unknown-unknown
+
+      - name: Clippy (tb-wasm)
+        run: cargo clippy -p tb-wasm --all-targets --locked -- -D warnings
+
+      - name: Test (tb-wasm)
+        run: cargo test -p tb-wasm --locked
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build web
+        run: npm run build:web
+
+      - name: Bundle has no password DB
+        run: |
+          ls -la app/dist-web/assets
+          if grep -rl "ifix-passwords" app/dist-web; then
+            echo "::error::the web bundle mentions the password DB"; exit 1
+          fi
+
+      - name: Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Playwright
+        run: npx playwright test
+
+      - name: Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

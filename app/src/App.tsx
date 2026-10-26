@@ -9,6 +9,7 @@ import { ShopSettings } from "./ShopSettings";
 import { ShopSync } from "./ShopSync";
 import { WorkOrders } from "./WorkOrders";
 import { runSmoke } from "./smoke";
+import { WEB } from "./platform";
 import {
   jobClear,
   jobGet,
@@ -27,8 +28,10 @@ import {
 } from "./api";
 
 /** Same main pages as ShellForm; screens not ported yet say so. */
-const PAGES = ["Search", "Work orders", "INLINE 7", "Settings"] as const;
-type Page = (typeof PAGES)[number];
+const ALL_PAGES = ["Search", "Work orders", "INLINE 7", "Settings"] as const;
+type Page = (typeof ALL_PAGES)[number];
+/** The web build has no shop settings: nothing to share with and no folders to pick. */
+const PAGES = WEB ? ALL_PAGES.filter((p) => p !== "Settings") : ALL_PAGES;
 
 const NO_HEADER: Header = { customer: "", model: "", serial: "" };
 
@@ -69,7 +72,7 @@ export function App() {
 
   /** ShellForm.RunSync(false): a quiet sync; a failure shows on the chip, not in a dialog. */
   const quietSync = useCallback(() => {
-    if (smokeOn.current) return;
+    if (smokeOn.current || WEB) return;
     syncRun()
       .then(synced)
       .catch((e) => setSync({ techId: "", syncFolder: "", text: String(e), conflicts: [], chip: String(e) }));

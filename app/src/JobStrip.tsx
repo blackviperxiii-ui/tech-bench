@@ -1,4 +1,5 @@
 import type { WoList, WorkOrder } from "./api";
+import { WEB } from "./platform";
 
 export interface Header {
   customer: string;
@@ -75,21 +76,28 @@ export function JobStrip({
       {field("customer", "Customer", "140px")}
       {field("model", "Model", "120px")}
       {field("serial", "Serial", "130px")}
-      <button className={sync?.conflict ? "job-sync conflict" : "job-sync"} onClick={onSync} title="Shop sync">
-        {sync?.chip ?? (data ? data.syncChip : "Sync: idle")}
-      </button>
+      {!WEB && (
+        <button className={sync?.conflict ? "job-sync conflict" : "job-sync"} onClick={onSync} title="Shop sync">
+          {sync?.chip ?? (data ? data.syncChip : "Sync: idle")}
+        </button>
+      )}
       <button className="job-btn" onClick={onSearchJob}>
         Search this job
       </button>
-      <button className="job-btn" onClick={onAddCode}>
-        Add code to KB
-      </button>
-      <button className="job-btn" onClick={onAddNote}>
-        Add note
-      </button>
-      <button className="job-btn" onClick={onAddFile}>
-        Add file
-      </button>
+      {/* The web build's KB is read-only: it is part of the app, not a shop folder. */}
+      {!WEB && (
+        <>
+          <button className="job-btn" onClick={onAddCode}>
+            Add code to KB
+          </button>
+          <button className="job-btn" onClick={onAddNote}>
+            Add note
+          </button>
+          <button className="job-btn" onClick={onAddFile}>
+            Add file
+          </button>
+        </>
+      )}
     </div>
   );
 }

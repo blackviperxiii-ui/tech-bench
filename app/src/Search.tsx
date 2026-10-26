@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { KINDS, kbInfo, kbOpen, kbSearch, type Hit, type KbInfo } from "./api";
+import { WEB } from "./platform";
 
 /** Port of SearchControl.cs: query + kind, hit list, detail pane, status line. */
 export function Search({
@@ -73,7 +74,8 @@ export function Search({
   useEffect(() => {
     onSelected?.(current ?? null);
   }, [current, onSelected]);
-  const openable = current && ["MANUAL", "FILE", "NOTE"].includes(current.kind) && current.path !== "";
+  // The web build cannot open files on this PC; the path still shows in the detail.
+  const openable = !WEB && current && ["MANUAL", "FILE", "NOTE"].includes(current.kind) && current.path !== "";
 
   /** SearchControl.OpenSel: the file behind a manual / file / note hit, through the launch guard. */
   async function openSel() {

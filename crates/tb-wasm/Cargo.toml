@@ -1,0 +1,13 @@
+[package]
+name = "tb-wasm"
+version = "0.1.0"
+description = "Tech Bench web build: tb-core behind one JSON call for the browser (no wasm-bindgen)."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tb-core = { path = "../tb-core" }
