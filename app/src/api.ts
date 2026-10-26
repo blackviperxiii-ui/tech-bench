@@ -237,3 +237,33 @@ export const busCaps = () => invoke<BusCaps>("bus_caps");
 /** One named bridge command; the bridge has no raw-frame command and guards every send. */
 export const busCall = <T>(cmd: string, args?: Record<string, unknown>) =>
   invoke<T>("bus_call", { cmd, args: args ?? null });
+
+/** The local clock as the session files want it (tb-core has no time zone). */
+export interface LocalNow {
+  local: string;
+  stamp: string;
+  iso: string;
+}
+
+export function localNow(d = new Date()): LocalNow {
+  const p = (n: number, w = 2) => String(Math.abs(n)).padStart(w, "0");
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  // .NET round-trip "o" for local time: seven fraction digits and the UTC offset.
+  const off = -d.getTimezoneOffset();
+  const zone = `${off < 0 ? "-" : "+"}${p(Math.trunc(Math.abs(off) / 60))}:${p(Math.abs(off) % 60)}`;
+  return {
+    local: `${date} ${time}`,
+    stamp: localStamp(d),
+    iso: `${date}T${time}.${p(d.getMilliseconds(), 3)}0000${zone}`,
+  };
+}
+
+/** Save: the session text and CSVs in the session folder, shared as this tech's history. */
+export const sessionSave = (job: string, now = localNow()) =>
+  invoke<{ path: string; folder: string }>("session_save", { job, now });
+/** The job report for what the bus shows now (JobReport.Text), with the unit history note. */
+export const busReport = (job: string, history: string, now = localNow()) =>
+  invoke<string>("bus_call", { cmd: "report", args: { job, when: now.local.slice(0, 16), history } });
+export const woAttachReport = (wo: WorkOrder, text: string) =>
+  invoke<WorkOrder>("wo_attach_report", { wo, text });

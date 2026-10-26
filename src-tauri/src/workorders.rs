@@ -331,3 +331,26 @@ pub fn wo_open_media(folder: String, name: String, app: AppHandle) -> Result<(),
         .ok_or("Media name is not a file inside this work order's media folder.")?;
     crate::job::safe_open(&app, &path)
 }
+
+/// `WorkOrderControl.AttachReportText`: the diagnostic report becomes the order's report text and
+/// a `diagnostic-report.txt` in its media folder.
+#[tauri::command]
+pub fn wo_attach_report(
+    wo: WoDto,
+    text: String,
+    app: AppHandle,
+    state: State<'_, WoState>,
+    kb: State<'_, Kb>,
+) -> Result<WoDto, String> {
+    if text.trim().is_empty() {
+        return Err("No diagnostic report yet.".into());
+    }
+    with_store(&app, &state, &kb, |store, shop, kb_root| {
+        let mut w = WorkOrder::from(wo);
+        w.report_text = text.clone();
+        store
+            .attach_text(&mut w, "diagnostic-report.txt", &text, shop, kb_root)
+            .map_err(|e| e.to_string())?;
+        Ok(WoDto::from(&w))
+    })
+}

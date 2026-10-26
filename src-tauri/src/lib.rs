@@ -27,7 +27,7 @@ const CHEATSHEET_RTF: &str = include_str!("../../assets/cheatsheet.rtf");
 const SMOKE_TIMEOUT: Duration = Duration::from_secs(90);
 
 pub(crate) struct Kb(pub(crate) Mutex<KbIndex>);
-struct Smoke(AtomicBool);
+pub(crate) struct Smoke(pub(crate) AtomicBool);
 
 #[derive(Serialize)]
 struct HitDto {
@@ -292,6 +292,8 @@ pub fn run() {
             shopsync::history_summary,
             livebus::bus_caps,
             livebus::bus_call,
+            livebus::session_save,
+            workorders::wo_attach_report,
             smoke_mode,
             smoke_report
         ])

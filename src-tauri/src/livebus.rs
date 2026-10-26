@@ -6,12 +6,12 @@
 //! built-in fake adapter (scripted ECMs, no hardware); CI smoke uses both. Without them, live bus
 //! is offered only on Windows, the one platform with RP1210 drivers.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::State;
+use tauri::{AppHandle, State};
 use tb_rp1210_bridge::client::{BridgeClient, CALL_TIMEOUT, CLEAR_TIMEOUT};
 
 pub struct Bridge(pub Mutex<Option<BridgeClient>>);
@@ -37,6 +37,8 @@ const ALLOWED: &[&str] = &[
     "trend",
     "timeline",
     "log",
+    "report",
+    "session",
 ];
 
 const BRIDGE_NAME: &str = "tb-rp1210-bridge";
@@ -130,6 +132,79 @@ pub fn bus_call(
         *slot = None;
     }
     r
+}
+
+/// The UI's local clock (tb-core has no time zone).
+#[derive(Deserialize)]
+pub struct LocalNow {
+    local: String,
+    stamp: String,
+    iso: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Saved {
+    path: String,
+    folder: String,
+}
+
+/// UTF-8 with a BOM, as .NET `File.WriteAllText(.., Encoding.UTF8)` wrote them, so a
+/// spreadsheet reads the dashes and degree text right.
+fn write_bom(path: &Path, text: &str) -> std::io::Result<()> {
+    std::fs::write(path, format!("\u{feff}{text}"))
+}
+
+fn write_if(dir: &Path, name: String, text: &Value) -> std::io::Result<()> {
+    match text.as_str() {
+        Some(t) if !t.is_empty() => write_bom(&dir.join(name), t),
+        _ => Ok(()),
+    }
+}
+
+/// Save (`SaveSessionCore` + `SessionIo.SaveSession`): the session text and its four CSVs in the
+/// session folder, then the DTC CSV goes to this tech's shared history. The UI sends its local
+/// clock in `now`.
+#[tauri::command(async)]
+pub fn session_save(
+    job: String,
+    now: LocalNow,
+    app: AppHandle,
+    bridge: State<'_, Bridge>,
+    kb: State<'_, crate::Kb>,
+    smoke: State<'_, crate::Smoke>,
+) -> Result<Saved, String> {
+    let f = bus_call(
+        "session".into(),
+        Some(
+            serde_json::json!({"job": job, "local": now.local, "stamp": now.stamp, "iso": now.iso}),
+        ),
+        bridge,
+    )?;
+    let base = f["base"]
+        .as_str()
+        .ok_or("The bridge sent no session name.")?;
+    let dir = crate::shopsync::session_folder(&app);
+    let write = || -> std::io::Result<PathBuf> {
+        std::fs::create_dir_all(&dir)?;
+        let txt = dir.join(format!("{base}.txt"));
+        write_bom(&txt, f["body"].as_str().unwrap_or(""))?;
+        write_if(&dir, format!("{base}_readings.csv"), &f["readingsCsv"])?;
+        write_if(&dir, format!("{base}_dtcs.csv"), &f["dtcCsv"])?;
+        write_if(&dir, format!("{base}_trend.csv"), &f["trendCsv"])?;
+        write_if(&dir, format!("{base}_timeline.csv"), &f["timelineCsv"])?;
+        Ok(txt)
+    };
+    let txt = write().map_err(|e| format!("Could not write the session file.\n\n{e}"))?;
+    // Sharing is best effort, as in the WinForms shell: the save itself already worked. A smoke
+    // run leaves the installed KB alone.
+    if !smoke.0.load(std::sync::atomic::Ordering::SeqCst) {
+        let _ = crate::shopsync::publish_session(&app, &kb, &dir.join(format!("{base}_dtcs.csv")));
+    }
+    Ok(Saved {
+        path: txt.to_string_lossy().into_owned(),
+        folder: dir.to_string_lossy().into_owned(),
+    })
 }
 
 /// App exit: release any TSC1 hold, disconnect and stop the bridge.
