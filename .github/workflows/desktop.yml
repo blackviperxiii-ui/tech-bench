@@ -1,7 +1,8 @@
 # Tauri 2 + React desktop shell (app/ + src-tauri/): the cross-platform recode.
 # Builds installers on Linux, Windows and macOS and uploads them as artifacts.
 # Linux and Windows also run `techbench --smoke`: the real app opens, the React UI runs a
-# KB search for a known code through tb-core, and the exit code says whether it got it.
+# KB search for a known code through tb-core (plus a work-order save and list in a scratch
+# TECHBENCH_HOME), and the exit code says whether it got it.
 # Unsigned builds only; no secrets. The C# `installer` job is separate and unchanged.
 name: desktop
 
@@ -79,7 +80,7 @@ jobs:
 
       - name: Smoke (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a ./target/release/techbench --smoke
+        run: TECHBENCH_HOME="$RUNNER_TEMP/tbhome" xvfb-run -a ./target/release/techbench --smoke
 
       - name: Smoke (Windows)
         if: runner.os == 'Windows'
@@ -87,6 +88,7 @@ jobs:
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'smoke.txt'
           $env:TECHBENCH_SMOKE_OUT = $out
+          $env:TECHBENCH_HOME = Join-Path $env:RUNNER_TEMP 'tbhome'
           $p = Start-Process -FilePath '.\target\release\techbench.exe' -ArgumentList '--smoke' -Wait -PassThru
           if (Test-Path $out) { Get-Content $out }
           if ($p.ExitCode -ne 0) {

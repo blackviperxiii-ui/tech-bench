@@ -1,7 +1,9 @@
 //! One WO-keyed job packet: header, notes, report, media names, shop clock
 //! (port of `src/Features/WorkOrders/WorkOrder.cs` and `WorkOrderStore.ResolveMediaPath`).
 
+use crate::json::{self, Value};
 use crate::kb::paths::full_path;
+use crate::settings::store::{field, str_field};
 use crate::time::utc_now_o;
 use std::path::{Path, PathBuf};
 
@@ -142,6 +144,119 @@ impl WorkOrder {
         self.clock.push(ev.clone());
         self.touch();
         ev
+    }
+}
+
+fn sv(v: &str) -> Value {
+    Value::String(v.to_string())
+}
+
+/// A string field that keeps the C# default when the key is missing (null reads as empty).
+fn str_or(obj: &Value, name: &str, default: &str) -> Result<String, ()> {
+    match field(obj, name) {
+        None => Ok(default.to_string()),
+        Some(_) => str_field(obj, name),
+    }
+}
+
+impl WorkOrderClock {
+    fn to_value(&self) -> Value {
+        Value::Object(vec![
+            ("Kind".into(), sv(&self.kind)),
+            ("WhenUtc".into(), sv(&self.when_utc)),
+            ("Detail".into(), sv(&self.detail)),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ()> {
+        if !v.is_object() {
+            return Err(());
+        }
+        Ok(Self {
+            kind: str_field(v, "Kind")?,
+            when_utc: str_field(v, "WhenUtc")?,
+            detail: str_field(v, "Detail")?,
+        })
+    }
+}
+
+impl WorkOrder {
+    /// `wo.json` text: the C# `JavaScriptSerializer` field order. `Folder` is always written
+    /// empty, like the store's `Shallow` snapshot.
+    pub fn to_json(&self) -> String {
+        Value::Object(vec![
+            ("Number".into(), sv(&self.number)),
+            ("Segment".into(), sv(&self.segment)),
+            ("Customer".into(), sv(&self.customer)),
+            ("CustomerNo".into(), sv(&self.customer_no)),
+            ("Model".into(), sv(&self.model)),
+            ("Serial".into(), sv(&self.serial)),
+            ("Stock".into(), sv(&self.stock)),
+            ("Description".into(), sv(&self.description)),
+            ("AssignedTech".into(), sv(&self.assigned_tech)),
+            ("Notes".into(), sv(&self.notes)),
+            ("ReportText".into(), sv(&self.report_text)),
+            ("Source".into(), sv(&self.source)),
+            ("ClockState".into(), sv(&self.clock_state)),
+            ("UpdatedUtc".into(), sv(&self.updated_utc)),
+            ("Folder".into(), sv("")),
+            (
+                "Media".into(),
+                Value::Array(self.media.iter().map(|m| sv(m)).collect()),
+            ),
+            (
+                "Clock".into(),
+                Value::Array(self.clock.iter().map(WorkOrderClock::to_value).collect()),
+            ),
+        ])
+        .to_json()
+    }
+
+    /// Parse `wo.json`. `None` for bad JSON or a wrong-shaped field, as the C# deserializer throws.
+    pub fn from_json(text: &str) -> Option<WorkOrder> {
+        let o = json::parse(text).ok()?;
+        if !o.is_object() {
+            return None;
+        }
+        let d = WorkOrder::default();
+        let list = |name: &str| -> Result<Vec<Value>, ()> {
+            match field(&o, name) {
+                None | Some(Value::Null) => Ok(Vec::new()),
+                Some(Value::Array(a)) => Ok(a.clone()),
+                Some(_) => Err(()),
+            }
+        };
+        (|| {
+            Ok::<_, ()>(WorkOrder {
+                number: str_or(&o, "Number", &d.number)?,
+                segment: str_or(&o, "Segment", &d.segment)?,
+                customer: str_or(&o, "Customer", &d.customer)?,
+                customer_no: str_or(&o, "CustomerNo", &d.customer_no)?,
+                model: str_or(&o, "Model", &d.model)?,
+                serial: str_or(&o, "Serial", &d.serial)?,
+                stock: str_or(&o, "Stock", &d.stock)?,
+                description: str_or(&o, "Description", &d.description)?,
+                assigned_tech: str_or(&o, "AssignedTech", &d.assigned_tech)?,
+                notes: str_or(&o, "Notes", &d.notes)?,
+                report_text: str_or(&o, "ReportText", &d.report_text)?,
+                source: str_or(&o, "Source", &d.source)?,
+                clock_state: str_or(&o, "ClockState", &d.clock_state)?,
+                updated_utc: str_or(&o, "UpdatedUtc", &d.updated_utc)?,
+                folder: str_or(&o, "Folder", &d.folder)?,
+                media: list("Media")?
+                    .iter()
+                    .map(|v| match v {
+                        Value::String(s) => Ok(s.clone()),
+                        _ => Err(()),
+                    })
+                    .collect::<Result<_, _>>()?,
+                clock: list("Clock")?
+                    .iter()
+                    .map(WorkOrderClock::from_value)
+                    .collect::<Result<_, _>>()?,
+            })
+        })()
+        .ok()
     }
 }
 

@@ -38,7 +38,7 @@ pub struct AdapterPrefsData {
 }
 
 /// Field lookup by the C# property name, exact first, then case-insensitive.
-fn field<'a>(obj: &'a Value, name: &str) -> Option<&'a Value> {
+pub(crate) fn field<'a>(obj: &'a Value, name: &str) -> Option<&'a Value> {
     if let Some(v) = obj.get(name) {
         return Some(v);
     }
@@ -52,7 +52,7 @@ fn field<'a>(obj: &'a Value, name: &str) -> Option<&'a Value> {
 }
 
 /// A string field: missing or null is empty, anything but a string is a bad file.
-fn str_field(obj: &Value, name: &str) -> Result<String, ()> {
+pub(crate) fn str_field(obj: &Value, name: &str) -> Result<String, ()> {
     match field(obj, name) {
         None | Some(Value::Null) => Ok(String::new()),
         Some(Value::String(s)) => Ok(s.clone()),
