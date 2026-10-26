@@ -31,3 +31,29 @@ export const kbSearch = (query: string, kind: string) =>
 export const smokeMode = () => invoke<boolean>("smoke_mode");
 export const smokeReport = (ok: boolean, detail: string) =>
   invoke<void>("smoke_report", { ok, detail });
+
+/** One cheat sheet paragraph from assets/cheatsheet.rtf; tabs separate key and description. */
+export interface Para {
+  text: string;
+  bold: boolean;
+  big: boolean;
+}
+
+export interface Explained {
+  text: string;
+  kb: string | null;
+}
+
+/** FeatureBook row (status/reference text only). */
+export interface SwitchRow {
+  id: string;
+  name: string;
+  state: string;
+  short: string;
+  detail: string;
+}
+
+export const cheatsheet = () => invoke<Para[]>("cheatsheet");
+export const explainCode = (spn: number, fmi: number) =>
+  invoke<Explained>("explain_code", { spn, fmi });
+export const guidanzFeatures = () => invoke<SwitchRow[]>("guidanz_features");

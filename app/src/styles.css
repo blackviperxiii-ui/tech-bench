@@ -107,3 +107,56 @@ html, body, #root { height: 100%; margin: 0; }
   .brand { display: none; }
   .split { grid-template-columns: 1fr; grid-template-rows: 40% 1fr; }
 }
+
+.nav-help { margin-top: auto; color: var(--muted); }
+
+.muted { color: var(--muted); }
+.notice {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  border: 1px solid var(--line);
+}
+.inline7 { overflow: auto; height: 100%; }
+.inline7 h2 { font-size: 16px; margin: 14px 0 6px; }
+.code-form { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.code-form label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); gap: 2px; }
+.code-form input { width: 110px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; }
+button { font: inherit; }
+.code-form button, .sheet-foot button {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.code-help { margin-top: 8px; min-height: 120px; max-height: 340px; }
+.split.short { height: 320px; flex: none; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.sheet {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: min(760px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.sheet-body { overflow: auto; padding: 16px 20px; }
+.sheet-body h2 { margin: 0 0 8px; font-size: 18px; }
+.sheet-body h3 { margin: 14px 0 4px; font-size: 15px; }
+.sheet-body p { margin: 4px 0; }
+.ref-row { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.ref-key { font-weight: 600; }
+.sheet-foot { display: flex; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--line); }
