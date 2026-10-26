@@ -41,6 +41,9 @@ jobs:
 
       - name: Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The default list still names the retired "tools" package, which fails.
+          packages: platform-tools
 
       - name: NDK
         run: |
