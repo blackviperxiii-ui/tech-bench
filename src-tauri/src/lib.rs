@@ -1,7 +1,8 @@
 //! Tauri 2 shell for Tech Bench. Commands expose tb-core to the React UI in app/.
 //! No bus access and no ECU actions (those stay in the WinForms
 //! build until the RP1210 sidecar lands with its guards). The only writes are work-order packets
-//! and the shop/job settings files the WinForms app also writes.
+//! the shop/job settings files the WinForms app also writes, and Add code / note / file into this
+//! tech's KB shop shard.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,6 +15,7 @@ use tb_core::kb::{KbIndex, MAX_RESULTS};
 use tb_core::search::{codebook, featurebook};
 
 mod job;
+mod shopadd;
 mod workorders;
 
 /// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
@@ -270,6 +272,10 @@ pub fn run() {
             job::pick_folder,
             job::pick_assigned_file,
             job::kb_open,
+            shopadd::kb_code_seed,
+            shopadd::kb_add_code,
+            shopadd::kb_add_note,
+            shopadd::kb_add_file,
             smoke_mode,
             smoke_report
         ])

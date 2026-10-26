@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CheatSheet } from "./CheatSheet";
 import { Inline7 } from "./Inline7";
 import { JobStrip, type Header } from "./JobStrip";
+import { AddCode, AddNote } from "./KbAdd";
 import { Search } from "./Search";
 import { ShopSettings } from "./ShopSettings";
 import { WorkOrders } from "./WorkOrders";
@@ -12,8 +13,10 @@ import {
   jobSetHeader,
   jobSetWo,
   jobTitle,
+  kbAddFile,
   smokeMode,
   woList,
+  type Hit,
   type WoList,
   type WorkOrder,
 } from "./api";
@@ -33,6 +36,10 @@ export function App() {
   const [current, setCurrent] = useState<WorkOrder | null>(null);
   const [header, setHeader] = useState<Header>(NO_HEADER);
   const loaded = useRef(false);
+  const [hit, setHit] = useState<Hit | null>(null);
+  const [adding, setAdding] = useState<"code" | "note" | null>(null);
+  const [kbTick, setKbTick] = useState(0);
+  const [addError, setAddError] = useState("");
 
   /** Re-list work orders; with `key`, select that order when it is listed. */
   const reload = useCallback(async (key?: string) => {
@@ -117,6 +124,26 @@ export function App() {
     setHeader((h) => ({ ...h, customer: "" }));
   }
 
+  const clearPrefill = useCallback(() => setPrefill({ text: "", tick: 0 }), []);
+
+  /** After Add code / note / file: the index is reloaded; show the new entry in Search. */
+  function showAdded(query: string) {
+    setAdding(null);
+    setAddError("");
+    setKbTick((t) => t + 1);
+    setPrefill((p) => ({ text: query, tick: p.tick + 1 }));
+    setPage("Search");
+  }
+
+  async function addFile() {
+    try {
+      const name = await kbAddFile();
+      if (name) showAdded(name);
+    } catch (e) {
+      setAddError(String(e));
+    }
+  }
+
   function searchJob() {
     // JobStrip.SearchQuery: the typed model and serial.
     setPrefill((p) => ({ text: `${header.model} ${header.serial}`.trim(), tick: p.tick + 1 }));
@@ -169,9 +196,25 @@ export function App() {
           onPick={selectWo}
           onSync={() => setPage("Work orders")}
           onSearchJob={searchJob}
+          onAddCode={() => setAdding("code")}
+          onAddNote={() => setAdding("note")}
+          onAddFile={() => void addFile()}
         />
+        {addError && (
+          <div className="notice add-error" role="alert">
+            {addError} <button onClick={() => setAddError("")}>Dismiss</button>
+          </div>
+        )}
         <main className="page">
-          {page === "Search" && <Search focusTick={focusTick} prefill={prefill} />}
+          {page === "Search" && (
+            <Search
+              key={kbTick}
+              focusTick={focusTick}
+              prefill={prefill}
+              onSelected={setHit}
+              onPrefilled={clearPrefill}
+            />
+          )}
           {page === "INLINE 7" && <Inline7 />}
           {page === "Work orders" && (
             <WorkOrders
@@ -188,6 +231,15 @@ export function App() {
         </main>
       </div>
       {help && <CheatSheet onClose={() => setHelp(false)} />}
+      {adding === "code" && (
+        <AddCode
+          seedKind={hit?.kind ?? ""}
+          seedTitle={hit?.title ?? ""}
+          onClose={() => setAdding(null)}
+          onSaved={showAdded}
+        />
+      )}
+      {adding === "note" && <AddNote onClose={() => setAdding(null)} onSaved={showAdded} />}
     </div>
   );
 }

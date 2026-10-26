@@ -34,7 +34,7 @@ export function CheatSheet({ onClose }: { onClose: () => void }) {
           })}
         </div>
         <div className="sheet-foot">
-          <button ref={closeRef} onClick={onClose}>
+          <button ref={closeRef} className="primary" onClick={onClose}>
             Close
           </button>
         </div>

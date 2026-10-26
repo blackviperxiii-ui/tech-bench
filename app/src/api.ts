@@ -132,3 +132,30 @@ export const shopSettingsSave = (techId: string, shareFolder: string, assignedFi
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickAssignedFile = () => invoke<string | null>("pick_assigned_file");
 export const kbOpen = (path: string) => invoke<void>("kb_open", { path });
+
+/** Add code form (CodeEditForm): causes and checks are one entry per line. */
+export interface CodeForm {
+  brand: string;
+  code: string;
+  title: string;
+  severity: string;
+  controller: string;
+  description: string;
+  causes: string;
+  checks: string;
+  reset: string;
+  safety: string;
+}
+
+export const kbCodeSeed = (kind: string, title: string) => invoke<CodeForm>("kb_code_seed", { kind, title });
+/** Each add returns what to search for so the new entry shows straight away. */
+export const kbAddCode = (code: CodeForm) => invoke<string>("kb_add_code", { code });
+export const kbAddNote = (title: string, body: string) =>
+  invoke<string>("kb_add_note", { title, body, stamp: localStamp() });
+export const kbAddFile = () => invoke<string | null>("kb_add_file", { stamp: localStamp() });
+
+/** Local time as yyyyMMdd_HHmmss (the shop note and file name stamp). */
+export function localStamp(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}

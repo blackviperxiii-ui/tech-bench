@@ -5,8 +5,14 @@ import { KINDS, kbInfo, kbOpen, kbSearch, type Hit, type KbInfo } from "./api";
 export function Search({
   focusTick = 0,
   prefill = { text: "", tick: 0 },
+  onSelected,
+  onPrefilled,
 }: {
   focusTick?: number;
+  /** The highlighted hit, for Add code's seed. */
+  onSelected?: (hit: Hit | null) => void;
+  /** Called once the prefill is in the box, so a later visit starts from the tech's own query. */
+  onPrefilled?: () => void;
   /** "Search this job": replace the query (SearchControl.Prefill). */
   prefill?: { text: string; tick: number };
 }) {
@@ -30,8 +36,9 @@ export function Search({
       setQuery(prefill.text);
       setKind("ALL");
       queryRef.current?.focus();
+      onPrefilled?.();
     }
-  }, [prefill]);
+  }, [prefill, onPrefilled]);
 
   useEffect(() => {
     kbInfo()
@@ -62,6 +69,10 @@ export function Search({
   }, [query, kind]);
 
   const current = hits[sel];
+
+  useEffect(() => {
+    onSelected?.(current ?? null);
+  }, [current, onSelected]);
   const openable = current && ["MANUAL", "FILE", "NOTE"].includes(current.kind) && current.path !== "";
 
   /** SearchControl.OpenSel: the file behind a manual / file / note hit, through the launch guard. */

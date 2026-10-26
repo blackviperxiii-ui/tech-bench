@@ -14,10 +14,24 @@ interface Props {
   onPick: (wo: WorkOrder | null) => void;
   onSync: () => void;
   onSearchJob: () => void;
+  onAddCode: () => void;
+  onAddNote: () => void;
+  onAddFile: () => void;
 }
 
 /** Port of the ShellForm job strip: WO pick list, customer / model / serial, sync chip. */
-export function JobStrip({ data, current, header, onHeader, onPick, onSync, onSearchJob }: Props) {
+export function JobStrip({
+  data,
+  current,
+  header,
+  onHeader,
+  onPick,
+  onSync,
+  onSearchJob,
+  onAddCode,
+  onAddNote,
+  onAddFile,
+}: Props) {
   const orders = data?.orders ?? [];
   const rows = data?.pickRows ?? ["(no work order)"];
   // JobStrip.PickItems: the open order's row (key ignoring case), else the no-work-order row.
@@ -63,6 +77,15 @@ export function JobStrip({ data, current, header, onHeader, onPick, onSync, onSe
       </button>
       <button className="job-btn" onClick={onSearchJob}>
         Search this job
+      </button>
+      <button className="job-btn" onClick={onAddCode}>
+        Add code to KB
+      </button>
+      <button className="job-btn" onClick={onAddNote}>
+        Add note
+      </button>
+      <button className="job-btn" onClick={onAddFile}>
+        Add file
       </button>
     </div>
   );
