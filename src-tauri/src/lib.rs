@@ -4,6 +4,7 @@
 //! the shop/job settings files the WinForms app also writes, Add code / note / file into this
 //! tech's KB shop shard, and shop sync between the KB and a sync folder.
 
+#[cfg(desktop)]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -157,8 +158,15 @@ fn smoke_mode(smoke: State<'_, Smoke>) -> SmokeInfo {
     let on = smoke.0.load(Ordering::SeqCst);
     SmokeInfo {
         on,
-        work_orders: on && std::env::var_os("TECHBENCH_HOME").is_some(),
+        // A phone or simulator smoke runs in a fresh install, so its data folder is scratch.
+        work_orders: on && (cfg!(mobile) || std::env::var_os("TECHBENCH_HOME").is_some()),
     }
+}
+
+/// Mobile has no command line: a CI smoke build bakes the flag in (`TECHBENCH_SMOKE=1` at
+/// compile time). Desktop takes `--smoke`.
+fn smoke_requested() -> bool {
+    std::env::args().any(|a| a == "--smoke") || option_env!("TECHBENCH_SMOKE") == Some("1")
 }
 
 #[tauri::command]
@@ -174,9 +182,29 @@ fn smoke_report(ok: bool, detail: String, smoke: State<'_, Smoke>, app: AppHandl
 }
 
 /// Prints a smoke line, and appends it to TECHBENCH_SMOKE_OUT when set: Windows release
-/// builds have no console, so CI reads the file instead.
+/// builds have no console, so CI reads the file instead. Android's stdout goes nowhere, so
+/// there it goes to logcat under the `TechBench` tag.
 fn smoke_line(line: &str) {
     println!("{line}");
+    #[cfg(target_os = "android")]
+    android_log(line);
+    // An iOS app's console is not reliable in CI; the simulator smoke reads this file from the
+    // app's data container instead (HOME is that container on iOS).
+    #[cfg(target_os = "ios")]
+    if let Some(home) = std::env::var_os("HOME") {
+        use std::io::Write;
+        let path = std::path::Path::new(&home)
+            .join("Documents")
+            .join("techbench-smoke.txt");
+        let _ = std::fs::create_dir_all(path.parent().unwrap_or(std::path::Path::new(&home)));
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(f, "{line}");
+        }
+    }
     if let Some(path) = std::env::var_os("TECHBENCH_SMOKE_OUT") {
         use std::io::Write;
         if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -189,12 +217,57 @@ fn smoke_line(line: &str) {
     }
 }
 
+#[cfg(target_os = "android")]
+fn android_log(line: &str) {
+    use std::ffi::{c_char, c_int, CString};
+    extern "C" {
+        fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char) -> c_int;
+    }
+    const INFO: c_int = 4;
+    if let (Ok(tag), Ok(text)) = (CString::new("TechBench"), CString::new(line)) {
+        // SAFETY: both are valid NUL-terminated strings that outlive the call.
+        unsafe { __android_log_write(INFO, tag.as_ptr(), text.as_ptr()) };
+    }
+}
+
+/// Phones and tablets get the KB built into the app: Android keeps resources inside the APK,
+/// where a plain file read cannot reach them. Like the web build, there is no password DB.
+/// The root stays empty: there is no KB folder, so nothing tries to write a shop copy into one.
+#[cfg(mobile)]
+fn load_kb(kb: &mut KbIndex, _app: &AppHandle) {
+    kb.load_bundled(
+        "",
+        &[
+            ("kb.json", include_str!("../../kb/data/kb.json")),
+            (
+                "usb-manuals.json",
+                include_str!("../../kb/data/usb-manuals.json"),
+            ),
+            (
+                "rental-portable-filters-oil.json",
+                include_str!("../../kb/data/rental-portable-filters-oil.json"),
+            ),
+            (
+                "rental-equipment-info.json",
+                include_str!("../../kb/data/rental-equipment-info.json"),
+            ),
+        ],
+    );
+}
+
+#[cfg(desktop)]
+fn load_kb(kb: &mut KbIndex, app: &AppHandle) {
+    kb.load(&kb_root(app).to_string_lossy());
+}
+
+#[cfg(desktop)]
 fn has_kb(root: &Path) -> bool {
     root.join("data").join("kb.json").is_file()
 }
 
 /// Same order as the WinForms app: TECHBENCH_KB overrides, then the copy shipped with the app.
 /// Debug builds fall back to the repo's kb/ so `tauri dev` works from a checkout.
+#[cfg(desktop)]
 fn kb_root(app: &AppHandle) -> PathBuf {
     if let Some(p) = std::env::var_os("TECHBENCH_KB").map(PathBuf::from) {
         if has_kb(&p) {
@@ -222,9 +295,10 @@ fn install_panic_hook() {
     }));
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     install_panic_hook();
-    let smoke = std::env::args().any(|a| a == "--smoke");
+    let smoke = smoke_requested();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -235,11 +309,10 @@ pub fn run() {
         .manage(shopsync::WatchBase(Mutex::new(None)))
         .manage(livebus::Bridge(Mutex::new(None)))
         .setup(move |app| {
-            let root = kb_root(app.handle());
             {
                 let kb = app.state::<Kb>();
                 let mut kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
-                kb.load(&root.to_string_lossy());
+                load_kb(&mut kb, app.handle());
                 if smoke {
                     smoke_line(&format!("SMOKE kb: {}", kb.status));
                 }

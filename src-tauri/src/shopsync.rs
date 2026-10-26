@@ -60,8 +60,12 @@ pub fn session_folder(app: &AppHandle) -> PathBuf {
         return PathBuf::from(home).join(NAME);
     }
     let p = app.path();
-    [p.desktop_dir(), p.document_dir(), p.local_data_dir()]
-        .into_iter()
+    // Phones have no Desktop folder.
+    #[cfg(desktop)]
+    let dirs = [p.desktop_dir(), p.document_dir(), p.local_data_dir()];
+    #[cfg(mobile)]
+    let dirs = [p.document_dir(), p.local_data_dir()];
+    dirs.into_iter()
         .flatten()
         .map(|d| d.join(NAME))
         .find(|d| std::fs::create_dir_all(d).is_ok())
@@ -285,12 +289,21 @@ pub async fn sync_resolve(
 
 #[tauri::command]
 pub async fn sync_pick_folder(app: AppHandle) -> Option<String> {
-    app.dialog()
-        .file()
-        .set_title("Folder both techs can see (USB, network, or OneDrive).")
-        .blocking_pick_folder()
-        .and_then(|p| p.into_path().ok())
-        .map(|p| p.to_string_lossy().into_owned())
+    #[cfg(desktop)]
+    {
+        app.dialog()
+            .file()
+            .set_title("Folder both techs can see (USB, network, or OneDrive).")
+            .blocking_pick_folder()
+            .and_then(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+    // Phones have no folder picker; shop folders are a desktop feature.
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        None
+    }
 }
 
 /// `ShellForm`'s SessionSaved hook: share a saved session's `_dtcs.csv` as this tech's history.
