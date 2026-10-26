@@ -1,6 +1,7 @@
 import {
   cheatsheet,
   explainCode,
+  historySummary,
   jobTitle,
   kbCodeSeed,
   kbOpen,
@@ -21,7 +22,8 @@ export const SMOKE_EXPECT = "Sensor Failure 1AVPT";
 /**
  * `--smoke`: the UI calls the real Tauri commands and reports back: a KB search for a known
  * code, the cheat sheet title, the SPN 5246 explainer header, the open-file guard refusing a
- * program and, with a scratch TECHBENCH_HOME, shop settings and a work order saved and read back.
+ * program and, with a scratch TECHBENCH_HOME, shop settings and a work order saved and read back
+ * and the unit history for it.
  */
 export async function runSmoke(workOrders: boolean) {
   try {
@@ -53,13 +55,16 @@ export async function runSmoke(workOrders: boolean) {
       const list = await woList();
       const listed = list.orders.find((o) => o.key === "SMOKE-1-01");
       const tag = await jobTitle(saved, "", "");
+      // Scratch home: no saved sessions yet, so unit history says so.
+      const hist = (await historySummary(tag)).text.split("\n")[0];
       woOk =
         tech === "smoke-tech" &&
         saved.key === "SMOKE-1-01" &&
         listed?.label === "SMOKE-1-01  Smoke Co" &&
         list.syncChip === "Sync · smoke-tech · click" &&
-        tag === "WO SMOKE-1-01";
-      woText = `tech: "${tech}"; work order: "${listed?.label ?? "(not listed)"}"; chip: "${list.syncChip}"; tag: "${tag}"`;
+        tag === "WO SMOKE-1-01" &&
+        hist === "No saved sessions yet.";
+      woText = `tech: "${tech}"; work order: "${listed?.label ?? "(not listed)"}"; chip: "${list.syncChip}"; tag: "${tag}"; history: "${hist}"`;
     }
     await smokeReport(
       searchOk && sheetOk && codeOk && guardOk && seedOk && woOk,

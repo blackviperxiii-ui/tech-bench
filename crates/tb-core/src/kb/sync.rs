@@ -710,3 +710,103 @@ impl SyncState {
         fs::write(path, sb)
     }
 }
+
+/// `ShopSync.PublishHistory`: copy a saved session's `*_dtcs.csv` into this tech's
+/// `history/` so other techs' sync brings it to them.
+pub fn publish_history(kb: &Path, tech_id: &str, dtc_csv: &Path) -> io::Result<()> {
+    if !dtc_csv.is_file() {
+        return Ok(());
+    }
+    let dir = shard_dir(kb, tech_id).join("history");
+    fs::create_dir_all(&dir)?;
+    fs::copy(dtc_csv, dir.join(dtc_csv.file_name().unwrap_or_default()))?;
+    Ok(())
+}
+
+fn dtc_csvs(dir: &Path) -> Vec<PathBuf> {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut v: Vec<PathBuf> = rd
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.file_name()
+                    .map(|n| n.to_string_lossy().to_lowercase().ends_with("_dtcs.csv"))
+                    .unwrap_or(false)
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+/// `ShopSync.ImportHistory`: bring every tech's shop history CSV into the session folder so
+/// unit history sees it. Returns how many files were copied.
+pub fn import_history(kb: &Path, session_folder: &Path) -> io::Result<usize> {
+    fs::create_dir_all(session_folder)?;
+    let mut n = 0;
+    for tech in tech_ids(kb) {
+        for src in dtc_csvs(&shard_dir(kb, &tech).join("history")) {
+            if import_one_history(session_folder, &tech, &src).unwrap_or(false) {
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
+}
+
+/// Identical bytes are skipped wherever they already sit. A same name with different bytes is
+/// never overwritten: it lands beside the local file as `base.tech-hash8_dtcs.csv`, or
+/// `base.tech-fullhash_dtcs.csv` when that 8-hex name is taken; if that is taken too, skipped.
+fn import_one_history(session_folder: &Path, tech: &str, src: &Path) -> io::Result<bool> {
+    let hash = hash_file(src)?;
+    if dtc_csvs(session_folder)
+        .iter()
+        .any(|f| hash_file(f).map(|h| h == hash).unwrap_or(false))
+    {
+        return Ok(false);
+    }
+    let name = src
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let dest = session_folder.join(&name);
+    if !dest.exists() {
+        fs::copy(src, &dest)?;
+        return Ok(true);
+    }
+    let mut collision = collision_history_path(session_folder, tech, &name, &hash, true);
+    if collision.exists() {
+        if hash_file(&collision).map(|h| h == hash).unwrap_or(false) {
+            return Ok(false);
+        }
+        collision = collision_history_path(session_folder, tech, &name, &hash, false);
+        if collision.exists() {
+            return Ok(false);
+        }
+    }
+    fs::copy(src, &collision)?;
+    Ok(true)
+}
+
+fn collision_history_path(
+    session_folder: &Path,
+    tech: &str,
+    file_name: &str,
+    hash: &str,
+    short: bool,
+) -> PathBuf {
+    const SUFFIX: &str = "_dtcs.csv";
+    let base = if file_name.to_lowercase().ends_with(SUFFIX) {
+        &file_name[..file_name.len() - SUFFIX.len()]
+    } else {
+        file_name
+    };
+    let tag = if short && hash.len() > 8 {
+        &hash[..8]
+    } else {
+        hash
+    };
+    session_folder.join(format!("{base}.{}-{tag}{SUFFIX}", sanitize_tech_id(tech)))
+}

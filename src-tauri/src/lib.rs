@@ -287,6 +287,7 @@ pub fn run() {
             shopsync::sync_run,
             shopsync::sync_resolve,
             shopsync::sync_pick_folder,
+            shopsync::history_summary,
             smoke_mode,
             smoke_report
         ])

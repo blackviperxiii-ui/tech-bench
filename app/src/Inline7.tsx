@@ -1,16 +1,25 @@
 import { useEffect, useState } from "react";
-import { explainCode, guidanzFeatures, type SwitchRow } from "./api";
+import { explainCode, guidanzFeatures, historySummary, type SwitchRow } from "./api";
 
 /**
  * INLINE 7 page, offline parts: the CodeBook explainer for any SPN/FMI and the Guidanz feature
  * reference. Live J1939 needs the 32-bit RP1210 adapter, so it stays in the Windows build for now.
  */
-export function Inline7() {
+export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number }) {
   const [spn, setSpn] = useState("");
   const [fmi, setFmi] = useState("");
   const [help, setHelp] = useState("Enter an SPN and FMI to explain a fault code.");
   const [rows, setRows] = useState<SwitchRow[]>([]);
   const [row, setRow] = useState(-1);
+
+  const [history, setHistory] = useState({ text: "", folder: "" });
+
+  // Inline7Control.RefreshHistory: follows the job tag, and a sync may bring other techs' visits.
+  useEffect(() => {
+    historySummary(jobTag)
+      .then(setHistory)
+      .catch((e) => setHistory({ text: String(e), folder: "" }));
+  }, [jobTag, syncTick]);
 
   useEffect(() => {
     guidanzFeatures()
@@ -58,6 +67,16 @@ export function Inline7() {
         <button type="submit">Explain</button>
       </form>
       <pre className="detail code-help">{help}</pre>
+
+      <h2>Unit history</h2>
+      <p className="muted">
+        Faults from earlier saved sessions for {jobTag ? `"${jobTag}"` : "this job"}, including other techs&apos;
+        visits that shop sync brought in.
+      </p>
+      <pre className="detail history" aria-label="Unit history">
+        {history.text}
+        {history.folder ? `\nSession folder: ${history.folder}` : ""}
+      </pre>
 
       <h2>Guidanz features</h2>
       <p className="muted">

@@ -9,6 +9,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tb_core::history::History;
 use tb_core::kb::shop::SyncSettings;
 use tb_core::kb::sync::{self, ShopSyncResult, NO_KB_STATUS};
 use tb_core::kb::watch::{watch_dirs, Snapshot};
@@ -49,6 +50,39 @@ fn settings(app: &AppHandle) -> SyncSettings {
 
 fn kb_root(kb: &State<'_, Kb>) -> String {
     kb.0.lock().unwrap_or_else(|e| e.into_inner()).root.clone()
+}
+
+/// `SessionIo.Folder()`: `TechBench-sessions` on the Desktop, else Documents, else local app
+/// data. Under `TECHBENCH_HOME` (tests and CI) it lives there instead.
+pub fn session_folder(app: &AppHandle) -> PathBuf {
+    const NAME: &str = "TechBench-sessions";
+    if let Some(home) = std::env::var_os("TECHBENCH_HOME") {
+        return PathBuf::from(home).join(NAME);
+    }
+    let p = app.path();
+    [p.desktop_dir(), p.document_dir(), p.local_data_dir()]
+        .into_iter()
+        .flatten()
+        .map(|d| d.join(NAME))
+        .find(|d| std::fs::create_dir_all(d).is_ok())
+        .unwrap_or_else(|| std::env::temp_dir().join(NAME))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryView {
+    text: String,
+    folder: String,
+}
+
+/// Unit history for a job tag (the INLINE 7 History panel).
+#[tauri::command]
+pub fn history_summary(job: String, app: AppHandle) -> HistoryView {
+    let folder = session_folder(&app);
+    HistoryView {
+        text: History::load(&folder).summary(&job),
+        folder: folder.to_string_lossy().into_owned(),
+    }
 }
 
 fn watched(app: &AppHandle) -> Vec<PathBuf> {
@@ -180,6 +214,8 @@ fn run_once(
         |r| r.conflicts.extend(wo_conflicts),
     )
     .map_err(|e| format!("Sync failed: {e}"))?;
+    // Other techs' saved sessions become this PC's unit history (ShellForm.RunSync).
+    let _ = sync::import_history(std::path::Path::new(&root), &session_folder(app));
     kb.0.lock().unwrap_or_else(|e| e.into_inner()).load(&root);
     set_base(app, Snapshot::take(&watched(app)));
     Ok(r)
