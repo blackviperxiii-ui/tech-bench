@@ -1,0 +1,99 @@
+# RP1210 bridge (crates/tb-rp1210-bridge): the 32-bit Windows sidecar that owns the J1939 adapter.
+# No hardware anywhere: the bridge runs against its built-in fake adapter, and on Windows its
+# 32-bit DLL loader runs against a mock RP1210 driver DLL (crates/rp1210-mock, never shipped).
+# The Windows job also proves the bridge exe is PE i386, and that the check rejects an x64 build.
+# Unsigned builds only; no secrets. The C# `installer` job is separate and unchanged.
+name: rp1210-bridge
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fake:
+    name: bridge fake adapter (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+
+      - name: Clippy
+        run: cargo clippy -p tb-rp1210-bridge -p rp1210-mock --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test -p tb-rp1210-bridge -p rp1210-mock --locked
+
+  win32:
+    name: bridge i686 + mock DLL (windows-latest)
+    runs-on: windows-latest
+    env:
+      TARGET: i686-pc-windows-msvc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          rustup target add $TARGET
+
+      - name: Clippy (i686)
+        run: cargo clippy -p tb-rp1210-bridge -p rp1210-mock --all-targets --target ${{ env.TARGET }} --locked -- -D warnings
+
+      - name: Build mock RP1210 DLL (i686)
+        run: cargo build -p rp1210-mock --target ${{ env.TARGET }} --locked
+
+      - name: Test (i686, fake adapter + mock DLL)
+        env:
+          RP1210_MOCK_DLL: ${{ github.workspace }}\target\i686-pc-windows-msvc\debug\rp1210_mock.dll
+        run: cargo test -p tb-rp1210-bridge -p rp1210-mock --target ${{ env.TARGET }} --locked -- --nocapture
+
+      - name: Build bridge (i686 release)
+        run: cargo build -p tb-rp1210-bridge --release --target ${{ env.TARGET }} --locked
+
+      - name: Assert PE i386
+        shell: pwsh
+        run: |
+          ./tools/assert-pe-i386.ps1 -Native target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./tools/assert-pe-i386.ps1 -Native target/i686-pc-windows-msvc/debug/rp1210_mock.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: PE check rejects an x64 build
+        shell: pwsh
+        run: |
+          cargo build -p tb-rp1210-bridge --release --locked
+          & ./tools/assert-pe-i386.ps1 -Native target/release/tb-rp1210-bridge.exe
+          if ($LASTEXITCODE -eq 0) { Write-Host "ERROR: x64 bridge passed the i386 check"; exit 1 }
+          Write-Host "OK: x64 bridge rejected"
+          exit 0
+
+      - name: Bridge smoke (i686 exe, fake adapter)
+        shell: pwsh
+        run: |
+          $req = '{"id":1,"cmd":"hello"}', '{"id":2,"cmd":"quit"}'
+          $out = $req | & target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe --fake
+          Write-Host $out
+          $hello = $out[0] | ConvertFrom-Json
+          if (-not $hello.ok -or $hello.data.pointerBits -ne 32) { Write-Host "ERROR: bridge is not 32-bit"; exit 1 }
+
+      - name: Upload bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: tb-rp1210-bridge-i686
+          path: target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe
