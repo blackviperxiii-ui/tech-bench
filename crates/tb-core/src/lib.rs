@@ -5,6 +5,7 @@
 //! literal expected values are ported under `tests/` and must keep matching.
 
 pub mod fmt;
+pub mod history;
 pub mod ini;
 pub mod j1939;
 pub mod json;

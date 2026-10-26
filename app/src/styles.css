@@ -255,3 +255,4 @@ button { font: inherit; }
 }
 .job-sync.conflict { color: #c0392b; border-color: #c0392b; }
 .sheet-foot button:disabled { opacity: 0.55; cursor: default; }
+.detail.history { min-height: 90px; max-height: 260px; font-size: 13px; }

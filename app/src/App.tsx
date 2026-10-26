@@ -46,6 +46,13 @@ export function App() {
   const [addError, setAddError] = useState("");
   const [sync, setSync] = useState<SyncView | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [jobTag, setJobTag] = useState("");
+  const [syncCount, setSyncCount] = useState(0);
+  /** A finished sync: update the chip, and let pages that read synced files look again. */
+  const synced = useCallback((v: SyncView) => {
+    setSync(v);
+    setSyncCount((c) => c + 1);
+  }, []);
   /** Smoke runs never sync: the installed KB stays untouched. */
   const smokeOn = useRef(true);
 
@@ -63,9 +70,9 @@ export function App() {
   const quietSync = useCallback(() => {
     if (smokeOn.current) return;
     syncRun()
-      .then(setSync)
+      .then(synced)
       .catch((e) => setSync({ techId: "", syncFolder: "", text: String(e), conflicts: [], chip: String(e) }));
-  }, []);
+  }, [synced]);
 
   // Startup: saved job (customer / model / serial), then the list with the last work order open,
   // then one quiet sync (ShellForm.Shown).
@@ -112,7 +119,9 @@ export function App() {
 
   // Window title and job tag follow the open work order, else the typed model and serial.
   useEffect(() => {
-    jobTitle(current, header.model, header.serial).catch(() => {});
+    jobTitle(current, header.model, header.serial)
+      .then(setJobTag)
+      .catch(() => {});
   }, [current, header.model, header.serial]);
 
   // Persist the typed job after a short pause (not while startup is still filling it).
@@ -254,7 +263,7 @@ export function App() {
               onPrefilled={clearPrefill}
             />
           )}
-          {page === "INLINE 7" && <Inline7 />}
+          {page === "INLINE 7" && <Inline7 jobTag={jobTag} syncTick={syncCount} />}
           {page === "Work orders" && (
             <WorkOrders
               data={data}
@@ -281,7 +290,7 @@ export function App() {
       {adding === "note" && <AddNote onClose={() => setAdding(null)} onSaved={showAdded} />}
       {syncOpen && (
         <ShopSync
-          onSynced={setSync}
+          onSynced={synced}
           onClose={() => {
             // SyncForm closed: the KB may have new shop entries and work orders.
             setSyncOpen(false);

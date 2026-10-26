@@ -178,3 +178,7 @@ export const syncRun = () => invoke<SyncView>("sync_run");
 export const syncResolve = (index: number, choice: "local" | "remote" | "both") =>
   invoke<SyncView | null>("sync_resolve", { index, choice });
 export const syncPickFolder = () => invoke<string | null>("sync_pick_folder");
+
+/** Unit history (History.Summary) for a job tag, from the saved session DTC files. */
+export const historySummary = (job: string) =>
+  invoke<{ text: string; folder: string }>("history_summary", { job });
