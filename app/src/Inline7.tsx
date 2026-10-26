@@ -7,7 +7,18 @@ import { LiveBus } from "./LiveBus";
  * offline parts that work everywhere: the CodeBook explainer, unit history and the Guidanz
  * feature reference.
  */
-export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number }) {
+export function Inline7({
+  jobTag,
+  syncTick,
+  onSessionSaved,
+  onAttachReport,
+}: {
+  jobTag: string;
+  syncTick: number;
+  onSessionSaved: () => void;
+  onAttachReport: (text: string) => Promise<string>;
+}) {
+  const [savedTick, setSavedTick] = useState(0);
   const [spn, setSpn] = useState("");
   const [fmi, setFmi] = useState("");
   const [help, setHelp] = useState("Enter an SPN and FMI to explain a fault code.");
@@ -28,7 +39,7 @@ export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number
     historySummary(jobTag)
       .then(setHistory)
       .catch((e) => setHistory({ text: String(e), folder: "" }));
-  }, [jobTag, syncTick]);
+  }, [jobTag, syncTick, savedTick]);
 
   useEffect(() => {
     guidanzFeatures()
@@ -74,7 +85,18 @@ export function Inline7({ jobTag, syncTick }: { jobTag: string; syncTick: number
     <section className="inline7">
       <h2>Live bus</h2>
       {caps?.available ? (
-        <LiveBus caps={caps} onCode={pick} onReport={setHelp} />
+        <LiveBus
+          caps={caps}
+          jobTag={jobTag}
+          history={history.text}
+          onCode={pick}
+          onReport={setHelp}
+          onSaved={() => {
+            setSavedTick((t) => t + 1);
+            onSessionSaved();
+          }}
+          onAttach={onAttachReport}
+        />
       ) : (
         <p className="notice">
           {caps?.reason ?? "Checking for the adapter bridge…"} Code lookup, unit history and the
