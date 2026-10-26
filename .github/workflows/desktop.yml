@@ -1,0 +1,108 @@
+# Tauri 2 + React desktop shell (app/ + src-tauri/): the cross-platform recode.
+# Builds installers on Linux, Windows and macOS and uploads them as artifacts.
+# Linux and Windows also run `techbench --smoke`: the real app opens, the React UI runs a
+# KB search for a known code through tb-core, and the exit code says whether it got it.
+# Unsigned builds only; no secrets. The C# `installer` job is separate and unchanged.
+name: desktop
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: desktop (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            bundles: deb,rpm,appimage
+            target: ""
+          - os: windows-latest
+            bundles: msi,nsis
+            target: ""
+          - os: macos-latest
+            bundles: app,dmg
+            target: universal-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev xvfb
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck and build UI
+        run: npm run build
+
+      - name: Clippy (shell)
+        if: runner.os == 'Linux'
+        run: cargo clippy -p techbench --all-targets --locked -- -D warnings
+
+      - name: Build installers
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            npx tauri build --ci --bundles ${{ matrix.bundles }} --target ${{ matrix.target }}
+          else
+            npx tauri build --ci --bundles ${{ matrix.bundles }}
+          fi
+
+      - name: Smoke (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a ./target/release/techbench --smoke
+
+      - name: Smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'smoke.txt'
+          $env:TECHBENCH_SMOKE_OUT = $out
+          $p = Start-Process -FilePath '.\target\release\techbench.exe' -ArgumentList '--smoke' -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out }
+          if ($p.ExitCode -ne 0) {
+            Write-Host "ERROR: smoke exited $($p.ExitCode)"
+            exit 1
+          }
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: techbench-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+            target/universal-apple-darwin/release/bundle/dmg/*.dmg

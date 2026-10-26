@@ -1,0 +1,19 @@
+[package]
+name = "techbench"
+version = "0.1.0"
+description = "Tech Bench cross-platform shell (Tauri 2). The WinForms app is still the shipping build."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "techbench_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tb-core = { path = "../crates/tb-core" }
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
