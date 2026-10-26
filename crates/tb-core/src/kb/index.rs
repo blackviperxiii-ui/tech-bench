@@ -48,6 +48,9 @@ pub struct KbIndex {
 
 type LoadResult = Result<usize, String>;
 
+/// One KB file's parsed JSON: `Ok(None)` when the file is not there.
+type Source = Result<Option<Value>, String>;
+
 fn read_root(path: &Path) -> Result<Option<Value>, String> {
     if !path.is_file() {
         return Ok(None);
@@ -168,18 +171,20 @@ impl KbIndex {
         let mut sa = HashMap::new();
 
         let none = HashSet::new();
-        let r = self.load_codes(&data.join("kb.json"), "", &none, &none, None);
+        let r = self.load_codes(read_root(&data.join("kb.json")), "", &none, &none, None);
         let mut n_code = self.track("kb.json", r);
-        let r = self.load_passwords(&data.join("passwords").join("ifix-passwords.json"));
+        let r = self.load_passwords(read_root(
+            &data.join("passwords").join("ifix-passwords.json"),
+        ));
         let n_pwd = self.track("ifix-passwords.json", r);
-        let r = self.load_manuals(&data.join("usb-manuals.json"));
+        let r = self.load_manuals(read_root(&data.join("usb-manuals.json")));
         let n_man = self.track("usb-manuals.json", r);
-        let r = self.load_filters(&data.join("rental-portable-filters-oil.json"));
+        let r = self.load_filters(read_root(&data.join("rental-portable-filters-oil.json")));
         let n_fil = self.track("rental-portable-filters-oil.json", r);
-        let r = self.load_equipment(&data.join("rental-equipment-info.json"));
+        let r = self.load_equipment(read_root(&data.join("rental-equipment-info.json")));
         let n_eq = self.track("rental-equipment-info.json", r);
         let r = merge_names(
-            &data.join("j1939-names.json"),
+            read_root(&data.join("j1939-names.json")),
             &mut spn,
             &mut pgn,
             &mut sa,
@@ -197,7 +202,7 @@ impl KbIndex {
         let keep_both = shop::keep_both_keys(kb);
         let mut seen_user = HashSet::new();
         let r = self.load_codes(
-            &shop_root.join("_resolved").join("user-codes.json"),
+            read_root(&shop_root.join("_resolved").join("user-codes.json")),
             "resolved",
             &none,
             &none,
@@ -207,7 +212,7 @@ impl KbIndex {
         for tech in shop::tech_ids(kb) {
             let shard = shop::shard_dir(kb, &tech);
             let r = self.load_codes(
-                &shard.join("user-codes.json"),
+                read_root(&shard.join("user-codes.json")),
                 &tech,
                 &skip,
                 &keep_both,
@@ -215,7 +220,7 @@ impl KbIndex {
             );
             n_code += self.track(&format!("{tech}\\user-codes.json"), r);
             let r = merge_names(
-                &shard.join("j1939-names.json"),
+                read_root(&shard.join("j1939-names.json")),
                 &mut spn,
                 &mut pgn,
                 &mut sa,
@@ -228,7 +233,7 @@ impl KbIndex {
             n_files += self.track(&format!("{tech}\\files"), r);
         }
         let r = self.load_codes(
-            &data.join("user-codes.json"),
+            read_root(&data.join("user-codes.json")),
             "",
             &none,
             &none,
@@ -236,7 +241,7 @@ impl KbIndex {
         );
         n_code += self.track("user-codes.json", r);
         let r = merge_names(
-            &shop_root.join("_resolved").join("j1939-names.json"),
+            read_root(&shop_root.join("_resolved").join("j1939-names.json")),
             &mut spn,
             &mut pgn,
             &mut sa,
@@ -245,6 +250,53 @@ impl KbIndex {
         n_names += self.track("_resolved\\j1939-names.json", r);
         self.names.load(Some(spn), Some(pgn), Some(sa));
 
+        self.set_status(n_code, n_pwd, n_man, n_fil, n_eq, n_names, n_notes, n_files);
+    }
+
+    /// The web build's KB: the shipped JSON passed in as text, with no folder behind it. Each
+    /// entry is a file name under `data/` and its contents. Shop shards, notes and files need a
+    /// disk, and the password DB is never handed to a public build, so only `kb.json`,
+    /// `usb-manuals.json`, the filter and equipment charts and `j1939-names.json` are read.
+    pub fn load_bundled(&mut self, label: &str, files: &[(&str, &str)]) {
+        self.all.clear();
+        self.errors.clear();
+        self.root = label.to_string();
+        self.names.reset();
+        let src = |name: &str| -> Source {
+            match files.iter().find(|(n, _)| *n == name) {
+                Some((_, text)) => json::parse(text).map(Some).map_err(|e| e.to_string()),
+                None => Ok(None),
+            }
+        };
+        let none = HashSet::new();
+        let r = self.load_codes(src("kb.json"), "", &none, &none, None);
+        let n_code = self.track("kb.json", r);
+        let r = self.load_manuals(src("usb-manuals.json"));
+        let n_man = self.track("usb-manuals.json", r);
+        let r = self.load_filters(src("rental-portable-filters-oil.json"));
+        let n_fil = self.track("rental-portable-filters-oil.json", r);
+        let r = self.load_equipment(src("rental-equipment-info.json"));
+        let n_eq = self.track("rental-equipment-info.json", r);
+        let (mut spn, mut pgn, mut sa) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let r = merge_names(src("j1939-names.json"), &mut spn, &mut pgn, &mut sa, false);
+        let n_names = self.track("j1939-names.json", r);
+        self.names.load(Some(spn), Some(pgn), Some(sa));
+        self.set_status(n_code, 0, n_man, n_fil, n_eq, n_names, 0, 0);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn set_status(
+        &mut self,
+        n_code: usize,
+        n_pwd: usize,
+        n_man: usize,
+        n_fil: usize,
+        n_eq: usize,
+        n_names: usize,
+        n_notes: usize,
+        n_files: usize,
+    ) {
+        let root = self.root.clone();
         self.status = format!(
             "Codes {n_code}  ·  Passwords {n_pwd}  ·  Manuals {n_man}  ·  Filters {n_fil}  ·  Equipment {n_eq}"
         );
@@ -282,8 +334,8 @@ impl KbIndex {
         self.all.push(h);
     }
 
-    fn load_passwords(&mut self, path: &Path) -> LoadResult {
-        let Some(root) = read_root(path)? else {
+    fn load_passwords(&mut self, src: Source) -> LoadResult {
+        let Some(root) = src? else {
             return Ok(0);
         };
         let mut n = 0;
@@ -312,8 +364,8 @@ impl KbIndex {
         Ok(n)
     }
 
-    fn load_manuals(&mut self, path: &Path) -> LoadResult {
-        let Some(root) = read_root(path)? else {
+    fn load_manuals(&mut self, src: Source) -> LoadResult {
+        let Some(root) = src? else {
             return Ok(0);
         };
         let mut n = 0;
@@ -356,8 +408,8 @@ impl KbIndex {
         Ok(n)
     }
 
-    fn load_filters(&mut self, path: &Path) -> LoadResult {
-        let Some(root) = read_root(path)? else {
+    fn load_filters(&mut self, src: Source) -> LoadResult {
+        let Some(root) = src? else {
             return Ok(0);
         };
         let mut n = 0;
@@ -393,8 +445,8 @@ impl KbIndex {
         Ok(n)
     }
 
-    fn load_equipment(&mut self, path: &Path) -> LoadResult {
-        let Some(root) = read_root(path)? else {
+    fn load_equipment(&mut self, src: Source) -> LoadResult {
+        let Some(root) = src? else {
             return Ok(0);
         };
         let mut n = 0;
@@ -433,13 +485,13 @@ impl KbIndex {
     /// `keep_both`.
     fn load_codes(
         &mut self,
-        path: &Path,
+        src: Source,
         author: &str,
         skip: &HashSet<String>,
         keep_both: &HashSet<String>,
         mut seen: Option<&mut HashSet<String>>,
     ) -> LoadResult {
-        let Some(root) = read_root(path)? else {
+        let Some(root) = src? else {
             return Ok(0);
         };
         let mut n = 0;
@@ -707,13 +759,13 @@ impl KbIndex {
 }
 
 fn merge_names(
-    path: &Path,
+    src: Source,
     spn: &mut HashMap<i32, String>,
     pgn: &mut HashMap<i32, String>,
     sa: &mut HashMap<i32, String>,
     overwrite: bool,
 ) -> LoadResult {
-    let Some(root) = read_root(path)? else {
+    let Some(root) = src? else {
         return Ok(0);
     };
     Ok(merge_name_map(name_map(root.get("spn")), spn, overwrite)
