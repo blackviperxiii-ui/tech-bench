@@ -3,15 +3,15 @@
 The detail behind the always-on list in `CLAUDE.md` and `.cursor/rules/tech-bench.mdc`. Those files stay one line per topic; this file is not loaded every turn, so read it when you start a task. If a rule here and an always-on line disagree, stop and ask.
 
 ## 1. Repo state
-- The repo is **public by user's choice**. Don't add exposure: no mirrors, forks, gists, public feeds or pasted internals elsewhere. Never add secrets.
-- Visibility changes and history rewrites are user's call only.
+- The repo is **public by the maintainer's choice**. Don't add exposure: no mirrors, forks, gists, public feeds or pasted internals elsewhere. Never add secrets.
+- Visibility changes and history rewrites are the maintainer's call only.
 - The password DB (`kb/data/passwords/ifix-passwords.json`) is an open owner decision. Don't edit, move, untrack or rewrite history for it. `build.bat` and `test.bat` still embed it.
 
 ## 2. Branch protection on `main`
 - Repository ruleset **"Protect main"** targets `refs/heads/main`: changes only through a PR (0 required approvals, no code-owner, last-push or thread-resolution requirement), required status check `installer` (GitHub Actions) with the branch **up to date** before merge, and no force-push or deletion. The bypass list is empty, admins included.
-- A direct push to `main` fails with `GH013: Repository rule violations`. That is expected; never push to `main`. Promote via PR only when user says so.
-- Check the live rules with `gh api repos/blackviperxiii-ui/tech-bench/rules/branches/main`. Changing the ruleset is user's call.
-- Merge methods are not restricted by the ruleset. user's rule is squash and merge. Into `beta`, agents squash-merge on green; into `main` only on his word.
+- A direct push to `main` fails with `GH013: Repository rule violations`. That is expected; never push to `main`. Promote via PR only when the maintainer approves.
+- Check the live rules with `gh api repos/blackviperxiii-ui/tech-bench/rules/branches/main`. Changing the ruleset is the maintainer's call.
+- Merge methods are not restricted by the ruleset. The rule is squash and merge. Into `beta`, agents squash-merge on green; into `main` only on the maintainer's word.
 
 ## 3. Fresh base
 ```
@@ -25,8 +25,8 @@ git switch -c cursor/<topic> origin/beta
 
 ## 4. Merging and releases
 - Open every PR into `beta`. Squash-merge it yourself (`gh pr merge <n> --squash`) as soon as CI (`installer`) is green on its head, with no review hold. Re-check that the branch is current with `beta` first.
-- Only promoting `beta` → `main`, tagging, and releasing need user's explicit word for that version.
-- When he says promote/release: after the promote merge, wait for `main` CI (`installer`) to go green, download that run's artifact (`TechBench-Setup-<ver>.exe`, `TechBench.exe`, `latest.json`), and attach it with `gh release create v<ver> ... --target main`. The API creates the tag. Installs are manual through shop Setup (`docs/shop-rollout.md`).
+- Only promoting `beta` → `main`, tagging, and releasing need the maintainer's explicit word for that version.
+- When the maintainer approves a promote/release: after the promote merge, wait for `main` CI (`installer`) to go green, download that run's artifact (`TechBench-Setup-<ver>.exe`, `TechBench.exe`, `latest.json`), and attach it with `gh release create v<ver> ... --target main`. The API creates the tag. Installs are manual through shop Setup (`docs/shop-rollout.md`).
 - There's no public feed and no dist repo. Don't create or upload to `tech-bench-dist`. Never use or ask for `DIST_REPO_TOKEN` or any PAT.
 - No field tests. Never run or schedule field tests on real engines or the shop floor; prove with CI / `test.bat` and document skips.
 
@@ -39,9 +39,9 @@ git switch -c cursor/<topic> origin/beta
   2. `app.manifest`: `<assemblyIdentity version="X.Y.Z.0" ...>`.
   3. `tests/SelfTest.Feed.cs`: `Eq("stamped version", AppVersion.Number, "X.Y.Z")`.
   4. `README.md`: the `Current stamp: **X.Y.Z**` line.
-  On user's box, `/workspace/tech-bench-tools/lockstep-version-bump.sh <repo> X.Y.Z` applies and verifies all 4; `--check` only reports them.
+  A lockstep version-bump script (if you keep one) should apply and verify all 4.
 - New `.cs` files go in `sources/core.list` or `sources/app.list` (membership: root name or `src\...` path). `tools/gen-rsp.bat` (and `tools/gen-rsp.sh` on Linux) write `sources/*.rsp`; `tests/*.cs` are picked up by glob into `selftest.rsp`. SelfTest fails on drift. Do not hand-edit generated `.rsp` files. Stage 6 moves feature code into `src/` one folder per PR; safety files last and separately.
-- No `.github/` changes (workflow, settings) without user's OK.
+- No `.github/` changes (workflow, settings) without the maintainer's OK.
 
 ## 6. Tests and CI
 - CI (`.github/workflows/windows-installer.yml`, job `installer`, windows-latest, on every push): `test.bat`, then `release.bat`, then `tools\assert-pe-i386.ps1` on `TechBench.exe` and `-Native` on the Setup exe, then `tools\install-smoke.ps1 -Setup dist\TechBench-Setup-<ver>.exe`.
@@ -83,7 +83,7 @@ git switch -c cursor/<topic> origin/beta
 ## 13. Safety rails (don't weaken)
 - J1939/INLINE 7: the code clear sends DM11/DM3 requests only, then reads DM1/DM2/FE56 back. No DEF/SCR reset or disable, no lamp override, no calibration or parameter writes, no proprietary or UDS routines, until user decides otherwise.
 - Keep the existing guards: code clears sit behind their confirm dialogs, and the TSC1 speed holds sit behind the Safety toggle. The existing TSC1, DM13 and Ping ECM controls stay as they are; don't widen them.
-- Any new ECU action needs user's OK and a confirm dialog. Irreversible engine commands need a human check on a real engine; CI can't prove them.
+- Any new ECU action needs the maintainer's OK and a confirm dialog. Irreversible engine commands need a human check on a real engine; CI can't prove them.
 - Updater (v1.2.9, `docs/specs/v1.2.9.md`): 64 KiB manifest cap and 32 MiB payload cap enforced while streaming; manual redirects, at most 5, same host only, never https to http; payload on the manifest's host and port; SHA-256 checked before staging; `.part` cleanup; no credentials or token ever sent; nothing applied while an INLINE 7 session is live. `Updater.DefaultManifestUrl` is unchanged.
 - No installs, new dependencies or NuGet packages without asking. No spending, and no code signing.
 
@@ -96,7 +96,7 @@ git switch -c cursor/<topic> origin/beta
 
 ## 15. Tooling choice (Grok Build, Cursor, Claude)
 - Pick **Grok Build CLI**, **Cursor** (cloud agent / IDE / Project), or **Claude** per job, whichever fits scope, machine access, and token budget. Document the choice in the brief.
-- Claude picks up Ready Command Centre cards the user orchestrates; Cursor Projects may also run them. Don't treat Cursor Projects as the only builder.
+- Any coding agent (Claude, Cursor, or others) may pick up work; none is the only builder.
 - Windows CI `installer` is the merge gate. Bugbot is off account-wide. Local Linux/Mono is only a hint.
 
 ## 16. Semgrep, dyl-review, Continual Learning
