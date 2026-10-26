@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { woAddPhotos, woClock, woOpenMedia, woSave, woShare, type WorkOrder, type WoList } from "./api";
+import { WEB } from "./platform";
 
-export const IDLE_STATUS =
-  "Work orders are saved on this PC and in the shop folder. Share with shop copies one for other techs.";
+export const IDLE_STATUS = WEB
+  ? "Work orders are saved in this browser only. The desktop build shares them with the shop."
+  : "Work orders are saved on this PC and in the shop folder. Share with shop copies one for other techs.";
 
 export function blankWorkOrder(techId: string): WorkOrder {
   const d = new Date();
@@ -193,19 +195,26 @@ export function WorkOrders({ data, current, onSelect, onEdit, reload, onClearJob
           <button disabled={busy} onClick={save}>
             Save
           </button>
-          <button disabled={busy} onClick={share}>
-            Share with shop
-          </button>
+          {!WEB && (
+            <button disabled={busy} onClick={share}>
+              Share with shop
+            </button>
+          )}
           <button disabled={busy} onClick={() => clock("logon")}>
             Log on
           </button>
           <button disabled={busy} onClick={() => clock("logoff")}>
             Log off
           </button>
-          <button disabled={busy} onClick={addPhoto}>
-            Add photo
-          </button>
-          <button onClick={onShopSettings}>Shop settings</button>
+          {/* The web build keeps no files: pictures and shop settings need the desktop build. */}
+          {!WEB && (
+            <>
+              <button disabled={busy} onClick={addPhoto}>
+                Add photo
+              </button>
+              <button onClick={onShopSettings}>Shop settings</button>
+            </>
+          )}
         </div>
         {current ? (
           <div className="wo-form">
@@ -223,30 +232,32 @@ export function WorkOrders({ data, current, onSelect, onEdit, reload, onClearJob
               Report
               <pre className="detail mini">{current.reportText}</pre>
             </label>
-            <div className="field">
-              <span>Pictures (double-click to open)</span>
-              <ul
-                className="hits mini"
-                role="listbox"
-                aria-label="Pictures"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && media && openMedia(media)}
-              >
-                {current.media.map((m) => (
-                  <li
-                    key={m}
-                    role="option"
-                    aria-selected={m === media}
-                    className={m === media ? "hit sel" : "hit"}
-                    onClick={() => setMedia(m)}
-                    onDoubleClick={() => openMedia(m)}
-                  >
-                    <span className="title">{m}</span>
-                  </li>
-                ))}
-                {current.media.length === 0 && <li className="empty">No pictures yet. Press Add photo.</li>}
-              </ul>
-            </div>
+            {!WEB && (
+              <div className="field">
+                <span>Pictures (double-click to open)</span>
+                <ul
+                  className="hits mini"
+                  role="listbox"
+                  aria-label="Pictures"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && media && openMedia(media)}
+                >
+                  {current.media.map((m) => (
+                    <li
+                      key={m}
+                      role="option"
+                      aria-selected={m === media}
+                      className={m === media ? "hit sel" : "hit"}
+                      onClick={() => setMedia(m)}
+                      onDoubleClick={() => openMedia(m)}
+                    >
+                      <span className="title">{m}</span>
+                    </li>
+                  ))}
+                  {current.media.length === 0 && <li className="empty">No pictures yet. Press Add photo.</li>}
+                </ul>
+              </div>
+            )}
             <label>
               Clock
               <pre className="detail mini">

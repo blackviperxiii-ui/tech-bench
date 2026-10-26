@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/tb-core", "crates/tb-rp1210-bridge", "crates/rp1210-mock", "src-tauri"]
+members = ["crates/tb-core", "crates/tb-rp1210-bridge", "crates/rp1210-mock", "crates/tb-wasm", "src-tauri"]
 
 [workspace.package]
 edition = "2021"

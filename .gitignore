@@ -65,3 +65,8 @@ src-tauri/gen/
 
 # 32-bit RP1210 bridge staged for the Windows bundle (tauri.windows.conf.json externalBin)
 src-tauri/binaries/
+
+# Web build (npm run build:web) and its Playwright runs
+app/dist-web/
+test-results/
+playwright-report/

@@ -3728,6 +3728,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tb-wasm"
+version = "0.1.0"
+dependencies = [
+ "tb-core",
+]
+
+[[package]]
 name = "techbench"
 version = "0.1.0"
 dependencies = [
