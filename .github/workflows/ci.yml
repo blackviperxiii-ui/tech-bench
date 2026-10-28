@@ -1,0 +1,115 @@
+# Short PR gate. PRs run: format (cargo fmt), linux (clippy + tests for the
+# Rust crates and the UI typecheck, one build) and windows (the C# offline
+# self-test, test.bat). The heavy builds (installer, desktop, mobile, web,
+# updater, bridge i686, tb-core matrix) run on push to beta/main, nightly and
+# on manual runs in their own workflows.
+# Path gating is a job-level `if:` on the `changes` outputs, never a
+# workflow-level filter, so a skipped required check still reports.
+name: CI
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+    branches: [main, beta]
+  workflow_dispatch:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
+      legacy: ${{ github.event_name != 'pull_request' || steps.filter.outputs.legacy == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'src-tauri/**'
+              - 'app/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'vite.config.ts'
+              - 'kb/**'
+              - '.github/workflows/ci.yml'
+            legacy:
+              - 'src/**'
+              - 'kb/**'
+              - 'sources/**'
+              - 'tools/**'
+              - 'installer/**'
+              - '*.cs'
+              - '*.bat'
+              - 'app.manifest'
+              - '.github/workflows/ci.yml'
+
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add rustfmt
+      - run: cargo fmt --all -- --check
+
+  linux:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+      - name: Clippy (core crates)
+        run: cargo clippy -p tb-core -p tb-rp1210-bridge -p rp1210-mock -p tb-wasm --all-targets --locked -- -D warnings
+      - name: Test (core crates)
+        run: cargo test -p tb-core -p tb-rp1210-bridge -p rp1210-mock -p tb-wasm --locked
+      - run: npm ci
+      - name: Typecheck UI
+        run: npm run typecheck
+
+  windows:
+    needs: changes
+    if: needs.changes.outputs.legacy == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test
+        shell: cmd
+        run: test.bat

@@ -5,9 +5,14 @@
 # Unsigned builds only; no secrets. The C# `installer` job is separate and unchanged.
 name: rp1210-bridge
 
+# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
+# CDT) and on manual runs. PRs use the short gate in ci.yml.
 on:
   workflow_dispatch:
   push:
+    branches: [main, beta]
+  schedule:
+    - cron: "30 8 * * *"
 
 permissions:
   contents: read
