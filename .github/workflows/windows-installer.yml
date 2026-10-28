@@ -6,9 +6,14 @@
 # Releases are attached to the private GitHub release by hand and installed via shop Setup.
 name: Windows installer
 
+# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
+# CDT) and on manual runs. PRs use the short gate in ci.yml.
 on:
   workflow_dispatch:
   push:
+    branches: [main, beta]
+  schedule:
+    - cron: "5 8 * * *"
 
 jobs:
   installer:

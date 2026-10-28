@@ -7,9 +7,14 @@
 # Windows-only, so live bus is reported as skipped. Debug/unsigned builds only; no secrets.
 name: mobile
 
+# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
+# CDT) and on manual runs. PRs use the short gate in ci.yml.
 on:
   workflow_dispatch:
   push:
+    branches: [main, beta]
+  schedule:
+    - cron: "15 8 * * *"
 
 permissions:
   contents: read
