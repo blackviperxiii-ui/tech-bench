@@ -23,7 +23,7 @@ Board: "Grok Bot Command Centre" database, data source "Command Center"
 ## Working a card
 - Start: set Status = Doing and Picked up = now. Add a line to Result saying you started.
 - PR opened: put the PR link and a one-line summary in Result.
-- Merged to beta (merges are done by the Repo bot): set Status = Done,
+- Merged to beta (you merge it, see Repo rules): set Status = Done,
   Done at = merge time, and update Result with the PR link and summary.
 - Never set Done before the PR has merged to beta.
 - Blocked: set Status back to Ready and put a clear note in Result saying
@@ -40,5 +40,7 @@ Board: "Grok Bot Command Centre" database, data source "Command Center"
 - No force-pushes.
 - Run fmt, lint and tests locally before pushing, then push once.
 - At most 2 open PRs per coder.
-- The Repo bot does all merges. Never merge your own PR.
+- Merges: once your PR into beta is green and not held, squash-merge it into
+  beta yourself, with no review hold. Rebase on the beta tip first and,
+  if beta moved past the PR's version, renumber it and let CI rerun. Never merge into main.
 - No personal info in the repo: write 'user' for names and /home/user for paths.
