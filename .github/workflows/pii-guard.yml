@@ -1,6 +1,7 @@
 name: pii-guard
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main, beta]
 permissions:

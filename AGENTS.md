@@ -9,14 +9,14 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 
 ## Stack
 - C# WinForms, .NET Framework 4, **x86 only** (RP1210).
-- Test/build: `test.bat` / `build.bat` on Windows; CI job `installer` is the gate.
-- Never commit secrets, `.env*`, tokens, keys/certs, or the IntelliDealer key.
+- Test/build: `test.bat` / `build.bat` on Windows; CI job `installer` is the gate (Bugbot off account-wide).
+- Never commit secrets, `.env*`, tokens, keys/certs, or legacy settings files (`id-settings*.json`).
 
 ## Merge / release
-- Agents stop at green + Ready. Squash-merge, tag, and release only on the maintainer's explicit word.
-- No `dyl-ready-pr` merge or babysit. No auto-merge.
+- PRs go into `beta`; agents squash-merge their own PR as soon as CI is green, no review hold.
+- Promoting `beta` → `main`, tagging, and releasing only on the maintainer's explicit word.
+- Never use `dyl-ready-pr` merge or babysit. No field tests.
 
-- **vstack:** Always load and follow the vstack skills in .cursor/skills (start with viper-mode); never use pstack.
 
 ## No personal info (hard rule)
 

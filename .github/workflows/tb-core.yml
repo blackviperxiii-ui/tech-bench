@@ -1,0 +1,72 @@
+# Rust tb-core (crates/tb-core): the cross-platform recode's portable core.
+# cargo fmt/clippy/test on Linux, Windows and macOS, plus the same test files
+# on wasm32 under Node via wasm-pack. The Tauri shell (src-tauri) builds in desktop.yml;
+# the C# `installer` job is separate and unchanged.
+name: tb-core
+
+# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
+# CDT) and on manual runs. PRs use the short gate in ci.yml.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, beta]
+  schedule:
+    - cron: "35 8 * * *"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cargo:
+    name: cargo (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add rustfmt clippy
+          rustc --version
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy -p tb-core --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test -p tb-core --locked
+
+  wasm:
+    name: wasm-pack test --node
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+          node --version
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+
+      - name: Build wasm32
+        run: cargo build -p tb-core --target wasm32-unknown-unknown --locked
+
+      - name: wasm-pack test
+        run: wasm-pack test --node crates/tb-core

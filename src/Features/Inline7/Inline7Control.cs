@@ -87,12 +87,6 @@ namespace J1939Reader
             return JobReport.Text(BuildReportData());
         }
 
-        /// <summary>True when startup restored prefs because the saved adapter id is still installed.</summary>
-        public bool AdapterPrefsMatched
-        {
-            get { return _adapterPrefsMatched; }
-        }
-
         public string CurrentAdapterId()
         {
             Rp1210Api api = SelectedAdapter();
@@ -485,7 +479,18 @@ namespace J1939Reader
             toggles.Controls.Add(_btnPing);
             _chkSafe = MkToggle(toggles,
                 "Safety: engine already running, compressor unloaded, area clear",
-                "Must be ON before a speed-request toggle will send TSC1. The engine will not start from these switches. TSC1 cannot override Red Stop or DEF inducement.");
+                "Must be ON before a speed-request toggle will send TSC1. Turning this OFF releases any active TSC1 hold. The engine will not start from these switches. TSC1 cannot override Red Stop or DEF inducement.");
+            _bus.AllowTscHold = false;
+            _chkSafe.CheckedChanged += delegate
+            {
+                _bus.AllowTscHold = _chkSafe.Checked;
+                if (!_chkSafe.Checked)
+                {
+                    if (_chkTsc800 != null) _chkTsc800.Checked = false;
+                    if (_chkTsc1200 != null) _chkTsc1200.Checked = false;
+                    SetTsc(0);
+                }
+            };
             _chkAuto = MkToggle(toggles,
                 "Auto-refresh codes (every 2 s)",
                 "ON: keep asking the ECM for DM1/DM2 and DEF tank so the lists stay live.\nOFF: lists only update when you click Refresh or Reset.\nThis does not change any ECM function.");
@@ -872,6 +877,9 @@ namespace J1939Reader
         {
             _tscRpm = 0;
             _bus.SetTsc1(0);
+            // Quiet bus (DM13 Stop) is session-scoped; leave modules broadcasting after disconnect.
+            if (_chkQuietBus != null && _chkQuietBus.Checked)
+                _chkQuietBus.Checked = false;
             _bus.RequestDisconnect();
             if (_chkTsc800 != null) _chkTsc800.Checked = false;
             if (_chkTsc1200 != null) _chkTsc1200.Checked = false;

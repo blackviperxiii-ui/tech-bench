@@ -1,0 +1,132 @@
+# Android and iOS builds of the recode (Phase 5). The native projects are generated here
+# (`tauri android init` / `tauri ios init`; src-tauri/gen/ is not committed), then a smoke build
+# (TECHBENCH_SMOKE=1 baked in, since phones have no command line) runs the same UI smoke as
+# desktop: KB search, cheat sheet, explainer, open guard, shop settings, a work order saved and
+# listed, unit history and an attached report. Android runs it on an API 34 x86_64 emulator and
+# reads logcat; iOS builds unsigned for the simulator and reads the app console. The adapter is
+# Windows-only, so live bus is reported as skipped. Debug/unsigned builds only; no secrets.
+name: mobile
+
+# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
+# CDT) and on manual runs. PRs use the short gate in ci.yml.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, beta]
+  schedule:
+    - cron: "15 8 * * *"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  android:
+    name: android (API 34 emulator smoke)
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The default list still names the retired "tools" package, which fails.
+          packages: platform-tools
+
+      - name: NDK
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-34" "build-tools;34.0.0"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: npm ci
+        run: npm ci
+
+      - name: tauri android init
+        run: npx tauri android init --ci
+
+      - name: Build smoke APK (x86_64, debug)
+        env:
+          TECHBENCH_SMOKE: "1"
+        run: npx tauri android build --debug --apk --target x86_64 --ci
+
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Emulator smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash scripts/mobile/android-smoke.sh
+
+      - name: APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: techbench-android-debug-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ios:
+    name: ios (simulator build and smoke)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios-sim aarch64-apple-ios
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: npm ci
+        run: npm ci
+
+      - name: tauri ios init
+        run: npx tauri ios init --ci
+
+      - name: Web assets
+        run: npm run build
+
+      - name: Simulator build and smoke
+        env:
+          TECHBENCH_SMOKE: "1"
+        run: bash scripts/mobile/ios-smoke.sh

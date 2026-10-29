@@ -56,7 +56,7 @@ Outside the install folder:
 
 - `%LOCALAPPDATA%\TechBench\settings.json` — last model/serial/customer/work order and window size
 - `%LOCALAPPDATA%\TechBench\adapter-prefs.json` — last RP1210 adapter id and shell/INLINE page
-- `%LOCALAPPDATA%\TechBench\id-settings.json` — IntelliDealer settings (secrets stay on this PC)
+- `%LOCALAPPDATA%\TechBench\shop-settings.json` — tech name, shop share folder, assigned WO file
 - `%LOCALAPPDATA%\TechBench\sync.json` and `sync-state-*.json` — tech name and sync folder
 - `%LOCALAPPDATA%\TechBench\work-orders\` — local work-order packets
 - Session files, screenshots, and `techbench-errors.log` — `Desktop\TechBench-sessions` if that folder can be created, otherwise Documents, otherwise `%LOCALAPPDATA%\TechBench-sessions`

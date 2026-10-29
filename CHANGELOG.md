@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- v1.2.40: fixes from the PR #69 review, carrying draft PR #85 (v1.2.38) forward onto the v1.2.39 beta tip and closing the two findings it left open: a page switch with no RP1210 adapter installed no longer wipes the saved adapter id (`AdapterPrefs.Merge` ignores an empty id), and a saved work order that no longer exists falls back to the first row instead of leaving the list unselected for the session (`WorkOrderControl.Reload`). From #85: KB documents and photos open again (`SafeOpen` read the `AssocQueryString` S_FALSE size answer as "no app"). The INLINE 7 SPN lookup shows notes and files that name the SPN only in their body, and shares Search's match and ranking. The crash dialog runs on an STA thread and the app exits when it closes. The saved shell page restores without an RP1210 adapter. The job strip no longer rewrites settings.json on every keystroke when the customer is unchanged. Lockstep version bump.
+
+- v1.2.37: sync the vendored pstack skills in `.cursor/skills/` to pstack 0.15.25 (cursor/plugins `f713f14`), from 0.15.23. Adds the new `sharpen` skill and picks up upstream skill text edits. No production, safety or UI change. Lockstep version bump.
+
+- v1.2.36: Rearch stage 14: the update menu and dialog text around an update check moves out of `ShellForm` into pure `UpdatePrompt` (`src/Core/Version/`). `Updater` and the install order are untouched. New SelfTest case `update prompt text`. No behaviour change. Lockstep version bump.
+
+- v1.2.35: Rearch stage 13: the main-window keyboard shortcuts move into pure `ShellShortcuts` (`src/Core/Shell/`), and the job hand-offs (Search this job query, launch customer, session DTC csv path) join `JobStrip`. New SelfTest case `shell shortcuts and job hand-offs`. No behaviour change. Lockstep version bump.
+
+- v1.2.34: Rearch stage 12: the job strip text (window title, job tag, sync chip, work-order pick list) moves out of `ShellForm` into pure `JobStrip` (`src/Features/WorkOrders/`). New SelfTest case `job strip text`. No behaviour change. Lockstep version bump.
+
+- v1.2.33: Rearch stage 11: main-window restore and save move out of `ShellForm` into pure `WindowPlacement` (`src/Core/Settings/`). New SelfTest case `window placement`. No behaviour change. Lockstep version bump.
+
+- v1.2.32: Rearch stage 10: what Add code / Add note pre-fill and search for moves out of `ShellForm` into pure `ShopAdd` (`src/Features/Kb/`). New SelfTest case `shop add prefill`. No behaviour change. Lockstep version bump.
+
+- v1.2.31: Removed the IntelliDealer integration: gateway client, its settings form, Sign off, From ID and media post-back. Work orders are shop-only; Log on / Log off write the local shop clock and make no network calls. Tech name, share folder and assigned-WO file move to `shop-settings.json` (Shop → Shop settings), copied once from the old `id-settings.json`, which is left in place and no longer read. Old work-order packets still load. Gateway-only SelfTests removed with the code (owner OK); new cases `shop settings migration` and `legacy work-order packet loads`. Lockstep version bump.
+
+- v1.2.30: Rearch stage 9: shop folder watching moves out of `ShellForm` into `ShopWatcher` (`src/Features/Sync/`), with the folder list from pure `ShopWatch.Dirs`. New SelfTest case `shop watch folders`. No behaviour change. Lockstep version bump.
+
+- v1.2.29: Rearch stage 8: the Adapters page moves out of `ShellForm` into `AdaptersPage` (`src/Features/Adapters/`), with its text built by pure `AdapterSummary.Text`. New SelfTest case `adapters page summary`. No behaviour change. Lockstep version bump.
+
+- v1.2.28: Rearch stage 7: `ShellPages` registry (`src/Core/Shell/`) is the one list of shell pages; `ShellForm` switch bar, panels and `AdapterPrefs` clamp read it. New SelfTest case `shell page registry`. No behaviour change. Lockstep version bump.
+
+- v1.2.27: switch agent tooling back to pstack: vendored `.cursor/skills/` now pstack 0.15.23 (`837067b`), `.cursor/rules/vstack.mdc` -> `pstack.mdc`, AGENTS.md/CLAUDE.md/tech-bench.mdc say always pstack, never vstack. v1.2.26 is reserved for another card (PR #74), so this takes the next free patch. Lockstep version bump.
+
+- v1.2.25: SelfTest for job persistence: customer and last WO survive a restart (trimmed, null-safe), missing or corrupt settings.json falls back to defaults and recovers on the next save. No production change. Lockstep version bump.
+
+- v1.2.24: SelfTest.Feed pins the exact about wording (`an anonymous manifest (built-in URL`) and diffs linux-compile-check `-resource:` against build.bat `/resource:`. Lockstep version bump.
+
+- v1.2.23: SelfTests for TrendSample/TrendLog and DtcEvent/DtcTimeline (`tests/SelfTest.Trend.cs`). No production change. Lockstep version bump.
+
 - v1.2.22: IdGateway refuses 307/308 redirects after non-GET (POST payload no longer wiped to GET). SelfTest covers POST+307. Lockstep version bump.
 
 - v1.2.21: BusSnapshot.IncludesBusLists — Refresh gates Bus PGN/SA Repopulate on the snapshot flag (not a second 800 ms clock read). Lockstep version bump.

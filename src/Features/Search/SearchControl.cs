@@ -174,6 +174,16 @@ namespace TechBench
         void OpenSel()
         {
             if (_sel == null || string.IsNullOrEmpty(_sel.Path)) return;
+            if (_sel.Kind == "MANUAL" || _sel.Kind == "FILE" || _sel.Kind == "NOTE")
+            {
+                if (!KbIndex.IsPathUnderRoot(_kb.Root, _sel.Path))
+                {
+                    MessageBox.Show(this,
+                        "Tech Bench will only open files under the knowledge base folder.",
+                        "Open file", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
             string error;
             if (!SafeOpen.TryOpen(_sel.Path, out error))
                 MessageBox.Show(this, error, "Open file", MessageBoxButtons.OK, MessageBoxIcon.Warning);

@@ -296,6 +296,16 @@ ProtocolDescription=ISO 15765
         Eq("boundary-spanning FMI", bamMon.Engine.Active[1].Fmi, 9);
 
         Check("null frame ignored", !bamMon.Feed(null, t), "accepted");
+
+        // MarkCleared empties the list but must not blank lamps (HUD "healthy silent").
+        var lamps = new BusMonitor();
+        lamps.Feed(F(0xF004, 0, 0, 0, 0, 0x00, 0x19, 0, 0, 0), t);
+        lamps.Feed(F(0xFECA, 0, 0x10, 0xFF, 0x7E, 0x14, 0x00, 0x01, 0xFF, 0xFF), t);
+        Eq("pre-clear red stop", lamps.Engine.Red, true);
+        Eq("pre-clear active count", lamps.Engine.Active.Count, 1);
+        lamps.MarkCleared(0, true, false, t);
+        Eq("MarkCleared empties active list", lamps.Engine.Active.Count, 0);
+        Eq("MarkCleared keeps red lamp until fresh DM1", lamps.Engine.Red, true);
     }
 
     [SelfTestCase("disconnected snapshot", Order = 140)]
@@ -976,6 +986,21 @@ ProtocolDescription=ISO 15765
         Check("corrupt user-codes.json throws instead of looking empty", threw, "returned empty list");
         Check("corrupt file left in place so a failed load cannot wipe the shop file",
             File.ReadAllText(corrupt).Contains("not json"), "was rewritten");
+
+        File.WriteAllText(corrupt, "{\"title\":\"no codes key\"}");
+        bool shapeThrew = false;
+        try { UserCodes.Load(root); }
+        catch (InvalidDataException) { shapeThrew = true; }
+        catch { shapeThrew = true; }
+        Check("wrong-shaped user-codes.json throws instead of looking empty", shapeThrew, "returned empty list");
+        File.WriteAllText(corrupt, "{\"codes\":\"not-an-array\"}");
+        shapeThrew = false;
+        try { UserCodes.Load(root); }
+        catch { shapeThrew = true; }
+        Check("non-array codes value throws", shapeThrew, "returned empty list");
+        File.WriteAllText(corrupt, "{\"codes\":[]}");
+        Eq("empty codes array loads as empty list", UserCodes.Load(root).Count, 0);
+
         UserCodes.Save(root, upserted);
 
         // The KB loader has to be able to read what the editor writes.
@@ -1250,6 +1275,42 @@ ProtocolDescription=ISO 15765
         Check("missing root explains itself", empty.Status.Contains("nothing loaded"), empty.Status);
 
         try { Directory.Delete(root, true); } catch { }
+
+        SpnHitsTests();
+    }
+
+    static void SpnHitsTests()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "kbspn_" + Guid.NewGuid().ToString("N"));
+        string notes = Path.Combine(root, "data", "notes");
+        Directory.CreateDirectory(notes);
+        File.WriteAllText(Path.Combine(root, "data", "kb.json"), @"{""codes"":[
+          {""brand_id"":""CUMMINS"",""code"":""SPN 5246"",""title"":""SCR inducement"",
+           ""description"":"""",""likely_causes"":[],""checks"":[],""severity"":""high"",
+           ""controller_id"":""cm2350"",""tags"":[]}]}");
+        // Title and key never name the SPN; only the body does, so it scores 0.
+        File.WriteAllText(Path.Combine(notes, "def.txt"), "Aftertreatment checklist\nIf SPN 5246 is active, check DEF quality first.");
+        File.WriteAllText(Path.Combine(notes, "other.txt"), "Belt tension\nNothing about that fault.");
+        // A second note with the same first line is its own entry, not a duplicate.
+        File.WriteAllText(Path.Combine(notes, "def2.txt"), "Aftertreatment checklist\nSPN 5246 came back after the doser swap.");
+
+        var kb = new KbIndex();
+        kb.Load(root);
+        List<Hit> hits = kb.SpnHits(5246, 0, 3);
+        Eq("SPN lookup finds the code and both body-only notes", hits.Count, 3);
+        Check("SPN code ranks above the body-only notes",
+            hits.Count == 3 && hits[0].Kind == "CODE"
+            && hits[1].Title == "Aftertreatment checklist" && hits[2].Title == "Aftertreatment checklist"
+            && hits[1].Path != hits[2].Path,
+            "order: " + string.Join(" / ", Titles(hits)));
+        Eq("SPN lookup respects max", kb.SpnHits(5246, 0, 1).Count, 1);
+        Eq("SPN lookup with max 0 is empty", kb.SpnHits(5246, 0, 0).Count, 0);
+        string text = kb.SpnText(5246, 0);
+        Check("SPN text includes the note body",
+            text != null && text.IndexOf("check DEF quality first", StringComparison.Ordinal) >= 0, text ?? "(null)");
+        Eq("unrelated SPN finds nothing", kb.SpnHits(9999, 0, 3).Count, 0);
+
+        try { Directory.Delete(root, true); } catch { }
     }
 
     static string[] Titles(List<Hit> hits)
@@ -1509,7 +1570,7 @@ ProtocolDescription=ISO 15765
         ShopSync.SettingsFolderOverride = settings;
         try
         {
-            Eq("sanitize drops junk", ShopSync.SanitizeTechId("Alex S."), "Alex-S");
+            Eq("sanitize drops junk", ShopSync.SanitizeTechId("user S."), "user-S");
             Eq("sanitize empty", ShopSync.SanitizeTechId("@@@"), "tech");
 
             string kbA = MkRoot();
@@ -1728,7 +1789,6 @@ ProtocolDescription=ISO 15765
     [SelfTestCase("data safety", Order = 280)]
     static void DataSafetyTests()
     {
-        SubscriptionKeyMaskTests();
         LaunchBlockTests();
         ManifestVersionTests();
         PacketSidecarSyncTests();

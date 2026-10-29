@@ -57,24 +57,23 @@ static partial class SelfTest
         Check("code clear result carried onto the report", clearedText.Contains("  RESULT: cleared — no active codes came back."), clearedText);
     }
 
-    [SelfTestCase("work orders / IntelliDealer gateway", Order = 260)]
+    [SelfTestCase("work orders / shop share", Order = 260)]
     static void WorkOrderTests()
     {
-        string prevFolder = IdSettings.FolderOverride;
-        string prevExeDir = IdSettings.ExeDirOverride;
+        string prevFolder = ShopSettings.FolderOverride;
+        string prevExeDir = ShopSettings.ExeDirOverride;
         string prevWo = WorkOrderStore.FolderOverride;
         string prevExe = WorkOrderStore.ExeDirOverride;
-        var prevHttp = IdGateway.HttpOverride;
         string root = Path.Combine(Path.GetTempPath(), "tb-wo-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         string kb = Path.Combine(root, "kb");
         Directory.CreateDirectory(Path.Combine(kb, "data"));
         string share = Path.Combine(root, "share");
         Directory.CreateDirectory(share);
-        IdSettings.FolderOverride = Path.Combine(root, "cfg");
+        ShopSettings.FolderOverride = Path.Combine(root, "cfg");
         WorkOrderStore.FolderOverride = Path.Combine(root, "local-wo");
         WorkOrderStore.ExeDirOverride = Path.Combine(root, "exe");
-        IdSettings.ExeDirOverride = WorkOrderStore.ExeDirOverride;
+        ShopSettings.ExeDirOverride = WorkOrderStore.ExeDirOverride;
         Directory.CreateDirectory(WorkOrderStore.ExeDirOverride);
         try
         {
@@ -94,14 +93,14 @@ static partial class SelfTest
             Eq("key", wo.Key(), "44551-01");
             Check("job tag has WO", wo.JobTag().Contains("WO 44551-01"), wo.JobTag());
 
-            var s = new IdSettings { TechId = "alex", ShareFolder = share };
+            var s = new ShopSettings { TechId = "user", ShareFolder = share };
             WorkOrderStore.Save(wo, s, kb);
             string packet = Path.Combine(WorkOrderStore.LocalRoot(), "44551-01");
             Check("wo.json written", File.Exists(Path.Combine(packet, "wo.json")), packet);
             Check("notes.txt written", File.ReadAllText(Path.Combine(packet, "notes.txt")).Contains("4-pin"), "notes");
             Check("shop shard packet",
-                File.Exists(Path.Combine(WorkOrderStore.ShopTechDir(kb, "alex"), "44551-01", "wo.json")),
-                "missing data\\shop\\alex\\work-orders");
+                File.Exists(Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "44551-01", "wo.json")),
+                "missing data\\shop\\user\\work-orders");
 
             WorkOrder loaded = WorkOrderStore.Load(packet);
             Check("reload packet", loaded != null, packet);
@@ -140,7 +139,7 @@ static partial class SelfTest
             Check("bak still parses",
                 bakWo != null && bakWo.Number == "44551" && (bakWo.Notes ?? "").IndexOf("4-pin", StringComparison.Ordinal) >= 0,
                 bakWo == null ? "null" : (bakWo.Notes ?? ""));
-            string shopPacket = Path.Combine(WorkOrderStore.ShopTechDir(kb, "alex"), "44551-01");
+            string shopPacket = Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "44551-01");
             Check("shop copy ignores wo.json.bak", !File.Exists(Path.Combine(shopPacket, "wo.json.bak")), "json bak copied");
             Check("shop copy ignores notes.txt.bak", !File.Exists(Path.Combine(shopPacket, "notes.txt.bak")), "notes bak copied");
             Check("shop copy has no tmp sidecar", !HasPacketTemp(shopPacket), shopPacket);
@@ -258,72 +257,14 @@ static partial class SelfTest
             Check("list includes saved WO", sawLocal, "missing 44551");
             Check("list includes sidecar file", sawFile, "missing SIDECAR");
 
-            string sync = Path.Combine(IdSettings.Folder(), "sync.json");
+            string sync = Path.Combine(ShopSettings.Folder(), "sync.json");
             File.WriteAllText(sync, "{\"TechId\":\"alice\",\"SyncFolder\":\"Z:\\\\usb\"}");
-            Eq("reads other-agent sync folder", IdSettings.ReadSiblingShare(WorkOrderStore.ExeDirOverride), "Z:\\usb");
+            Eq("reads other-agent sync folder", ShopSettings.ReadSiblingShare(WorkOrderStore.ExeDirOverride), "Z:\\usb");
             string after = File.ReadAllText(sync);
             Check("does not smash sync.json", after.Contains("alice") && after.Contains("Z:"), after);
 
-            var blank = new IdSettings();
-            IdCallResult missing = IdGateway.FetchAssigned(blank);
-            Check("no creds is not a live fetch", !missing.Posted, missing.Message);
-            IdCallResult noSign = IdGateway.SignOff(blank, wo);
-            Check("sign-off refused without gateway", !noSign.Posted, noSign.Message);
-            Check("sign-off names payroll/DMS", noSign.Message.Contains("payroll") || noSign.Message.Contains("API Gateway"), noSign.Message);
+            Eq("list still has packets", all.Count >= 1, true);
 
-            var live = new IdSettings
-            {
-                GatewayUrl = "https://dealer.azure-api.net",
-                SubscriptionKey = "test-key",
-                TechNumber = "T12",
-                AssignedPath = "/service/technicians/{tech}/workorders",
-                SignOffPath = "/service/workorders/{wo}/signoff"
-            };
-            Eq("expand assigned", IdGateway.Expand(live.AssignedPath, live, null),
-                "/service/technicians/T12/workorders");
-            Eq("combine url", IdGateway.CombineUrl(live.GatewayUrl, "/x"),
-                "https://dealer.azure-api.net/x");
-
-            IdGateway.HttpOverride = delegate(IdHttpRequest req)
-            {
-                if (req.Url.Contains("workorders") && req.Method == "GET")
-                    return new IdHttpResponse { Status = 200, Body = "[{\"Number\":\"G1\",\"Customer\":\"Gateway\"}]" };
-                return new IdHttpResponse { Status = 404, Error = "not found" };
-            };
-            IdCallResult fetched = IdGateway.FetchAssigned(live);
-            Check("gateway fetch posts on 200", fetched.Posted, fetched.Message);
-            Eq("gateway fetch count", fetched.WorkOrders.Count, 1);
-            Eq("gateway source", fetched.WorkOrders[0].Source, "gateway");
-
-            IdCallResult denied = IdGateway.SignOff(live, wo);
-            Check("sign-off 404 is not success", !denied.Posted, denied.Message);
-            Check("did not fake sign-off", wo.ApiSignOff == false, "ApiSignOff was set");
-
-            IdGateway.HttpOverride = delegate(IdHttpRequest req)
-            {
-                Check("sign-off sends subscription key",
-                    req.Headers.ContainsKey("Ocp-Apim-Subscription-Key")
-                    && req.Headers["Ocp-Apim-Subscription-Key"] == "test-key",
-                    "missing header");
-                return new IdHttpResponse { Status = 200, Body = "{\"ok\":true}" };
-            };
-            IdCallResult signed = IdGateway.SignOff(live, wo);
-            Check("sign-off 200 is posted", signed.Posted, signed.Message);
-
-            IdGateway.HttpOverride = delegate(IdHttpRequest req)
-            {
-                return new IdHttpResponse { Status = 200, Body = "{\"ok\":true}" };
-            };
-            string media = Path.Combine(packet, "media", "shot.png");
-            IdCallResult mm = IdGateway.PostMultimedia(live, wo, media);
-            Check("multimedia 200 posts", mm.Posted, mm.Message);
-            IdCallResult mmBlank = IdGateway.PostMultimedia(blank, wo, media);
-            Check("multimedia without creds is local only", !mmBlank.Posted, mmBlank.Message);
-
-            Eq("list still has packets after gateway tests", all.Count >= 1, true);
-
-            CredProtectTests();
-            TokenCacheTests(live, wo);
             WorkOrderMergeTests(s, kb);
             WorkOrderBakRecoveryTests(s, kb);
             JobStripSettingsTests(s, kb, root);
@@ -331,17 +272,15 @@ static partial class SelfTest
         finally
         {
             WorkOrderStore.ForceCopyFallbackForTest = false;
-            IdSettings.FolderOverride = prevFolder;
-            IdSettings.ExeDirOverride = prevExeDir;
+            ShopSettings.FolderOverride = prevFolder;
+            ShopSettings.ExeDirOverride = prevExeDir;
             WorkOrderStore.FolderOverride = prevWo;
             WorkOrderStore.ExeDirOverride = prevExe;
-            IdGateway.HttpOverride = prevHttp;
-            IdGateway.ClearTokenCache();
             try { Directory.Delete(root, true); } catch { }
         }
     }
 
-    static void JobStripSettingsTests(IdSettings s, string kb, string root)
+    static void JobStripSettingsTests(ShopSettings s, string kb, string root)
     {
         string prevPath = AppSettings.PathOverride;
         string settingsPath = Path.Combine(root, "settings.json");
@@ -423,4 +362,136 @@ static partial class SelfTest
         return false;
     }
 
+    static void WorkOrderMergeTests(ShopSettings s, string kb)
+    {
+        var clash = new WorkOrder
+        {
+            Number = "9001",
+            Segment = "01",
+            Customer = "Clash Co",
+            Notes = "Local notes A"
+        };
+        WorkOrderStore.Save(clash, s, kb);
+        string localDir = Path.Combine(WorkOrderStore.LocalRoot(), "9001-01");
+        string shopDir = Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "9001-01");
+        WorkOrder shopWo = WorkOrderStore.Load(shopDir);
+        Check("shop shard exists for merge", shopWo != null, shopDir);
+        shopWo.Notes = "Remote notes B";
+        shopWo.UpdatedUtc = DateTime.UtcNow.AddHours(2).ToString("o");
+        File.WriteAllText(Path.Combine(shopDir, "notes.txt"), shopWo.Notes, Encoding.UTF8);
+        var ser = new JavaScriptSerializer();
+        File.WriteAllText(Path.Combine(shopDir, "wo.json"), ser.Serialize(shopWo));
+
+        var result = new ShopSyncResult();
+        WorkOrderStore.CollectConflicts(s, kb, result);
+        WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "9001");
+        Check("newer remote packet listed", listed != null && listed.Notes.IndexOf("Remote notes B") >= 0,
+            listed == null ? "missing 9001" : listed.Notes);
+        Check("local notes still on disk",
+            File.ReadAllText(Path.Combine(localDir, "notes.txt")).IndexOf("Local notes A") >= 0, "local dropped");
+        ShopConflict woClash = null;
+        foreach (ShopConflict c in WorkOrderStore.Conflicts)
+        {
+            if (c.Kind == "work-order" && (c.Key ?? "").IndexOf("9001") >= 0) woClash = c;
+        }
+        Check("same WO key disagreement is a conflict", woClash != null, "conflicts=" + WorkOrderStore.Conflicts.Count);
+        Check("CollectConflicts reuses ShopConflict list", result.Conflicts >= 1, "n=" + result.Conflicts);
+
+        if (woClash != null)
+        {
+            ShopSync.Resolve(kb, woClash, "remote");
+            WorkOrder after = FindWo(WorkOrderStore.ListAll(s, kb), "9001");
+            int still = 0;
+            foreach (ShopConflict c in WorkOrderStore.Conflicts)
+                if (c.Kind == "work-order" && (c.Key ?? "").IndexOf("9001") >= 0) still++;
+            Check("resolve remote clears WO conflict", still == 0, "still=" + still);
+            Check("resolve copied remote notes to local",
+                File.ReadAllText(Path.Combine(localDir, "notes.txt")).IndexOf("Remote notes B") >= 0, "not copied");
+            Check("listed notes after resolve", after != null && after.Notes.IndexOf("Remote notes B") >= 0,
+                after == null ? "missing" : after.Notes);
+        }
+
+        var same = new WorkOrder { Number = "9002", Segment = "01", Notes = "Same notes" };
+        WorkOrderStore.Save(same, s, kb);
+        string shop2 = Path.Combine(WorkOrderStore.ShopTechDir(kb, "user"), "9002-01");
+        WorkOrder shopSame = WorkOrderStore.Load(shop2);
+        string newer = DateTime.UtcNow.AddHours(3).ToString("o");
+        shopSame.UpdatedUtc = newer;
+        File.WriteAllText(Path.Combine(shop2, "wo.json"), ser.Serialize(shopSame));
+        WorkOrder listedSame = FindWo(WorkOrderStore.ListAll(s, kb), "9002");
+        bool clash9002 = false;
+        foreach (ShopConflict c in WorkOrderStore.Conflicts)
+            if (c.Kind == "work-order" && (c.Key ?? "").IndexOf("9002") >= 0) clash9002 = true;
+        Check("same content hash is not a conflict", !clash9002, "9002 conflicted");
+        Check("newer timestamp kept when notes match",
+            listedSame != null && listedSame.UpdatedUtc == newer, listedSame == null ? "missing" : listedSame.UpdatedUtc);
+    }
+
+    static WorkOrder FindWo(List<WorkOrder> list, string number)
+    {
+        if (list == null) return null;
+        foreach (WorkOrder x in list)
+            if (x != null && x.Number == number) return x;
+        return null;
+    }
+
+    static void WorkOrderBakRecoveryTests(ShopSettings s, string kb)
+    {
+        string packet = null;
+        string shopPacket = null;
+        string onlyBak = null;
+        try
+        {
+            var wo = new WorkOrder
+            {
+                Number = "77701",
+                Segment = "01",
+                Customer = "Prev Co",
+                Notes = "prev note"
+            };
+            WorkOrderStore.Save(wo, s, kb);
+            packet = WorkOrderStore.PacketDir(WorkOrderStore.LocalRoot(), wo.Key());
+            shopPacket = WorkOrderStore.PacketDir(WorkOrderStore.ShopTechDir(kb, s.TechId), wo.Key());
+            string jsonPath = Path.Combine(packet, "wo.json");
+            string firstJson = File.ReadAllText(jsonPath);
+            wo.Customer = "Curr Co";
+            wo.Notes = "curr note";
+            WorkOrderStore.Save(wo, s, kb);
+
+            WorkOrder preferred = WorkOrderStore.Load(packet);
+            Check("valid wo.json is preferred over bak",
+                preferred != null && preferred.Customer == "Curr Co",
+                preferred == null ? "null" : preferred.Customer);
+
+            string bakText = File.ReadAllText(jsonPath + ".bak");
+            WorkOrder recovered = new JavaScriptSerializer().Deserialize<WorkOrder>(bakText);
+            string bakDetail = recovered == null ? "null" : (recovered.Number + "/" + recovered.Customer);
+            if (bakText != firstJson) bakDetail = "bak text differs; " + bakDetail;
+            Check("wo.json.bak holds the previous version",
+                bakText == firstJson
+                    && recovered != null
+                    && recovered.Number == "77701"
+                    && recovered.Customer == "Prev Co",
+                bakDetail);
+
+            onlyBak = Path.Combine(WorkOrderStore.LocalRoot(), "77702");
+            Directory.CreateDirectory(onlyBak);
+            File.WriteAllText(Path.Combine(onlyBak, "wo.json.bak"),
+                "{\"Number\":\"77702\",\"Customer\":\"Bak Only\"}");
+            WorkOrder loadedBak = WorkOrderStore.Load(onlyBak);
+            WorkOrder listed = FindWo(WorkOrderStore.ListAll(s, kb), "77702");
+            Check("bak-only folder is not loaded",
+                loadedBak == null,
+                loadedBak == null ? "null" : (loadedBak.Number + "/" + loadedBak.Customer));
+            Check("bak-only packet folder is not listed",
+                listed == null,
+                listed == null ? "absent" : (listed.Number + "/" + listed.Customer));
+        }
+        finally
+        {
+            try { if (!string.IsNullOrEmpty(packet)) Directory.Delete(packet, true); } catch { }
+            try { if (!string.IsNullOrEmpty(shopPacket)) Directory.Delete(shopPacket, true); } catch { }
+            try { if (!string.IsNullOrEmpty(onlyBak)) Directory.Delete(onlyBak, true); } catch { }
+        }
+    }
 }

@@ -1,0 +1,21 @@
+[package]
+name = "rp1210-mock"
+version = "0.1.0"
+description = "Test-only RP1210 driver DLL: the bridge's fake adapter behind the RP1210 C ABI, so the 32-bit DLL loader is exercised in CI with no hardware."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "rp1210_mock"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tb-rp1210-bridge = { path = "../tb-rp1210-bridge" }
+
+[dev-dependencies]
+tb-core = { path = "../tb-core" }
+serde_json = "1"
+
+[target.'cfg(windows)'.dev-dependencies]
+libloading = "0.7"

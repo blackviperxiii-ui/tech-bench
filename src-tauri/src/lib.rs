@@ -1,0 +1,399 @@
+//! Tauri 2 shell for Tech Bench. Commands expose tb-core to the React UI in app/.
+//! Live bus goes through the 32-bit RP1210 bridge sidecar (`livebus`), which owns the adapter
+//! and checks every frame against the tb-core send guard. The other writes are work-order packets,
+//! the shop/job settings files the WinForms app also writes, Add code / note / file into this
+//! tech's KB shop shard, and shop sync between the KB and a sync folder.
+
+#[cfg(desktop)]
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::Duration;
+
+use serde::Serialize;
+use tauri::{AppHandle, Manager, RunEvent, State};
+use tb_core::kb::{KbIndex, MAX_RESULTS};
+use tb_core::search::{codebook, featurebook};
+
+mod job;
+mod livebus;
+mod shopadd;
+mod shopsync;
+mod update;
+mod workorders;
+
+/// Same file the WinForms build embeds as `TechBench.assets.cheatsheet.rtf`.
+const CHEATSHEET_RTF: &str = include_str!("../../assets/cheatsheet.rtf");
+
+/// How long `--smoke` waits for the UI to report before failing.
+const SMOKE_TIMEOUT: Duration = Duration::from_secs(90);
+
+pub(crate) struct Kb(pub(crate) Mutex<KbIndex>);
+pub(crate) struct Smoke(pub(crate) AtomicBool);
+
+#[derive(Serialize)]
+struct HitDto {
+    kind: String,
+    title: String,
+    subtitle: String,
+    body: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+struct SearchResult {
+    hits: Vec<HitDto>,
+    total: usize,
+    status: String,
+}
+
+#[derive(Serialize)]
+struct KbInfo {
+    root: String,
+    status: String,
+    count: usize,
+    errors: Vec<String>,
+}
+
+#[tauri::command]
+fn kb_info(kb: State<'_, Kb>) -> KbInfo {
+    let kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
+    KbInfo {
+        root: kb.root.clone(),
+        status: kb.status.clone(),
+        count: kb.all.len(),
+        errors: kb.errors.clone(),
+    }
+}
+
+#[tauri::command]
+fn kb_search(query: String, kind: String, kb: State<'_, Kb>) -> SearchResult {
+    let kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
+    let (hits, total) = kb.search(&query, &kind, MAX_RESULTS);
+    SearchResult {
+        hits: hits
+            .into_iter()
+            .map(|h| HitDto {
+                kind: h.kind,
+                title: h.title,
+                subtitle: h.subtitle,
+                body: h.body,
+                path: h.path,
+            })
+            .collect(),
+        total,
+        status: kb.status.clone(),
+    }
+}
+
+#[derive(Serialize)]
+struct ParaDto {
+    text: String,
+    bold: bool,
+    big: bool,
+}
+
+#[tauri::command]
+fn cheatsheet() -> Vec<ParaDto> {
+    tb_core::rtf::paragraphs(CHEATSHEET_RTF)
+        .into_iter()
+        .map(|p| ParaDto {
+            text: p.text,
+            bold: p.bold,
+            big: p.big,
+        })
+        .collect()
+}
+
+#[derive(Serialize)]
+struct Explained {
+    text: String,
+    kb: Option<String>,
+}
+
+/// CodeBook explainer for one SPN/FMI plus the KB's own entry for that SPN, if any.
+#[tauri::command]
+fn explain_code(spn: i32, fmi: i32, kb: State<'_, Kb>) -> Explained {
+    let kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
+    Explained {
+        text: codebook::explain(spn, fmi, &kb.names),
+        kb: kb.spn_text(spn, fmi),
+    }
+}
+
+#[derive(Serialize)]
+struct SwitchRowDto {
+    id: String,
+    name: String,
+    state: String,
+    short: String,
+    detail: String,
+}
+
+/// The INLINE 7 Guidanz feature reference (status text only; nothing is written to an ECU).
+#[tauri::command]
+fn guidanz_features() -> Vec<SwitchRowDto> {
+    featurebook::guidanz_features()
+        .into_iter()
+        .map(|r| SwitchRowDto {
+            id: r.id,
+            name: r.name,
+            state: r.state,
+            short: r.short,
+            detail: r.detail,
+        })
+        .collect()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SmokeInfo {
+    on: bool,
+    /// Also round-trip a work order: only when TECHBENCH_HOME points the store at a scratch
+    /// folder, so a smoke run never writes into a real shop's work orders.
+    work_orders: bool,
+}
+
+#[tauri::command]
+fn smoke_mode(smoke: State<'_, Smoke>) -> SmokeInfo {
+    let on = smoke.0.load(Ordering::SeqCst);
+    SmokeInfo {
+        on,
+        // A phone or simulator smoke runs in a fresh install, so its data folder is scratch.
+        work_orders: on && (cfg!(mobile) || std::env::var_os("TECHBENCH_HOME").is_some()),
+    }
+}
+
+/// Mobile has no command line: a CI smoke build bakes the flag in (`TECHBENCH_SMOKE=1` at
+/// compile time). Desktop takes `--smoke`.
+fn smoke_requested() -> bool {
+    std::env::args().any(|a| a == "--smoke") || option_env!("TECHBENCH_SMOKE") == Some("1")
+}
+
+#[tauri::command]
+fn smoke_report(ok: bool, detail: String, smoke: State<'_, Smoke>, app: AppHandle) {
+    if !smoke.0.load(Ordering::SeqCst) {
+        return;
+    }
+    smoke_line(&format!(
+        "SMOKE {}: {detail}",
+        if ok { "PASS" } else { "FAIL" }
+    ));
+    app.exit(if ok { 0 } else { 1 });
+}
+
+/// Prints a smoke line, and appends it to TECHBENCH_SMOKE_OUT when set: Windows release
+/// builds have no console, so CI reads the file instead. Android's stdout goes nowhere, so
+/// there it goes to logcat under the `TechBench` tag.
+pub(crate) fn smoke_line(line: &str) {
+    println!("{line}");
+    #[cfg(target_os = "android")]
+    android_log(line);
+    // An iOS app's console is not reliable in CI; the simulator smoke reads this file from the
+    // app's data container instead (HOME is that container on iOS).
+    #[cfg(target_os = "ios")]
+    if let Some(home) = std::env::var_os("HOME") {
+        use std::io::Write;
+        let path = std::path::Path::new(&home)
+            .join("Documents")
+            .join("techbench-smoke.txt");
+        let _ = std::fs::create_dir_all(path.parent().unwrap_or(std::path::Path::new(&home)));
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+    if let Some(path) = std::env::var_os("TECHBENCH_SMOKE_OUT") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn android_log(line: &str) {
+    use std::ffi::{c_char, c_int, CString};
+    extern "C" {
+        fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char) -> c_int;
+    }
+    const INFO: c_int = 4;
+    if let (Ok(tag), Ok(text)) = (CString::new("TechBench"), CString::new(line)) {
+        // SAFETY: both are valid NUL-terminated strings that outlive the call.
+        unsafe { __android_log_write(INFO, tag.as_ptr(), text.as_ptr()) };
+    }
+}
+
+/// Phones and tablets get the KB built into the app: Android keeps resources inside the APK,
+/// where a plain file read cannot reach them. Like the web build, there is no password DB.
+/// The root stays empty: there is no KB folder, so nothing tries to write a shop copy into one.
+#[cfg(mobile)]
+fn load_kb(kb: &mut KbIndex, _app: &AppHandle) {
+    kb.load_bundled(
+        "",
+        &[
+            ("kb.json", include_str!("../../kb/data/kb.json")),
+            (
+                "usb-manuals.json",
+                include_str!("../../kb/data/usb-manuals.json"),
+            ),
+            (
+                "rental-portable-filters-oil.json",
+                include_str!("../../kb/data/rental-portable-filters-oil.json"),
+            ),
+            (
+                "rental-equipment-info.json",
+                include_str!("../../kb/data/rental-equipment-info.json"),
+            ),
+        ],
+    );
+}
+
+#[cfg(desktop)]
+fn load_kb(kb: &mut KbIndex, app: &AppHandle) {
+    kb.load(&kb_root(app).to_string_lossy());
+}
+
+#[cfg(desktop)]
+fn has_kb(root: &Path) -> bool {
+    root.join("data").join("kb.json").is_file()
+}
+
+/// Same order as the WinForms app: TECHBENCH_KB overrides, then the copy shipped with the app.
+/// Debug builds fall back to the repo's kb/ so `tauri dev` works from a checkout.
+#[cfg(desktop)]
+fn kb_root(app: &AppHandle) -> PathBuf {
+    if let Some(p) = std::env::var_os("TECHBENCH_KB").map(PathBuf::from) {
+        if has_kb(&p) {
+            return p;
+        }
+    }
+    let bundled = app
+        .path()
+        .resource_dir()
+        .map(|d| d.join("kb"))
+        .unwrap_or_default();
+    if has_kb(&bundled) || !cfg!(debug_assertions) {
+        return bundled;
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("kb")
+}
+
+fn install_panic_hook() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let log = std::env::temp_dir().join("techbench-crash.log");
+        let _ = std::fs::write(&log, format!("{info}\n"));
+        eprintln!("Tech Bench crashed: {info} (written to {})", log.display());
+        default(info);
+    }));
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    install_panic_hook();
+    let smoke = smoke_requested();
+    #[cfg_attr(mobile, allow(unused_variables))]
+    let update_smoke = std::env::args().any(|a| a == "--update-smoke");
+    let context = tauri::generate_context!();
+    let updates = cfg!(desktop) && update::configured(&context);
+    #[cfg_attr(mobile, allow(unused_mut))]
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init());
+    #[cfg(desktop)]
+    if updates {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    builder
+        .manage(update::UpdaterOn(updates))
+        .manage(Kb(Mutex::new(KbIndex::new())))
+        .manage(Smoke(AtomicBool::new(smoke)))
+        .manage(workorders::WoState(Mutex::new(None)))
+        .manage(shopsync::LastSync(Mutex::new(None)))
+        .manage(shopsync::WatchBase(Mutex::new(None)))
+        .manage(livebus::Bridge(Mutex::new(None)))
+        .setup(move |app| {
+            {
+                let kb = app.state::<Kb>();
+                let mut kb = kb.0.lock().unwrap_or_else(|e| e.into_inner());
+                load_kb(&mut kb, app.handle());
+                if smoke {
+                    smoke_line(&format!("SMOKE kb: {}", kb.status));
+                }
+            }
+            #[cfg(desktop)]
+            if update_smoke {
+                update::run_smoke(app.handle().clone());
+                return Ok(());
+            }
+            if !smoke {
+                shopsync::start_watcher(app.handle().clone());
+            }
+            if smoke {
+                std::thread::spawn(|| {
+                    std::thread::sleep(SMOKE_TIMEOUT);
+                    smoke_line(&format!(
+                        "SMOKE FAIL: the UI did not report within {SMOKE_TIMEOUT:?}"
+                    ));
+                    std::process::exit(2);
+                });
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            kb_info,
+            kb_search,
+            cheatsheet,
+            explain_code,
+            guidanz_features,
+            workorders::wo_list,
+            workorders::wo_save,
+            workorders::wo_clock,
+            workorders::wo_share,
+            workorders::wo_add_photos,
+            workorders::wo_open_media,
+            job::job_get,
+            job::job_set_header,
+            job::job_set_wo,
+            job::job_clear,
+            job::job_title,
+            job::shop_settings_get,
+            job::shop_settings_save,
+            job::pick_folder,
+            job::pick_assigned_file,
+            job::kb_open,
+            shopadd::kb_code_seed,
+            shopadd::kb_add_code,
+            shopadd::kb_add_note,
+            shopadd::kb_add_file,
+            shopsync::sync_view,
+            shopsync::sync_save,
+            shopsync::sync_run,
+            shopsync::sync_resolve,
+            shopsync::sync_pick_folder,
+            shopsync::history_summary,
+            livebus::bus_caps,
+            livebus::bus_call,
+            livebus::session_save,
+            workorders::wo_attach_report,
+            smoke_mode,
+            smoke_report,
+            update::update_check,
+            update::update_install
+        ])
+        .build(context)
+        .expect("error while running Tech Bench")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                livebus::shut_down(&app.state::<livebus::Bridge>());
+            }
+        });
+}

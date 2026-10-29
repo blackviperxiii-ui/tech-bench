@@ -8,6 +8,75 @@ using TechBench;
 
 static partial class SelfTest
 {
+    [SelfTestCase("persist restart and bad store", Order = 221)]
+    static void PersistRestartAndBadStoreTests()
+    {
+        SettingsWriteGate.ResetForTests();
+
+        string dir = Path.Combine(Path.GetTempPath(), "tb-persist-restart-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string prevSettings = AppSettings.PathOverride;
+        string path = Path.Combine(dir, "settings.json");
+        AppSettings.PathOverride = path;
+        try
+        {
+            // Missing store: defaults, nothing created by a read.
+            AppSettings none = AppSettings.Load();
+            Eq("missing store customer empty", none.Customer, "");
+            Eq("missing store last wo empty", none.LastWo, "");
+            Check("read does not create the store", !File.Exists(path), path);
+
+            // Persist customer + last WO, then "restart" (gate reset, fresh Load from disk).
+            Eq("save customer trims", SettingsStore.SaveJobCustomer("  Acme Quarry  "), "Acme Quarry");
+            Eq("save last wo trims", SettingsStore.SaveJobWorkOrder(" 44551-01 "), "44551-01");
+            SettingsWriteGate.ResetForTests();
+            AppSettings restarted = AppSettings.Load();
+            Eq("customer restored after restart", restarted.Customer, "Acme Quarry");
+            Eq("last wo restored after restart", restarted.LastWo, "44551-01");
+            Eq("null last wo saves empty", SettingsStore.SaveJobWorkOrder(null), "");
+            Eq("null last wo persisted", AppSettings.Load().LastWo, "");
+            Eq("customer kept when only wo cleared", AppSettings.Load().Customer, "Acme Quarry");
+
+            // Corrupt or hostile stores fall back to defaults and never throw.
+            string[] bad =
+            {
+                "",
+                "   ",
+                "{ not json",
+                "{\"Customer\":\"Trunc",
+                "null",
+                "[]",
+                "{\"Width\":\"abc\"}",
+                "{\"Customer\":null,\"LastWo\":null}"
+            };
+            for (int i = 0; i < bad.Length; i++)
+            {
+                File.WriteAllText(path, bad[i]);
+                AppSettings s = AppSettings.Load();
+                Check("bad store #" + i + " loads defaults",
+                    s != null && s.Customer == "" && s.LastWo == "", bad[i]);
+            }
+
+            // Writing over a corrupt store recovers: new values persist and read back.
+            File.WriteAllText(path, "{ corrupt");
+            Eq("save over corrupt store", SettingsStore.SaveJobCustomer("Recovered Co"), "Recovered Co");
+            Eq("corrupt store recovered", AppSettings.Load().Customer, "Recovered Co");
+            File.WriteAllText(path, "{ corrupt");
+            Eq("wo save over corrupt store", SettingsStore.SaveJobWorkOrder("12-34"), "12-34");
+            Eq("wo recovered from corrupt store", AppSettings.Load().LastWo, "12-34");
+
+            // A saved WO key that is gone from the list restores to nothing.
+            Eq("stale wo key restores empty", AppSettings.MatchWorkOrderKey(new System.Collections.Generic.List<WorkOrder>(), "gone-99"), "");
+            Eq("null order list restores empty", AppSettings.MatchWorkOrderKey(null, "12-34"), "");
+        }
+        finally
+        {
+            AppSettings.PathOverride = prevSettings;
+            SettingsWriteGate.ResetForTests();
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     [SelfTestCase("persist startup (no wipe)", Order = 220)]
     static void PersistStartupTests()
     {
@@ -108,6 +177,14 @@ static partial class SelfTest
             // SettingsStore owns job-strip + adapter merge routing.
             Eq("SettingsStore.SaveJobCustomer", SettingsStore.SaveJobCustomer("Gamma LLC"), "Gamma LLC");
             Eq("job customer on disk via store", AppSettings.Load().Customer, "Gamma LLC");
+            // Typing in Model or Serial re-pushes the same customer; that must not rewrite settings.json.
+            File.Delete(settingsPath + ".bak");
+            Eq("same customer again returns it", SettingsStore.SaveJobCustomer(" Gamma LLC "), "Gamma LLC");
+            Check("same customer does not rewrite settings.json", !File.Exists(settingsPath + ".bak"), settingsPath + ".bak");
+            SettingsStore.SaveJobCustomer("Gamma Two");
+            Eq("changed customer still writes", AppSettings.Load().Customer, "Gamma Two");
+            Check("changed customer write keeps .bak", File.Exists(settingsPath + ".bak"), settingsPath + ".bak");
+            SettingsStore.SaveJobCustomer("Gamma LLC");
             Eq("SettingsStore.SaveJobWorkOrder", SettingsStore.SaveJobWorkOrder("99-01"), "99-01");
             Eq("last wo on disk via store", AppSettings.Load().LastWo, "99-01");
             SettingsStore.ClearJobStrip();
@@ -132,6 +209,9 @@ static partial class SelfTest
                 shellSrc.IndexOf("ShowPage(0, false)", StringComparison.Ordinal) >= 0
                 && shellSrc.IndexOf("ShowPage(shell, false)", StringComparison.Ordinal) >= 0,
                 "ShellForm missing persistShellPage:false on startup");
+            Check("shell page restore does not wait on an adapter match",
+                shellSrc.IndexOf("AdapterPrefsMatched", StringComparison.Ordinal) < 0,
+                "ShellForm gates the shell page on the RP1210 adapter");
             Check("shell wraps job fill with write gate",
                 shellSrc.IndexOf("SettingsWriteGate.BeginLoad()", StringComparison.Ordinal) >= 0
                 && shellSrc.IndexOf("_filling = true", StringComparison.Ordinal) >= 0,
@@ -153,6 +233,9 @@ static partial class SelfTest
             string woSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Features", "WorkOrders", "WorkOrderControl.cs"));
             Check("WO reload does not auto-pick after job restore",
                 woSrc.IndexOf("_orders.Count > 0 && !_jobWoRestoreDone", StringComparison.Ordinal) >= 0,
+                "WorkOrderControl");
+            Check("WO reload falls back to the first row when the saved WO is gone",
+                woSrc.IndexOf("keepFromSavedWo && _orders.Count > 0", StringComparison.Ordinal) >= 0,
                 "WorkOrderControl");
             Check("job strip routes through SettingsStore",
                 woSrc.IndexOf("SettingsStore.SaveJobCustomer", StringComparison.Ordinal) >= 0

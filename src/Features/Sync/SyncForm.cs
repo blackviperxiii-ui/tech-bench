@@ -179,6 +179,15 @@ namespace TechBench
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            string verb = choice == "local" ? "Keep mine"
+                : (choice == "remote" ? "Keep theirs" : "Keep both");
+            var ask = MessageBox.Show(this,
+                verb + " for this conflict?\n\n"
+                + (c.RelativePath ?? "")
+                + "\n\nThis overwrites the other side for that file.",
+                "Shop sync",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (ask != DialogResult.Yes) return;
             try
             {
                 ShopSync.Resolve(_kbRoot, c, choice);

@@ -2,7 +2,7 @@
 
 Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
 
-Current stamp: **1.2.22** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
+Current stamp: **1.2.41** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
 
 ## What it does
 
@@ -17,7 +17,7 @@ Current stamp: **1.2.22** (Help → About). The field database ships with the ap
 - Remembers last model/serial/customer/WO and window size in `%LocalAppData%\TechBench\settings.json`; last RP1210 adapter and shell/INLINE page in `adapter-prefs.json`
 - Help → Check for updates: `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token). The built-in feed is not published. A shop can point at a network share with `update-feed-path.txt` beside the exe (folder holding `latest.json`), or at a URL with `update-url.txt`
 - **Shop sync** — two-way share of tech notes, user codes, and shop files through the knowledge-base folder or a USB/network folder you pick in Shop → Sync
-- **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off. IntelliDealer Azure API Gateway log on / log off / sign off / multimedia post-back only when dealer credentials are in Shop → IntelliDealer
+- **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off timestamps. Tech name and share folder are in Shop → Shop settings
 
 A missing knowledge base does not block launch — the search status line says the index is empty.
 
@@ -78,7 +78,7 @@ Help → About names which feed source is active. The updater never sends creden
 test.bat
 ```
 
-Offline checks: J1939 decoding, BAM reassembly, DM11/DM3 code clear against simulated ECMs (ACK, refusal, silent controller, codes that come back, DEF from a separate module), RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
+Offline checks: J1939 decoding, BAM reassembly, DM11/DM3 code clear against simulated ECMs (ACK, refusal, silent controller, codes that come back, DEF from a separate module), RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets and shop share. No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
 
 On Linux agent boxes (no Windows csc), catch compile breaks with Mono before opening a PR:
 
@@ -106,17 +106,16 @@ A malformed file in `data\` only costs that section — the status line under th
 
 Manual hits point at the original PDF paths from the shop PC that built the index. Those PDFs are not inside the installer.
 
-### Work orders (Mobile Tech in-app)
+### Work orders
 
-Stay in Tech Bench instead of ID Mobile Access:
+Keep the job in Tech Bench:
 
 - **Work orders** page and the WO picker on the job strip
 - Notes, photos, INLINE 7 shots, and the diagnostic report attach to that WO number
-- **Share with shop** copies the packet to `data\shop\_shared\work-orders` (rides along if the knowledge base is already on OneDrive) and to a share folder you pick in Shop → IntelliDealer. Same `data\shop` tree the two-way sync branch uses — this does not overwrite that work.
-- **Log on / log off** write a shop timestamp on the packet. They post to IntelliDealer only when Azure API Gateway credentials are saved.
-- **Sign off** is refused until the gateway returns success. Tech Bench will not fake payroll.
+- **Share with shop** copies the packet to `data\shop\_shared\work-orders` (rides along if the knowledge base is already on OneDrive) and to a share folder you pick in Shop → Shop settings. Same `data\shop` tree the two-way sync branch uses — this does not overwrite that work.
+- **Log on / log off** write a shop timestamp on the packet. They make no network calls.
 
-Drop `id-work-orders.json` (or `.csv`) next to `TechBench.exe` or in the KB `data` folder for a file-backed assigned list. Credentials live in `%LocalAppData%\TechBench\id-settings.json` (subscription key and OAuth secret are DPAPI-protected). Optional `id-api.json` next to the exe may overlay operation paths — not secrets.
+Drop `id-work-orders.json` (or `.csv`) next to `TechBench.exe` or in the KB `data` folder for a file-backed assigned list. Tech name, share folder, and the assigned-list file live in `%LocalAppData%\TechBench\shop-settings.json`. An older `id-settings.json` is read once for those three values and then left in place, unread.
 
 ### Adding what you learn
 
@@ -205,7 +204,7 @@ The `_dtcs.csv` files are what the Unit history tab reads back, so saving a sess
 | Ctrl+F or F3 | jump to the search box |
 | Ctrl+N | add a code to the knowledge base |
 | Shop → Sync | pick a folder, run two-way sync, resolve conflicts |
-| Shop → IntelliDealer | Azure API Gateway credentials for live WO / clock |
+| Shop → Shop settings | tech name, shop share folder, assigned WO file |
 | Enter (search box) | search now |
 | Down (search box) | move into the results |
 

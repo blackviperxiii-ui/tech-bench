@@ -302,18 +302,96 @@ namespace TechBench
                 string mfg = S(Get(d, "manufacturer"));
                 string ctl = S(Get(d, "controller"));
                 string local = S(Get(d, "local_path"));
+                string filename = S(Get(d, "filename"));
+                // Only expose an openable Path when it resolves under the KB tree.
+                string openPath = ResolveDocumentPath(Root, local, filename);
                 Add(new Hit
                 {
                     Kind = "MANUAL",
                     Title = title,
                     Subtitle = mfg + (ctl.Length > 0 ? "  ·  " + ctl : ""),
                     Body = local,
-                    Path = local,
-                    Hay = (title + " " + mfg + " " + ctl + " " + S(Get(d, "filename")) + " " + S(Get(d, "category"))).ToLowerInvariant()
+                    Path = openPath ?? "",
+                    Hay = (title + " " + mfg + " " + ctl + " " + filename + " " + S(Get(d, "category"))).ToLowerInvariant()
                 }, title);
                 n++;
             }
             return n;
+        }
+
+        /// <summary>
+        /// Resolve a KB document path that is allowed to open. Absolute paths outside the KB
+        /// root are refused (Body may still show the recorded path). Relative paths and
+        /// basename lookups under the KB (and kb/manuals/) are accepted when present.
+        /// </summary>
+        public static string ResolveDocumentPath(string kbRoot, string localPath, string filename)
+        {
+            string under = PathUnderRoot(kbRoot, localPath);
+            if (under != null) return under;
+            string name = Path.GetFileName(string.IsNullOrWhiteSpace(filename) ? localPath : filename);
+            if (string.IsNullOrEmpty(name)) return null;
+            under = PathUnderRoot(kbRoot, name);
+            if (under != null && File.Exists(under)) return under;
+            under = PathUnderRoot(kbRoot, Path.Combine("manuals", name));
+            if (under != null && File.Exists(under)) return under;
+            return null;
+        }
+
+        /// <summary>True when path resolves under kbRoot (or equals it).</summary>
+        public static bool IsPathUnderRoot(string kbRoot, string path)
+        {
+            return PathUnderRoot(kbRoot, path) != null;
+        }
+
+        static string PathUnderRoot(string kbRoot, string path)
+        {
+            if (string.IsNullOrWhiteSpace(kbRoot) || string.IsNullOrWhiteSpace(path)) return null;
+            string rootFull = GetFullPathSafe(kbRoot);
+            if (rootFull == null) return null;
+            string candidate;
+            try
+            {
+                if (IsAbsolutePath(path))
+                {
+                    // Drive/UNC paths must not be joined onto the KB root (Mono on Linux
+                    // treats "C:\..." as relative).
+                    candidate = GetFullPathSafe(path);
+                    if (candidate == null) return null;
+                }
+                else
+                    candidate = Path.GetFullPath(Path.Combine(rootFull, path));
+            }
+            catch
+            {
+                return null;
+            }
+            string prefix = rootFull.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? rootFull
+                : rootFull + Path.DirectorySeparatorChar;
+            if (!candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(candidate, rootFull, StringComparison.OrdinalIgnoreCase))
+                return null;
+            return candidate;
+        }
+
+        /// <summary>True for rooted paths, Windows drive paths, and UNC — even under Mono on Linux.</summary>
+        internal static bool IsAbsolutePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            if (Path.IsPathRooted(path)) return true;
+            string p = path.Trim();
+            if (p.Length >= 3 && char.IsLetter(p[0]) && p[1] == ':'
+                && (p[2] == '\\' || p[2] == '/'))
+                return true;
+            if (p.StartsWith(@"\\", StringComparison.Ordinal) || p.StartsWith("//", StringComparison.Ordinal))
+                return true;
+            return false;
+        }
+
+        static string GetFullPathSafe(string path)
+        {
+            try { return Path.GetFullPath(path); }
+            catch { return null; }
         }
 
         int LoadFilters(JavaScriptSerializer ser, string path)
@@ -565,46 +643,29 @@ namespace TechBench
         {
             if (max < 1) return new List<Hit>();
             string spnName = J1939Reader.Names.Spn(spn);
-            string qSpn = ("spn " + spn).ToLowerInvariant();
-            string qNum = spn.ToString(CultureInfo.InvariantCulture).ToLowerInvariant();
-            string qName = spnName.Length > 0 ? spnName.ToLowerInvariant() : "";
-            string[] toksSpn = qSpn.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            string[] toksNum = new[] { qNum };
-            string[] toksName = qName.Length == 0
-                ? null
-                : qName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] queries = spnName.Length > 0
+                ? new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture), spnName }
+                : new[] { "spn " + spn, spn.ToString(CultureInfo.InvariantCulture) };
 
+            // One row per entry, at the best score any query gave it. A body-only mention scores 0
+            // and still counts, the same as it does on the Search tab.
+            // Keyed by the Hit itself: two notes with the same first line are still two entries.
+            var bestScore = new Dictionary<Hit, int>();
             var matches = new List<Hit>();
-            foreach (Hit h in All)
+            foreach (string q in queries)
             {
-                string hay = h.Hay ?? "";
-                int best = 0;
-                if (HayHasAll(hay, toksSpn))
-                    best = Math.Max(best, Score(h, qSpn, toksSpn));
-                if (hay.IndexOf(qNum, StringComparison.Ordinal) >= 0)
-                    best = Math.Max(best, Score(h, qNum, toksNum));
-                if (toksName != null && HayHasAll(hay, toksName))
-                    best = Math.Max(best, Score(h, qName, toksName));
-                if (best <= 0) continue;
-                h.Score = best;
-                matches.Add(h);
+                foreach (Hit h in Matches(q.Trim().ToLowerInvariant(), "ALL"))
+                {
+                    int prev;
+                    if (!bestScore.TryGetValue(h, out prev)) matches.Add(h);
+                    else if (prev >= h.Score) continue;
+                    bestScore[h] = h.Score;
+                }
             }
-            matches.Sort(delegate(Hit a, Hit b)
-            {
-                int c = b.Score.CompareTo(a.Score);
-                return c != 0 ? c : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
-            });
-            var hits = new List<Hit>();
-            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
-            return hits;
-        }
-
-        static bool HayHasAll(string hay, string[] toks)
-        {
-            if (toks == null || toks.Length == 0) return false;
-            foreach (string t in toks)
-                if (hay.IndexOf(t, StringComparison.Ordinal) < 0) return false;
-            return true;
+            foreach (Hit h in matches) h.Score = bestScore[h];
+            Rank(matches);
+            if (matches.Count > max) matches.RemoveRange(max, matches.Count - max);
+            return matches;
         }
 
         public string SpnText(int spn, int fmi)
@@ -653,7 +714,16 @@ namespace TechBench
                 return hits;
             }
 
-            string q = query.Trim().ToLowerInvariant();
+            List<Hit> matches = Matches(query.Trim().ToLowerInvariant(), kind);
+            total = matches.Count;
+            Rank(matches);
+            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
+            return hits;
+        }
+
+        /// <summary>Every entry of <paramref name="kind"/> whose text holds all of the query's tokens, scored, unsorted.</summary>
+        List<Hit> Matches(string q, string kind)
+        {
             string[] toks = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var matches = new List<Hit>();
             foreach (Hit h in All)
@@ -666,7 +736,11 @@ namespace TechBench
                 h.Score = Score(h, q, toks);
                 matches.Add(h);
             }
-            total = matches.Count;
+            return matches;
+        }
+
+        static void Rank(List<Hit> matches)
+        {
             // An exact fault-code match has to come first. Unranked, "F68" buried the F68 entry behind
             // every row that merely mentioned it.
             matches.Sort(delegate(Hit a, Hit b)
@@ -674,8 +748,6 @@ namespace TechBench
                 int c = b.Score.CompareTo(a.Score);
                 return c != 0 ? c : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
             });
-            for (int i = 0; i < matches.Count && i < max; i++) hits.Add(matches[i]);
-            return hits;
         }
 
         static int Score(Hit h, string q, string[] toks)

@@ -73,6 +73,13 @@ static partial class SelfTest
             Eq("merge shell", merged.ShellPage, 3);
             Eq("merge inner", merged.InnerPage, 1);
 
+            // Page switch with no adapter installed: the shell passes "" and the saved id must survive.
+            AdapterPrefs.Merge("", 1, 2);
+            AdapterPrefsData noAdapter = AdapterPrefs.Load();
+            Eq("empty adapter id keeps the saved id", noAdapter.AdapterId, "OTHER");
+            Eq("empty adapter id still merges shell page", noAdapter.ShellPage, 1);
+            Eq("empty adapter id still merges inner page", noAdapter.InnerPage, 2);
+
             Check("exact adapter match", AdapterPrefs.SavedAdapterMatches("CMNSI7", "CMNSI7"), "no");
             Check("case-insensitive adapter match", AdapterPrefs.SavedAdapterMatches("cmnsi7", "CMNSI7"), "no");
             Check("empty saved id does not match", !AdapterPrefs.SavedAdapterMatches("", "CMNSI7"), "matched");
@@ -92,6 +99,117 @@ static partial class SelfTest
             try { Directory.Delete(dir, true); }
             catch { }
         }
+    }
+
+    [SelfTestCase("shell page registry", Order = 95)]
+    static void ShellPageRegistryTests()
+    {
+        Eq("shell page count", ShellPages.Count, 4);
+        Eq("shell page titles in switch-bar order", string.Join("|", ShellPages.Titles()),
+            "Search|Work orders|INLINE 7|Adapters");
+        var panels = new List<string>();
+        var ids = new List<string>();
+        for (int i = 0; i < ShellPages.Count; i++)
+        {
+            panels.Add(ShellPages.At(i).PanelName);
+            ids.Add(((int)ShellPages.At(i).Id).ToString());
+        }
+        Eq("shell panel names unchanged", string.Join("|", panels.ToArray()),
+            "shellPage0|shellPage1|shellPage2|shellPage3");
+        Eq("saved shell page ints map to registry order", string.Join("|", ids.ToArray()), "0|1|2|3");
+        Eq("INLINE 7 is saved as page 2", (int)ShellPageId.Inline7, 2);
+        Eq("clamp below range", ShellPages.Clamp(-1), 0);
+        Eq("clamp in range", ShellPages.Clamp(2), 2);
+        Eq("clamp past end", ShellPages.Clamp(4), 3);
+        Eq("At falls back to first page", ShellPages.At(-5).Title, "Search");
+        Eq("At falls back to last page", ShellPages.At(99).Title, "Adapters");
+        Eq("AdapterPrefs page count follows registry", AdapterPrefs.ShellPageCount, 4);
+        Eq("AdapterPrefs clamp follows registry", AdapterPrefs.ClampShell(7), 3);
+
+        string dir = Path.Combine(Path.GetTempPath(), "tb-shell-pages-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string prev = AdapterPrefs.FolderOverride;
+        AdapterPrefs.FolderOverride = dir;
+        try
+        {
+            AdapterPrefs.Save(new AdapterPrefsData { AdapterId = "CMNSI7", ShellPage = 1, InnerPage = 0 });
+            Eq("saved page 1 restores Work orders",
+                ShellPages.At(AdapterPrefs.ClampShell(AdapterPrefs.Load().ShellPage)).Title, "Work orders");
+            File.WriteAllText(AdapterPrefs.PathName(), "{\"AdapterId\":\"CMNSI7\",\"ShellPage\":9,\"InnerPage\":0}");
+            Eq("out-of-range saved page restores Adapters",
+                ShellPages.At(AdapterPrefs.Load().ShellPage).Title, "Adapters");
+        }
+        finally
+        {
+            AdapterPrefs.FolderOverride = prev;
+            try { Directory.Delete(dir, true); }
+            catch { }
+        }
+
+        // One list: the shell builds its switch bar from the registry, and the layout audit's
+        // independent page list still agrees with it.
+        string root = FindRepoRoot();
+        string shellSrc = File.ReadAllText(Path.Combine(root, "src", "Shell", "ShellForm.cs"));
+        Check("shell switch bar reads the registry",
+            shellSrc.IndexOf("UiLayout.SwitchBar(ShellPages.Titles()", StringComparison.Ordinal) >= 0
+            && shellSrc.IndexOf("\"Work orders\"", StringComparison.Ordinal) < 0,
+            "ShellForm still hardcodes shell page titles");
+        string audit = File.ReadAllText(Path.Combine(root, "tools", "LayoutAudit.cs"));
+        Check("layout audit page list matches registry",
+            audit.IndexOf("{ \"Search\", \"Work orders\", \"INLINE 7\", \"Adapters\" }", StringComparison.Ordinal) >= 0,
+            "tools/LayoutAudit.cs page names drifted from ShellPages");
+    }
+
+    [SelfTestCase("adapters page summary", Order = 96)]
+    static void AdapterSummaryTests()
+    {
+        string nl = Environment.NewLine;
+        string none = AdapterSummary.Text(@"C:\Windows\RP121032.INI", true, new List<Rp1210Api>());
+        Eq("no adapters text", none, string.Join(nl, new[]
+        {
+            "RP1210 adapters installed on this PC",
+            "(read from C:\\Windows\\RP121032.INI)",
+            "",
+            "Process: 32-bit — correct for RP1210",
+            "",
+            "None found.",
+            "",
+            "Install the adapter vendor's RP1210 drivers (for the INLINE 7 that is the",
+            "Cummins CIL7 package), then press Rescan.",
+            ""
+        }));
+        Eq("null adapter list reads as none",
+            AdapterSummary.Text(@"C:\Windows\RP121032.INI", true, null), none);
+        Check("64-bit host warns drivers will not load",
+            AdapterSummary.Text("x", false, null).Contains("Process: 64-bit — RP1210 drivers will NOT load; rebuild with build.bat" + nl),
+            "missing 64-bit warning");
+
+        Rp1210Api api = Rp1210Api.FromIni("CMNSI7", Ini.Parse(VendorIni), @"C:\Windows\SysWOW64\CMNSI7.DLL");
+        Eq("one INLINE 7 text", AdapterSummary.Text(@"C:\Windows\RP121032.INI", true, new List<Rp1210Api> { api }),
+            string.Join(nl, new[]
+            {
+                "RP1210 adapters installed on this PC",
+                "(read from C:\\Windows\\RP121032.INI)",
+                "",
+                "Process: 32-bit — correct for RP1210",
+                "",
+                "Cummins Inc. INLINE 7  (CMNSI7)",
+                "DLL: C:\\Windows\\SysWOW64\\CMNSI7.DLL",
+                "Devices: 1 — INLINE 7 over USB, 2 — INLINE 7 Bluetooth",
+                "J1939: J1939:Baud=250, J1939:Baud=500, J1939",
+                "ISO15765: yes",
+                "",
+                "",
+                "The INLINE 7 tab connects with whichever adapter is picked in its Adapter box.",
+                "Sullair / IR Xe datalinks appear here automatically once their drivers are installed.",
+                ""
+            }));
+
+        string shellSrc = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Shell", "ShellForm.cs"));
+        Check("shell hosts AdaptersPage for the Adapters slot",
+            shellSrc.IndexOf("{ ShellPageId.Adapters, new AdaptersPage() }", StringComparison.Ordinal) >= 0
+            && shellSrc.IndexOf("DescribeAdapters", StringComparison.Ordinal) < 0,
+            "ShellForm still builds the adapters page itself");
     }
 
     // ---------------- names ----------------

@@ -156,7 +156,7 @@ namespace TechBench
             if (s == null) s = new ShopSyncSettings();
             s.TechId = SanitizeTechId(s.TechId);
             var ser = new JavaScriptSerializer();
-            File.WriteAllText(SettingsPath(), ser.Serialize(s), new UTF8Encoding(false));
+            WorkOrderStore.AtomicWriteText(SettingsPath(), ser.Serialize(s), new UTF8Encoding(false));
         }
 
         static string ReadPathFile(string name)
@@ -246,7 +246,7 @@ namespace TechBench
             }
 
             CollectCodeConflicts(kbRoot, result);
-            WorkOrderStore.CollectConflicts(IdSettings.Load(), kbRoot, result);
+            WorkOrderStore.CollectConflicts(ShopSettings.Load(), kbRoot, result);
             result.Techs = CountTechs(kbRoot);
             result.Status = Describe(kbRoot, settings, result);
             return result;
@@ -828,14 +828,7 @@ namespace TechBench
 
         static void CopyFile(string src, string dest)
         {
-            string dir = Path.GetDirectoryName(dest);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            string tmp = dest + ".tmp";
-            File.Copy(src, tmp, true);
-            if (File.Exists(dest)) File.Copy(tmp, dest, true);
-            else File.Move(tmp, dest);
-            try { if (File.Exists(tmp)) File.Delete(tmp); }
-            catch { }
+            WorkOrderStore.AtomicCopyFile(src, dest);
         }
 
         public static string HashFile(string path)

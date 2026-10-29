@@ -26,7 +26,7 @@ id-settings.json
 id-settings*.json
 id-api.json
 
-# Secrets and credentials (never commit; IntelliDealer creds live in %LocalAppData%)
+# Secrets and credentials (never commit; legacy settings files stay in %LocalAppData%)
 .env
 .env.*
 *.pfx
@@ -56,3 +56,17 @@ packages/
 *.suo
 *.part
 TestResults/
+
+# Rust workspace (crates/)
+target/
+node_modules/
+app/dist/
+src-tauri/gen/
+
+# 32-bit RP1210 bridge staged for the Windows bundle (tauri.windows.conf.json externalBin)
+src-tauri/binaries/
+
+# Web build (npm run build:web) and its Playwright runs
+app/dist-web/
+test-results/
+playwright-report/
