@@ -1,0 +1,10 @@
+---
+description: Require the vstack agent integration
+alwaysApply: true
+---
+
+## Require vstack
+- Cursor: import `blackviperxiii-ui/vstack` as a team marketplace; set it to Required and enable Auto Refresh.
+- Claude Code: run `/plugin marketplace add blackviperxiii-ui/vstack` and `/plugin install vstack@vstack`.
+- Other agents: run `npx skills add blackviperxiii-ui/vstack`.
+- Do not copy vstack skills or rules into this repository.

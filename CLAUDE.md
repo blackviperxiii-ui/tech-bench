@@ -23,6 +23,12 @@ C# WinForms shop tool, .NET Framework 4, **x86 only** (RP1210 drivers are 32-bit
 - **J1939:** no DEF/SCR reset and no calibration or parameter writes. Keep the existing guards. New ECU actions need the maintainer's OK and a confirm dialog; irreversible engine commands need human checks.
 - **Updater:** keep the v1.2.9 rules (`docs/specs/v1.2.9.md`); `Updater.DefaultManifestUrl` stays unchanged.
 
+## Require vstack
+- Cursor: import `blackviperxiii-ui/vstack` as a team marketplace; set it to Required and enable Auto Refresh.
+- Claude Code: run `/plugin marketplace add blackviperxiii-ui/vstack` and `/plugin install vstack@vstack`.
+- Other agents: run `npx skills add blackviperxiii-ui/vstack`.
+- Do not copy vstack skills or rules into this repository.
+
 ## No personal info (hard rule)
 
 This is open-source work meant for anyone to use. Keep every file, commit, PR and issue generic.

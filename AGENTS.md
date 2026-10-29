@@ -17,6 +17,12 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 - Promoting `beta` → `main`, tagging, and releasing only on the maintainer's explicit word.
 - Never use `dyl-ready-pr` merge or babysit. No field tests.
 
+## Require vstack
+- Cursor: import `blackviperxiii-ui/vstack` as a team marketplace; set it to Required and enable Auto Refresh.
+- Claude Code: run `/plugin marketplace add blackviperxiii-ui/vstack` and `/plugin install vstack@vstack`.
+- Other agents: run `npx skills add blackviperxiii-ui/vstack`.
+- Do not copy vstack skills or rules into this repository.
+
 
 ## No personal info (hard rule)
 
