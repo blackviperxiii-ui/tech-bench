@@ -25,8 +25,8 @@ C# WinForms shop tool, .NET Framework 4, **x86 only** (RP1210 drivers are 32-bit
 
 ## Require vstack
 - Cursor: import `blackviperxiii-ui/vstack` as a team marketplace; set it to Required and enable Auto Refresh.
-- Claude Code: run `/plugin marketplace add blackviperxiii-ui/vstack` and `/plugin install vstack@vstack`.
-- Other agents: run `npx skills add blackviperxiii-ui/vstack`.
+- Claude Code: `.claude/settings.json` adds the vstack marketplace and turns on `vstack@vstack`, so it loads once you trust the folder. If `/plugin` doesn't list it, run `/plugin marketplace add blackviperxiii-ui/vstack` and `/plugin install vstack@vstack`.
+- Other agents (Codex, Copilot, Jules): run `npx skills add blackviperxiii-ui/vstack -g -y` before you start, so the skills install for your user and nothing lands in the repo.
 - Do not copy vstack skills or rules into this repository.
 
 ## No personal info (hard rule)
