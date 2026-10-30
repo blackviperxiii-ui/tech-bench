@@ -29,6 +29,13 @@ C# WinForms shop tool, .NET Framework 4, **x86 only** (RP1210 drivers are 32-bit
 - Other agents (Codex, Copilot, Jules): run `npx skills add blackviperxiii-ui/vstack -g -y` before you start, so the skills install for your user and nothing lands in the repo.
 - Do not copy vstack skills or rules into this repository.
 
+How to use vstack here:
+- Start nontrivial work with `viper-mode`. It routes to `how` and `why` before edits, `architect` for new modules, `blast-radius` before shared code, `tdd` for bugs and `interrogate` for reviews.
+- Issues and board cards: run `follow-through` from pickup to PR (start comment, blocked note, done with proof).
+- PR bodies and docs: `technical-writing`.
+- `app/` TypeScript: `typescript-best-practices`. Before a beta to main promotion: `qa-walkthrough`.
+- No install? Read a skill straight from `https://github.com/blackviperxiii-ui/vstack/blob/main/skills/<name>/SKILL.md`.
+
 ## No personal info (hard rule)
 
 This is open-source work meant for anyone to use. Keep every file, commit, PR and issue generic.
