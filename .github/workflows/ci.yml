@@ -1,8 +1,21 @@
-# Short PR gate. PRs run: format (cargo fmt), linux (clippy + tests for the
-# Rust crates and the UI typecheck, one build) and windows (the C# offline
-# self-test, test.bat). The heavy builds (installer, desktop, mobile, web,
-# updater, bridge i686, tb-core matrix) run on push to beta/main, nightly and
-# on manual runs in their own workflows.
+# Tech Bench CI: one workflow, one `changes` job that decides what runs.
+#
+# Pull requests run the short gate only: format (cargo fmt), linux (clippy +
+# tests for the Rust crates and the UI typecheck) and windows (the C# offline
+# self-test, test.bat). The heavy builds never run on pull requests.
+#
+# Push to beta: the short gate plus the Linux heavy builds whose paths changed
+#   (desktop on Ubuntu, android emulator smoke, web + Playwright, wasm tests).
+# Push to main, nightly and manual runs: everything above plus the macOS and
+#   Windows legs (desktop macOS/Windows, ios, tb-core Windows/macOS, bridge i686,
+#   updater). Nightly and manual runs ignore paths and run all.
+#
+# Windows builds the 32-bit RP1210 bridge sidecar once (bridge-i686) and hands
+# it to desktop (windows-latest) and the updater as an artifact.
+#
+# The C# Inno installer (`installer`) stays in windows-installer.yml: the
+# offline self-test reads that file.
+#
 # Path gating is a job-level `if:` on the `changes` outputs, never a
 # workflow-level filter, so a skipped required check still reports.
 name: CI
@@ -14,13 +27,17 @@ on:
     branches: [main, beta]
   workflow_dispatch:
   merge_group:
+  schedule:
+    - cron: "5 8 * * *" # 3:05 AM Central during CDT
 
 permissions:
   contents: read
 
+# Pull requests and beta pushes cancel their own older run. Main pushes,
+# nightly, manual and merge-queue runs each get their own group.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || (github.event_name == 'push' && github.ref == 'refs/heads/beta') && 'beta' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -33,29 +50,62 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
-      legacy: ${{ github.event_name != 'pull_request' || steps.filter.outputs.legacy == 'true' }}
+      # heavy: the heavy builds may run (never on pull requests or merge queue).
+      heavy: ${{ steps.mode.outputs.heavy }}
+      # full: the macOS and Windows legs may run too (not on beta pushes).
+      full: ${{ steps.mode.outputs.full }}
+      rust: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.rust == 'true' }}
+      legacy: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.legacy == 'true' }}
+      desktop: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.desktop == 'true' }}
+      mobile: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.mobile == 'true' }}
+      tbcore: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.tbcore == 'true' }}
+      bridge: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.bridge == 'true' }}
+      web: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.web == 'true' }}
     steps:
+      - name: Mode
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          # all: no diff to filter on, so every path-gated job runs.
+          case "$EVENT" in
+            pull_request) all=false; heavy=false; full=false ;;
+            merge_group)  all=true;  heavy=false; full=false ;;
+            push)
+              all=false; heavy=true
+              if [ "$REF" = refs/heads/beta ]; then full=false; else full=true; fi ;;
+            *)            all=true;  heavy=true;  full=true ;;
+          esac
+          { echo "all=$all"; echo "heavy=$heavy"; echo "full=$full"; } >> "$GITHUB_OUTPUT"
+          echo "event=$EVENT ref=$REF all=$all heavy=$heavy full=$full"
       - uses: actions/checkout@v4
+        if: steps.mode.outputs.all != 'true'
       - uses: dorny/paths-filter@v3
         id: filter
-        if: github.event_name == 'pull_request'
+        if: steps.mode.outputs.all != 'true'
         with:
+          # Pull requests diff against their base. A push diffs against the
+          # branch's commit before the push.
+          base: ${{ github.ref }}
           filters: |
             rust:
               - 'crates/**'
               - 'src-tauri/**'
               - 'app/**'
+              - 'kb/**'
+              - 'assets/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'package.json'
               - 'package-lock.json'
               - 'vite.config.ts'
-              - 'kb/**'
               - '.github/workflows/ci.yml'
             legacy:
               - 'src/**'
+              - 'tests/**'
               - 'kb/**'
+              - 'assets/**'
               - 'sources/**'
               - 'tools/**'
               - 'installer/**'
@@ -63,6 +113,56 @@ jobs:
               - '*.bat'
               - 'app.manifest'
               - '.github/workflows/ci.yml'
+            app: &app
+              - 'app/**'
+              - 'src-tauri/**'
+              - 'crates/tb-core/**'
+              - 'crates/tb-rp1210-bridge/**'
+              - 'kb/**'
+              - 'assets/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'vite.config.ts'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+            desktop:
+              - *app
+              - 'tools/assert-pe-i386.ps1'
+            mobile:
+              - *app
+              - 'scripts/mobile/**'
+            tbcore:
+              - 'crates/tb-core/**'
+              - 'kb/**'
+              - 'assets/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+            bridge:
+              - 'crates/tb-core/**'
+              - 'crates/tb-rp1210-bridge/**'
+              - 'crates/rp1210-mock/**'
+              - 'tools/assert-pe-i386.ps1'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'app/**'
+              - 'crates/tb-core/**'
+              - 'crates/tb-wasm/**'
+              - 'kb/**'
+              - 'assets/**'
+              - 'src-tauri/tauri.conf.json'
+              - 'playwright.config.ts'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'vite.config.ts'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+
+  # ---- Short gate (pull requests and every push) ---------------------------
 
   format:
     runs-on: ubuntu-latest
@@ -76,6 +176,8 @@ jobs:
           rustup component add rustfmt
       - run: cargo fmt --all -- --check
 
+  # Clippy + tests for tb-core, the bridge (fake adapter), rp1210-mock and
+  # tb-wasm on Linux, plus the UI typecheck.
   linux:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
@@ -103,6 +205,7 @@ jobs:
       - name: Typecheck UI
         run: npm run typecheck
 
+  # C# offline self-test.
   windows:
     needs: changes
     if: needs.changes.outputs.legacy == 'true'
@@ -113,3 +216,648 @@ jobs:
       - name: Self-test
         shell: cmd
         run: test.bat
+
+  # ---- Heavy builds, Linux (push to beta/main, nightly, manual) ------------
+
+  # Rust tb-core: the same test files on wasm32 under Node via wasm-pack.
+  wasm:
+    name: wasm-pack test --node
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.tbcore == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+          node --version
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+
+      - name: Build wasm32
+        run: cargo build -p tb-core --target wasm32-unknown-unknown --locked
+
+      - name: wasm-pack test
+        run: wasm-pack test --node crates/tb-core
+
+  # Web build of the recode: tb-core as wasm (crates/tb-wasm), work orders in
+  # IndexedDB, no adapter. `npm run build:web` builds the wasm core and
+  # `vite build --mode web` into app/dist-web; Playwright then runs a KB search
+  # and a work-order save and reopen on Chromium, Firefox and WebKit. Builds and
+  # tests only: nothing is deployed and no secrets are used. Clippy and tests
+  # for tb-wasm run in `linux`.
+  web:
+    name: web (vite build + Playwright)
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build web
+        run: npm run build:web
+
+      - name: Bundle has no password DB
+        run: |
+          ls -la app/dist-web/assets
+          if grep -rl "ifix-passwords" app/dist-web; then
+            echo "::error::the web bundle mentions the password DB"; exit 1
+          fi
+
+      - name: Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Playwright
+        run: npx playwright test
+
+      - name: Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # Android build of the recode. The native project is generated here
+  # (`tauri android init`; src-tauri/gen/ is not committed), then a smoke build
+  # (TECHBENCH_SMOKE=1 baked in, since phones have no command line) runs the
+  # same UI smoke as desktop on an API 34 x86_64 emulator and reads logcat. The
+  # adapter is Windows-only, so live bus is reported as skipped. Debug builds
+  # only; no secrets.
+  android:
+    name: android (API 34 emulator smoke)
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The default list still names the retired "tools" package, which fails.
+          packages: platform-tools
+
+      - name: NDK
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-34" "build-tools;34.0.0"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: npm ci
+        run: npm ci
+
+      - name: tauri android init
+        run: npx tauri android init --ci
+
+      - name: Build smoke APK (x86_64, debug)
+        env:
+          TECHBENCH_SMOKE: "1"
+        run: npx tauri android build --debug --apk --target x86_64 --ci
+
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Emulator smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash scripts/mobile/android-smoke.sh
+
+      - name: APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: techbench-android-debug-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Tauri 2 + React desktop shell (app/ + src-tauri/) on Linux and macOS
+  # (Windows is `desktop-windows`). Builds installers and uploads them. Linux
+  # also runs `techbench --smoke`: the real app opens, the React UI runs a KB
+  # search for a known code through tb-core (plus a work-order save and list in
+  # a scratch TECHBENCH_HOME) and drives the RP1210 bridge on its fake adapter.
+  # Unsigned builds only; no secrets. A beta push builds the Linux leg only.
+  desktop:
+    name: desktop (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.desktop == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.full == 'true' && '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""},{"os":"macos-latest","bundles":"app,dmg","target":"universal-apple-darwin"}]' || '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""}]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tauri-${{ runner.os }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' }}
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev xvfb
+
+      - name: Bridge (Linux, fake adapter for the smoke)
+        if: runner.os == 'Linux'
+        run: cargo build -p tb-rp1210-bridge --release --locked
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck and build UI
+        run: npm run build
+
+      - name: Clippy (shell)
+        if: runner.os == 'Linux'
+        run: cargo clippy -p techbench --all-targets --locked -- -D warnings
+
+      - name: Build installers
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            npx tauri build --ci --bundles ${{ matrix.bundles }} --target ${{ matrix.target }}
+          else
+            npx tauri build --ci --bundles ${{ matrix.bundles }}
+          fi
+
+      - name: Smoke (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -o pipefail
+          TECHBENCH_HOME="$RUNNER_TEMP/tbhome" TECHBENCH_BRIDGE="$PWD/target/release/tb-rp1210-bridge" \
+            TECHBENCH_BRIDGE_FAKE=1 xvfb-run -a ./target/release/techbench --smoke | tee "$RUNNER_TEMP/smoke.txt"
+          grep -q "live bus: bridge .* RPM: 800" "$RUNNER_TEMP/smoke.txt"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: techbench-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
+            target/release/bundle/appimage/*.AppImage
+            target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+  # ---- Heavy builds, macOS and Windows (push to main, nightly, manual) -----
+
+  # tb-core clippy + tests on Windows and macOS (Linux runs in `linux`, and
+  # cargo fmt in `format`).
+  tb-core:
+    name: tb-core (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.full == 'true' && needs.changes.outputs.tbcore == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          rustc --version
+
+      - name: Clippy
+        run: cargo clippy -p tb-core --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test -p tb-core --locked
+
+  # iOS: the native project is generated here (`tauri ios init`), then an
+  # unsigned simulator build runs the same UI smoke as desktop and reads the
+  # app console. No secrets.
+  ios:
+    name: ios (simulator build and smoke)
+    needs: changes
+    if: needs.changes.outputs.full == 'true' && needs.changes.outputs.mobile == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios-sim aarch64-apple-ios
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: npm ci
+        run: npm ci
+
+      - name: tauri ios init
+        run: npx tauri ios init --ci
+
+      - name: Web assets
+        run: npm run build
+
+      - name: Simulator build and smoke
+        env:
+          TECHBENCH_SMOKE: "1"
+        run: bash scripts/mobile/ios-smoke.sh
+
+  # RP1210 bridge (crates/tb-rp1210-bridge): the 32-bit Windows sidecar that
+  # owns the J1939 adapter, built once per run. No hardware: the bridge runs
+  # against its built-in fake adapter, and its 32-bit DLL loader runs against a
+  # mock RP1210 driver DLL (crates/rp1210-mock, never shipped). Proves the exe
+  # is PE i386 and that the check rejects an x64 build, then uploads the exe for
+  # desktop (windows-latest) and the updater. Unsigned builds only; no secrets.
+  bridge-i686:
+    name: bridge i686 + mock DLL (windows-latest)
+    needs: changes
+    if: needs.changes.outputs.full == 'true' && (needs.changes.outputs.bridge == 'true' || needs.changes.outputs.desktop == 'true')
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      TARGET: i686-pc-windows-msvc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          rustup target add $TARGET
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' }}
+
+      - name: Clippy (i686)
+        run: cargo clippy -p tb-rp1210-bridge -p rp1210-mock --all-targets --target ${{ env.TARGET }} --locked -- -D warnings
+
+      - name: Build mock RP1210 DLL (i686)
+        run: cargo build -p rp1210-mock --target ${{ env.TARGET }} --locked
+
+      - name: Test (i686, fake adapter + mock DLL)
+        env:
+          RP1210_MOCK_DLL: ${{ github.workspace }}\target\i686-pc-windows-msvc\debug\rp1210_mock.dll
+        run: cargo test -p tb-rp1210-bridge -p rp1210-mock --target ${{ env.TARGET }} --locked -- --nocapture
+
+      - name: Build bridge (i686 release)
+        run: cargo build -p tb-rp1210-bridge --release --target ${{ env.TARGET }} --locked
+
+      - name: Assert PE i386
+        shell: pwsh
+        run: |
+          ./tools/assert-pe-i386.ps1 -Native target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./tools/assert-pe-i386.ps1 -Native target/i686-pc-windows-msvc/debug/rp1210_mock.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: PE check rejects an x64 build
+        shell: pwsh
+        run: |
+          cargo build -p tb-rp1210-bridge --release --locked
+          & ./tools/assert-pe-i386.ps1 -Native target/release/tb-rp1210-bridge.exe
+          if ($LASTEXITCODE -eq 0) { Write-Host "ERROR: x64 bridge passed the i386 check"; exit 1 }
+          Write-Host "OK: x64 bridge rejected"
+          exit 0
+
+      - name: Bridge smoke (i686 exe, fake adapter)
+        shell: pwsh
+        run: |
+          $req = '{"id":1,"cmd":"hello"}', '{"id":2,"cmd":"quit"}'
+          $out = $req | & target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe --fake
+          Write-Host $out
+          $hello = $out[0] | ConvertFrom-Json
+          if (-not $hello.ok -or $hello.data.pointerBits -ne 32) { Write-Host "ERROR: bridge is not 32-bit"; exit 1 }
+
+      - name: Upload bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: tb-rp1210-bridge-i686
+          if-no-files-found: error
+          path: target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe
+
+  # Desktop shell on Windows: MSI + NSIS with the 32-bit bridge sidecar from
+  # bridge-i686, then `techbench --smoke`, which must reach that sidecar on its
+  # fake adapter. Unsigned builds only; no secrets.
+  desktop-windows:
+    name: desktop (windows-latest)
+    needs: [changes, bridge-i686]
+    if: needs.changes.outputs.full == 'true' && needs.changes.outputs.desktop == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tauri-${{ runner.os }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' }}
+
+      - name: Bridge sidecar (32-bit, from bridge-i686)
+        uses: actions/download-artifact@v4
+        with:
+          name: tb-rp1210-bridge-i686
+          path: ${{ runner.temp }}/bridge
+
+      - name: Place the sidecar
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'bridge/tb-rp1210-bridge.exe'
+          ./tools/assert-pe-i386.ps1 -Native $exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          Copy-Item $exe src-tauri/binaries/tb-rp1210-bridge-x86_64-pc-windows-msvc.exe
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck and build UI
+        run: npm run build
+
+      - name: Build installers
+        run: npx tauri build --ci --bundles msi,nsis
+
+      - name: Smoke (Windows)
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'smoke.txt'
+          $env:TECHBENCH_SMOKE_OUT = $out
+          $env:TECHBENCH_HOME = Join-Path $env:RUNNER_TEMP 'tbhome'
+          $env:TECHBENCH_BRIDGE_FAKE = '1'
+          # The bundle step put the sidecar beside the app; it must still be the 32-bit build.
+          ./tools/assert-pe-i386.ps1 -Native target/release/tb-rp1210-bridge.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $p = Start-Process -FilePath '.\target\release\techbench.exe' -ArgumentList '--smoke' -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out }
+          if ($p.ExitCode -ne 0) {
+            Write-Host "ERROR: smoke exited $($p.ExitCode)"
+            exit 1
+          }
+          if (-not (Select-String -Path $out -Pattern 'live bus: bridge \S+ pointerBits 32; RPM: 800' -Quiet)) {
+            Write-Host "ERROR: the smoke did not reach the 32-bit bridge sidecar"
+            exit 1
+          }
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: techbench-Windows
+          if-no-files-found: error
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+
+  # Tauri desktop self-update, end to end on Windows: build Tech Bench 0.1.1 and
+  # 0.1.0 (NSIS) with the bridge sidecar from bridge-i686, install 0.1.0, point
+  # it at a local update feed that offers 0.1.1, and run `--update-smoke`. Pass
+  # means the app found 0.1.1, the plugin checked its signature, the installer
+  # replaced the app, and the new app reports 0.1.1 with nothing newer on the
+  # feed. The signing key is generated fresh in this job and thrown away: no
+  # secrets are used, and the shipped config has no updater section.
+  updater:
+    name: update from previous version (Windows)
+    needs: [changes, bridge-i686]
+    if: needs.changes.outputs.full == 'true' && needs.changes.outputs.desktop == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tauri-${{ runner.os }}
+          save-if: false
+
+      - name: Bridge sidecar (32-bit, from bridge-i686)
+        uses: actions/download-artifact@v4
+        with:
+          name: tb-rp1210-bridge-i686
+          path: ${{ runner.temp }}/bridge
+
+      - name: Place the sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'bridge/tb-rp1210-bridge.exe') src-tauri/binaries/tb-rp1210-bridge-x86_64-pc-windows-msvc.exe
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Throwaway signing key and local feed config
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'upd'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $pw = [guid]::NewGuid().ToString('N')
+          npx tauri signer generate --ci -p $pw -w (Join-Path $dir 'key') | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$pw"
+          Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY=$(Join-Path $dir 'key')"
+          $pub = (Get-Content (Join-Path $dir 'key.pub') -Raw).Trim()
+          foreach ($v in '0.1.0', '0.1.1') {
+            @{
+              version = $v
+              bundle = @{ createUpdaterArtifacts = $true }
+              plugins = @{
+                updater = @{
+                  pubkey = $pub
+                  endpoints = @('http://127.0.0.1:8765/latest.json')
+                  dangerousInsecureTransportProtocol = $true
+                  windows = @{ installMode = 'passive' }
+                }
+              }
+            } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $dir "conf-$v.json")
+          }
+
+      - name: Build 0.1.1 (the update)
+        shell: pwsh
+        run: |
+          npx tauri build --ci --bundles nsis --config "$env:RUNNER_TEMP/upd/conf-0.1.1.json"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $feed = Join-Path $env:RUNNER_TEMP 'feed'
+          New-Item -ItemType Directory -Force $feed | Out-Null
+          $setup = Get-Item 'target/release/bundle/nsis/*_0.1.1_x64-setup.exe'
+          Copy-Item $setup.FullName (Join-Path $feed 'techbench-0.1.1-setup.exe')
+          $sig = (Get-Content "$($setup.FullName).sig" -Raw).Trim()
+          @{
+            version = '0.1.1'
+            notes = 'CI update test'
+            pub_date = '2026-01-01T00:00:00Z'
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = $sig
+                url = 'http://127.0.0.1:8765/techbench-0.1.1-setup.exe'
+              }
+            }
+          } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $feed 'latest.json')
+          Get-Content (Join-Path $feed 'latest.json')
+
+      - name: Build 0.1.0 (the installed version)
+        shell: pwsh
+        run: |
+          npx tauri build --ci --bundles nsis --config "$env:RUNNER_TEMP/upd/conf-0.1.0.json"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Install 0.1.0, update it from the local feed
+        shell: pwsh
+        run: |
+          $setup = Get-Item 'target/release/bundle/nsis/*_0.1.0_x64-setup.exe'
+          $i = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($i.ExitCode -ne 0) { Write-Host "ERROR: 0.1.0 setup exited $($i.ExitCode)"; exit 1 }
+          $appDir = Join-Path $env:LOCALAPPDATA 'Tech Bench'
+          $exe = Get-ChildItem $appDir -Filter *.exe | Where-Object { $_.Name -notmatch '^uninstall|tb-rp1210-bridge' } | Select-Object -First 1
+          if (-not $exe) { Write-Host "ERROR: no app exe in $appDir"; Get-ChildItem $appDir; exit 1 }
+          $before = (Get-Item $exe.FullName).VersionInfo.ProductVersion
+          Write-Host "installed: $($exe.Name) $before"
+          if ($before -notlike '0.1.0*') { Write-Host "ERROR: expected 0.1.0 installed"; exit 1 }
+
+          $server = Start-Process -FilePath python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', (Join-Path $env:RUNNER_TEMP 'feed') -PassThru
+          Start-Sleep -Seconds 3
+
+          $out = Join-Path $env:RUNNER_TEMP 'update-smoke.txt'
+          $env:TECHBENCH_SMOKE_OUT = $out
+          $env:TECHBENCH_HOME = Join-Path $env:RUNNER_TEMP 'tbhome'
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--update-smoke' -Wait -PassThru
+          Write-Host "0.1.0 --update-smoke exited $($p.ExitCode)"
+
+          # The installer runs on after the old app exits. Its relaunch of the app goes through
+          # the shell without this job's environment, so wait for the new exe, then run it here.
+          $deadline = (Get-Date).AddMinutes(4)
+          while ((Get-Date) -lt $deadline) {
+            $v = (Get-Item $exe.FullName -ErrorAction SilentlyContinue).VersionInfo.ProductVersion
+            if ($v -like '0.1.1*') { break }
+            Start-Sleep -Seconds 5
+          }
+          Start-Sleep -Seconds 10
+          $after = (Get-Item $exe.FullName).VersionInfo.ProductVersion
+          Write-Host "installed after update: $($exe.Name) $after"
+          $q = Start-Process -FilePath $exe.FullName -ArgumentList '--update-smoke' -Wait -PassThru
+          Write-Host "0.1.1 --update-smoke exited $($q.ExitCode)"
+          Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          if (Test-Path $out) { Get-Content $out } else { Write-Host '(no smoke output)' }
+
+          $fail = $false
+          foreach ($want in '^UPDATE current 0\.1\.0$', '^UPDATE found 0\.1\.1$', '^UPDATE current 0\.1\.1$', '^UPDATE newest$') {
+            if (-not ((Test-Path $out) -and (Select-String -Path $out -Pattern $want -Quiet))) {
+              Write-Host "ERROR: smoke output is missing $want"; $fail = $true
+            }
+          }
+          if ($p.ExitCode -ne 0) { Write-Host "ERROR: the 0.1.0 app exited $($p.ExitCode)"; $fail = $true }
+          if ($q.ExitCode -ne 0) { Write-Host "ERROR: the 0.1.1 app exited $($q.ExitCode)"; $fail = $true }
+          if ($after -notlike '0.1.1*') { Write-Host "ERROR: expected 0.1.1 installed, got $after"; $fail = $true }
+          if ($fail) { exit 1 }
+          Write-Host 'UPDATE PASS: 0.1.0 updated itself to 0.1.1 from a signed local feed'
