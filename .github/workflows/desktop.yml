@@ -7,17 +7,39 @@
 # Unsigned builds only; no secrets. The C# `installer` job is separate and unchanged.
 name: desktop
 
-# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
-# CDT) and on manual runs. PRs use the short gate in ci.yml.
+# Heavy build: runs on push to beta/main when its paths change, nightly (3:xx AM
+# Central during CDT) and on manual runs. PRs use the short gate in ci.yml.
+# A beta push runs the Linux legs only; the macOS/Windows legs run on main
+# pushes, nightly and manual runs.
 on:
   workflow_dispatch:
   push:
     branches: [main, beta]
+    paths:
+      - 'app/**'
+      - 'src-tauri/**'
+      - 'crates/tb-core/**'
+      - 'crates/tb-rp1210-bridge/**'
+      - 'kb/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools/assert-pe-i386.ps1'
+      - '.github/workflows/desktop.yml'
   schedule:
     - cron: "10 8 * * *"
 
 permissions:
   contents: read
+
+# Beta pushes share one group, so a newer beta push cancels the older run.
+# main, nightly and manual runs each get their own group and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/beta' && 'beta' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,20 +47,13 @@ env:
 jobs:
   build:
     name: desktop (${{ matrix.os }})
+    # A beta push builds the Linux leg only; everything else builds all three.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-22.04
-            bundles: deb,rpm,appimage
-            target: ""
-          - os: windows-latest
-            bundles: msi,nsis
-            target: ""
-          - os: macos-latest
-            bundles: app,dmg
-            target: universal-apple-darwin
+        include: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/beta' && '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""}]' || '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""},{"os":"windows-latest","bundles":"msi,nsis","target":""},{"os":"macos-latest","bundles":"app,dmg","target":"universal-apple-darwin"}]') }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4

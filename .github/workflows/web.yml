@@ -4,17 +4,39 @@
 # Firefox and WebKit. Builds and tests only: nothing is deployed and no secrets are used.
 name: web
 
-# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
-# CDT) and on manual runs. PRs use the short gate in ci.yml.
+# Heavy build: runs on push to beta/main when its paths change, nightly (3:xx AM
+# Central during CDT) and on manual runs. PRs use the short gate in ci.yml.
+# A beta push runs the Linux legs only; the macOS/Windows legs run on main
+# pushes, nightly and manual runs.
 on:
   workflow_dispatch:
   push:
     branches: [main, beta]
+    paths:
+      - 'app/**'
+      - 'crates/tb-core/**'
+      - 'crates/tb-wasm/**'
+      - 'kb/**'
+      - 'assets/**'
+      - 'src-tauri/tauri.conf.json'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/web.yml'
   schedule:
     - cron: "20 8 * * *"
 
 permissions:
   contents: read
+
+# Beta pushes share one group, so a newer beta push cancels the older run.
+# main, nightly and manual runs each get their own group and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/beta' && 'beta' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -23,6 +45,7 @@ jobs:
   web:
     name: web (vite build + Playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4

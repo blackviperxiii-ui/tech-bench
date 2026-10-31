@@ -6,18 +6,32 @@
 # Releases are attached to the private GitHub release by hand and installed via shop Setup.
 name: Windows installer
 
-# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
-# CDT) and on manual runs. PRs use the short gate in ci.yml.
+# Heavy Windows build: runs on push to main when its paths change, nightly
+# (3:xx AM Central during CDT) and on manual runs. Beta pushes skip it (the
+# Linux legs of the other workflows cover beta). PRs use the short gate in ci.yml.
 on:
   workflow_dispatch:
   push:
-    branches: [main, beta]
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'kb/**'
+      - 'assets/**'
+      - 'sources/**'
+      - 'tools/**'
+      - 'installer/**'
+      - '*.cs'
+      - '*.bat'
+      - 'app.manifest'
+      - '.github/workflows/windows-installer.yml'
   schedule:
     - cron: "5 8 * * *"
 
 jobs:
   installer:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
