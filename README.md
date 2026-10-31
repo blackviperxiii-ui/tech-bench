@@ -87,7 +87,7 @@ On Linux agent boxes (no Windows csc), catch compile breaks with Mono before ope
 tools/linux-compile-check.sh
 ```
 
-That compiles SelfTest and TechBench with `mcs` from the same `sources\*.rsp` lists. It does **not** replace `test.bat` or the Windows CI `installer` job.
+That compiles SelfTest and TechBench with `mcs` from the same `sources\*.rsp` lists. It does **not** replace `test.bat` or the Windows CI `windows` and `installer` jobs.
 
 ## Knowledge base
 
