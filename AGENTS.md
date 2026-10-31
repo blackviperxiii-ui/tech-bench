@@ -9,7 +9,7 @@ Short, living notes for agents working this repo. Continual Learning may refresh
 
 ## Stack
 - C# WinForms, .NET Framework 4, **x86 only** (RP1210).
-- Test/build: `test.bat` / `build.bat` on Windows; CI job `installer` is the gate (Bugbot off account-wide).
+- Test/build: `test.bat` / `build.bat` on Windows; the required CI checks in `docs/ci.md` are the gate (Bugbot off account-wide).
 - Never commit secrets, `.env*`, tokens, keys/certs, or legacy settings files (`id-settings*.json`).
 
 ## Merge / release

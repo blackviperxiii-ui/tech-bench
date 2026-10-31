@@ -8,7 +8,7 @@ The detail behind the always-on list in `CLAUDE.md` and `.cursor/rules/tech-benc
 - The password DB (`kb/data/passwords/ifix-passwords.json`) is an open owner decision. Don't edit, move, untrack or rewrite history for it. `build.bat` and `test.bat` still embed it.
 
 ## 2. Branch protection on `main`
-- Repository ruleset **"Protect main"** targets `refs/heads/main`: changes only through a PR (0 required approvals, no code-owner, last-push or thread-resolution requirement), required status check `installer` (GitHub Actions) with the branch **up to date** before merge, and no force-push or deletion. The bypass list is empty, admins included.
+- One repository ruleset targets `refs/heads/main` and `refs/heads/beta`: changes only through a PR (0 required approvals, no code-owner, last-push or thread-resolution requirement), the required status checks listed in `docs/ci.md`, and no force-push or deletion. The bypass list is empty, admins included.
 - A direct push to `main` fails with `GH013: Repository rule violations`. That is expected; never push to `main`. Promote via PR only when the maintainer approves.
 - Check the live rules with `gh api repos/blackviperxiii-ui/tech-bench/rules/branches/main`. Changing the ruleset is the maintainer's call.
 - Merge methods are not restricted by the ruleset. The rule is squash and merge. Into `beta`, agents squash-merge on green; into `main` only on the maintainer's word.
@@ -24,7 +24,7 @@ git switch -c cursor/<topic> origin/beta
 - Never plan, review or screenshot from a stale checkout or from old images in `docs/`.
 
 ## 4. Merging and releases
-- Open every PR into `beta`. Squash-merge it yourself (`gh pr merge <n> --squash`) as soon as CI (`installer`) is green on its head, with no review hold. Re-check that the branch is current with `beta` first.
+- Open every PR into `beta`. Squash-merge it yourself (`gh pr merge <n> --squash`) as soon as the required checks (`docs/ci.md`) are green on its head, with no review hold. Re-check that the branch is current with `beta` first.
 - Only promoting `beta` → `main`, tagging, and releasing need the maintainer's explicit word for that version.
 - When the maintainer approves a promote/release: after the promote merge, wait for `main` CI (`installer`) to go green, download that run's artifact (`TechBench-Setup-<ver>.exe`, `TechBench.exe`, `latest.json`), and attach it with `gh release create v<ver> ... --target main`. The API creates the tag. Installs are manual through shop Setup (`docs/shop-rollout.md`).
 - There's no public feed and no dist repo. Don't create or upload to `tech-bench-dist`. Never use or ask for `DIST_REPO_TOKEN` or any PAT.
@@ -97,12 +97,12 @@ git switch -c cursor/<topic> origin/beta
 ## 15. Tooling choice (Grok Build, Cursor, Claude)
 - Pick **Grok Build CLI**, **Cursor** (cloud agent / IDE / Project), or **Claude** per job, whichever fits scope, machine access, and token budget. Document the choice in the brief.
 - Any coding agent (Claude, Cursor, or others) may pick up work; none is the only builder.
-- Windows CI `installer` is the merge gate. Bugbot is off account-wide. Local Linux/Mono is only a hint.
+- The required checks in `docs/ci.md` are the merge gate (`windows` runs `test.bat` on every PR). Bugbot is off account-wide. Local Linux/Mono is only a hint.
 
 ## 16. Semgrep, dyl-review, Continual Learning
 - **Semgrep:** before a **code** PR counts Ready, run Semgrep on the touched area (or the repo). Fix findings or justify them under `Skipped / not verified` / Notes. Docs-only PRs may mark Semgrep N/A, but still keep this gate in the playbook.
 - **`dyl-review`:** quick by default for PR review drafts; deep only when asked. Never posts to the PR by itself.
 - **Continual Learning:** keep this repo's `AGENTS.md` current via the continual-learning / `agents-memory-updater` flow. No secrets in `AGENTS.md`.
-- **Banned:** do **not** use `dyl-ready-pr` **merge** or **babysit** steps. Agents squash-merge into `beta` on green `installer`; only beta→main / tag / release needs user. No merge queues that bypass the installer gate.
+- **Banned:** do **not** use `dyl-ready-pr` **merge** or **babysit** steps. Agents squash-merge into `beta` on green required checks; only beta→main / tag / release needs user. No merge queues that bypass the required checks.
 
 
