@@ -6,12 +6,26 @@
 # shipped config has no updater section (production key and feed are the user's to set up).
 name: updater
 
-# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
-# CDT) and on manual runs. PRs use the short gate in ci.yml.
+# Heavy Windows build: runs on push to main when its paths change, nightly
+# (3:xx AM Central during CDT) and on manual runs. Beta pushes skip it (the
+# Linux legs of the other workflows cover beta). PRs use the short gate in ci.yml.
 on:
   workflow_dispatch:
   push:
-    branches: [main, beta]
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'src-tauri/**'
+      - 'crates/tb-core/**'
+      - 'crates/tb-rp1210-bridge/**'
+      - 'kb/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/updater.yml'
   schedule:
     - cron: "25 8 * * *"
 
@@ -25,6 +39,7 @@ jobs:
   update-from-previous:
     name: update from previous version (Windows)
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -5,17 +5,33 @@
 # Unsigned builds only; no secrets. The C# `installer` job is separate and unchanged.
 name: rp1210-bridge
 
-# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
-# CDT) and on manual runs. PRs use the short gate in ci.yml.
+# Heavy build: runs on push to beta/main when its paths change, nightly (3:xx AM
+# Central during CDT) and on manual runs. PRs use the short gate in ci.yml.
+# A beta push runs the Linux legs only; the macOS/Windows legs run on main
+# pushes, nightly and manual runs.
 on:
   workflow_dispatch:
   push:
     branches: [main, beta]
+    paths:
+      - 'crates/tb-core/**'
+      - 'crates/tb-rp1210-bridge/**'
+      - 'crates/rp1210-mock/**'
+      - 'tools/assert-pe-i386.ps1'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/rp1210-bridge.yml'
   schedule:
     - cron: "30 8 * * *"
 
 permissions:
   contents: read
+
+# Beta pushes share one group, so a newer beta push cancels the older run.
+# main, nightly and manual runs each get their own group and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/beta' && 'beta' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,6 +40,7 @@ jobs:
   fake:
     name: bridge fake adapter (ubuntu-latest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +59,10 @@ jobs:
 
   win32:
     name: bridge i686 + mock DLL (windows-latest)
+    # Windows leg: main pushes, nightly and manual runs only.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/beta') }}
     runs-on: windows-latest
+    timeout-minutes: 20
     env:
       TARGET: i686-pc-windows-msvc
     steps:

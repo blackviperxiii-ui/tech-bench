@@ -7,17 +7,39 @@
 # Windows-only, so live bus is reported as skipped. Debug/unsigned builds only; no secrets.
 name: mobile
 
-# Heavy build: runs on push to beta/main, nightly (3:xx AM Central during
-# CDT) and on manual runs. PRs use the short gate in ci.yml.
+# Heavy build: runs on push to beta/main when its paths change, nightly (3:xx AM
+# Central during CDT) and on manual runs. PRs use the short gate in ci.yml.
+# A beta push runs the Linux legs only; the macOS/Windows legs run on main
+# pushes, nightly and manual runs.
 on:
   workflow_dispatch:
   push:
     branches: [main, beta]
+    paths:
+      - 'app/**'
+      - 'src-tauri/**'
+      - 'crates/tb-core/**'
+      - 'crates/tb-rp1210-bridge/**'
+      - 'kb/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/mobile/**'
+      - '.github/workflows/mobile.yml'
   schedule:
     - cron: "15 8 * * *"
 
 permissions:
   contents: read
+
+# Beta pushes share one group, so a newer beta push cancels the older run.
+# main, nightly and manual runs each get their own group and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/beta' && 'beta' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -26,6 +48,7 @@ jobs:
   android:
     name: android (API 34 emulator smoke)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NDK_VERSION: 27.2.12479018
     steps:
@@ -99,7 +122,10 @@ jobs:
 
   ios:
     name: ios (simulator build and smoke)
+    # macOS leg: main pushes, nightly and manual runs only.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/beta') }}
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
