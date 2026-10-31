@@ -2,20 +2,33 @@
 
 All build and test jobs live in `.github/workflows/ci.yml`. Three small workflows sit beside it: `pii-guard.yml` (the personal-info guard), `windows-installer.yml` (the C# Inno installer, kept separate because `SelfTest.cs` reads that file) and `claude.yml` (owner-triggered assistant, not CI).
 
-## What runs when
+## Run-on and skip-on
 
-The `changes` job in `ci.yml` reads the event and the changed paths, then each job gates on its outputs with a job-level `if:`.
+The `changes` job in `ci.yml` reads the event and the changed paths, then each job gates on its outputs with a job-level `if:`. On a push, a path-gated job runs only when its paths changed since the branch's previous commit.
 
-| Event | Jobs that can run |
-|---|---|
-| Pull request into `beta` or `main` | `format`, `linux`, `windows`, plus `pii-guard`. Heavy builds never run on pull requests. |
-| Push to `beta` | The PR set, plus the Linux heavy builds whose paths changed: `desktop (ubuntu-22.04)`, `android (API 34 emulator smoke)`, `web (vite build + Playwright)`, `wasm-pack test --node`. |
-| Push to `main` | All of the above, plus the macOS and Windows legs: `desktop (macos-latest)`, `ios (simulator build and smoke)`, `tb-core (windows-latest)`, `tb-core (macos-latest)`, `bridge i686 + mock DLL (windows-latest)`, `desktop (windows-latest)`, `update from previous version (Windows)`, and `installer` from `windows-installer.yml`. |
-| Nightly (`schedule`) and manual (`workflow_dispatch`) | Everything, without a paths filter. Nightly runs only on `main`, because GitHub schedules runs on the default branch only. |
-
-On a push, a job runs only when its paths changed since the branch's previous commit. `format` and `pii-guard` always run.
+| Event | Runs | Skips | Cancelled by a newer run? |
+|---|---|---|---|
+| Pull request into `beta` or `main` | `format`, `linux` (Linux build + test), `windows` (C# `test.bat`), `pii-guard` | `linux`/`windows` when their paths didn't change (they still report as passed). Every heavy build. No macOS. | Yes, a newer push to the same PR |
+| Push to `beta` | The PR set, plus the Linux heavy builds whose paths changed: `desktop (ubuntu-22.04)`, `android (API 34 emulator smoke)`, `web (vite build + Playwright)`, `wasm-pack test --node` | All Windows and macOS legs except `windows` | Yes, a newer push to `beta` |
+| Push to `main` (promotion) | All of the above, plus the Windows legs whose paths changed: `bridge i686 + mock DLL (windows-latest)`, `desktop (windows-latest)`, `update from previous version (Windows)`, `tb-core (windows-latest)`, and `installer` (`windows-installer.yml`) | macOS legs. No screenshots. | No |
+| Tag `v*` | Nothing. No release workflow: the release is attached by hand from the green `main` build's `installer` artifact. | Everything | n/a |
+| Nightly (`schedule`, 08:05 UTC, default branch only) | Everything with no paths filter, plus the macOS legs: `desktop (macos-latest)`, `ios (simulator build and smoke)`, `tb-core (macos-latest)` | Every job but `format` when an earlier push, nightly or manual `ci.yml` run on the same commit passed with no job skipped. `installer` when it already passed on the same commit. If the lookup fails, the nightly runs in full. | No |
+| Manual (`workflow_dispatch`) | Everything, like the nightly, with no skip | Nothing | No |
+| Merge queue | The PR set, with no paths filter | Heavy builds | No |
+| Issue label or `@claude` comment by the owner | `claude.yml` | Everyone else's events | No |
 
 The 32-bit bridge sidecar is built once per run, in `bridge i686 + mock DLL (windows-latest)`. `desktop (windows-latest)` and the updater download it as an artifact.
+
+## Rules for workflow changes
+
+Update this file in the same PR as any workflow change.
+
+- Every job sets `timeout-minutes`, a few times its usual run time.
+- Every `actions/upload-artifact` step sets `retention-days: 7` or less. The bridge hand-off keeps 1 day. The `installer` artifact keeps 7 days, so attach it to the GitHub release within a week of the `main` build, or re-run the build.
+- Heavy builds never run on pull requests.
+- macOS runs only on nightly and manual runs.
+- Path gating is a job-level `if:` on the `changes` outputs, never a workflow-level path filter on a workflow that holds a required check.
+- A nightly does not repeat a commit that already passed.
 
 ## Required checks
 

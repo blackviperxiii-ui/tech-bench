@@ -10,7 +10,7 @@ The C# WinForms app is still the shipping build; this crate lives alongside it.
   don't touch the filesystem (decode, bam, names, search, ini) also run on wasm32 under Node.
 - CI (`.github/workflows/ci.yml`): `format` and `linux` run fmt, clippy and tests on every PR
   and push; `wasm` runs `wasm-pack test --node` on pushes; `tb-core` runs clippy and tests on
-  Windows and macOS on main pushes, nightly and manual runs.
+  Windows on main pushes, and on Windows and macOS on nightly and manual runs.
 
 ```
 cargo test -p tb-core

@@ -6,9 +6,12 @@
 #
 # Push to beta: the short gate plus the Linux heavy builds whose paths changed
 #   (desktop on Ubuntu, android emulator smoke, web + Playwright, wasm tests).
-# Push to main, nightly and manual runs: everything above plus the macOS and
-#   Windows legs (desktop macOS/Windows, ios, tb-core Windows/macOS, bridge i686,
-#   updater). Nightly and manual runs ignore paths and run all.
+# Push to main: everything above plus the Windows legs whose paths changed
+#   (desktop Windows, tb-core Windows, bridge i686, updater).
+# Nightly and manual runs: everything, with no paths filter, plus the macOS
+#   legs (desktop macOS, ios, tb-core macOS). A nightly skips (all but
+#   `format`) when its commit already passed a run with no job skipped.
+# docs/ci.md has the full run-on/skip-on table.
 #
 # Windows builds the 32-bit RP1210 bridge sidecar once (bridge-i686) and hands
 # it to desktop (windows-latest) and the updater as an artifact.
@@ -49,41 +52,76 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
     outputs:
       # heavy: the heavy builds may run (never on pull requests or merge queue).
       heavy: ${{ steps.mode.outputs.heavy }}
-      # full: the macOS and Windows legs may run too (not on beta pushes).
+      # full: the Windows legs may run too (not on beta pushes).
       full: ${{ steps.mode.outputs.full }}
-      rust: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.rust == 'true' }}
-      legacy: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.legacy == 'true' }}
-      desktop: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.desktop == 'true' }}
-      mobile: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.mobile == 'true' }}
-      tbcore: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.tbcore == 'true' }}
-      bridge: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.bridge == 'true' }}
-      web: ${{ steps.mode.outputs.all == 'true' || steps.filter.outputs.web == 'true' }}
+      # mac: the macOS legs may run too (nightly and manual runs only).
+      mac: ${{ steps.mode.outputs.mac }}
+      rust: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.rust == 'true') }}
+      legacy: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.legacy == 'true') }}
+      desktop: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.desktop == 'true') }}
+      mobile: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.mobile == 'true') }}
+      tbcore: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.tbcore == 'true') }}
+      bridge: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.bridge == 'true') }}
+      web: ${{ steps.mode.outputs.skip != 'true' && (steps.mode.outputs.all == 'true' || steps.filter.outputs.web == 'true') }}
     steps:
+      # A nightly on a commit where an earlier push, nightly or manual CI run
+      # passed with no job skipped would only repeat it, so the nightly skips
+      # every job but `format`. Path-filtered push runs skip jobs, so they
+      # don't count. If the lookup fails, the nightly runs in full.
+      - name: Skip nightly if this commit already passed
+        id: nightly
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=false
+          if ids=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=50" \
+              --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch") | .id'); then
+            for id in $ids; do
+              notok=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.conclusion != "success")] | length') || continue
+              if [ "$notok" = 0 ]; then
+                passed=true
+                echo "${GITHUB_SHA} already passed every job in run ${id}; skipping the nightly rerun."
+                break
+              fi
+            done
+          else
+            echo "Run lookup failed; running the nightly in full."
+          fi
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
       - name: Mode
         id: mode
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
+          PASSED: ${{ steps.nightly.outputs.passed }}
         run: |
           # all: no diff to filter on, so every path-gated job runs.
+          # skip: a nightly whose commit already passed; nothing path-gated runs.
+          skip=false
           case "$EVENT" in
-            pull_request) all=false; heavy=false; full=false ;;
-            merge_group)  all=true;  heavy=false; full=false ;;
+            pull_request) all=false; heavy=false; full=false; mac=false ;;
+            merge_group)  all=true;  heavy=false; full=false; mac=false ;;
             push)
-              all=false; heavy=true
+              all=false; heavy=true; mac=false
               if [ "$REF" = refs/heads/beta ]; then full=false; else full=true; fi ;;
-            *)            all=true;  heavy=true;  full=true ;;
+            *)            all=true;  heavy=true;  full=true;  mac=true ;;
           esac
-          { echo "all=$all"; echo "heavy=$heavy"; echo "full=$full"; } >> "$GITHUB_OUTPUT"
-          echo "event=$EVENT ref=$REF all=$all heavy=$heavy full=$full"
+          if [ "$PASSED" = true ]; then
+            skip=true; all=false; heavy=false; full=false; mac=false
+          fi
+          { echo "all=$all"; echo "heavy=$heavy"; echo "full=$full"; echo "mac=$mac"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
+          echo "event=$EVENT ref=$REF all=$all heavy=$heavy full=$full mac=$mac skip=$skip"
       - uses: actions/checkout@v4
-        if: steps.mode.outputs.all != 'true'
+        if: steps.mode.outputs.all != 'true' && steps.mode.outputs.skip != 'true'
       - uses: dorny/paths-filter@v3
         id: filter
-        if: steps.mode.outputs.all != 'true'
+        if: steps.mode.outputs.all != 'true' && steps.mode.outputs.skip != 'true'
         with:
           # Pull requests diff against their base. A push diffs against the
           # branch's commit before the push.
@@ -391,7 +429,8 @@ jobs:
   # also runs `techbench --smoke`: the real app opens, the React UI runs a KB
   # search for a known code through tb-core (plus a work-order save and list in
   # a scratch TECHBENCH_HOME) and drives the RP1210 bridge on its fake adapter.
-  # Unsigned builds only; no secrets. A beta push builds the Linux leg only.
+  # Unsigned builds only; no secrets. The macOS leg runs on nightly and manual
+  # runs only.
   desktop:
     name: desktop (${{ matrix.os }})
     needs: changes
@@ -399,7 +438,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.changes.outputs.full == 'true' && '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""},{"os":"macos-latest","bundles":"app,dmg","target":"universal-apple-darwin"}]' || '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""}]') }}
+        include: ${{ fromJSON(needs.changes.outputs.mac == 'true' && '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""},{"os":"macos-latest","bundles":"app,dmg","target":"universal-apple-darwin"}]' || '[{"os":"ubuntu-22.04","bundles":"deb,rpm,appimage","target":""}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -469,16 +508,17 @@ jobs:
         with:
           name: techbench-${{ runner.os }}
           if-no-files-found: error
+          retention-days: 7
           path: |
             target/release/bundle/deb/*.deb
             target/release/bundle/rpm/*.rpm
             target/release/bundle/appimage/*.AppImage
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
 
-  # ---- Heavy builds, macOS and Windows (push to main, nightly, manual) -----
+  # ---- Heavy builds, Windows (push to main) and macOS (nightly, manual) ----
 
-  # tb-core clippy + tests on Windows and macOS (Linux runs in `linux`, and
-  # cargo fmt in `format`).
+  # tb-core clippy + tests on Windows (push to main) and macOS (nightly and
+  # manual runs). Linux runs in `linux`, and cargo fmt in `format`.
   tb-core:
     name: tb-core (${{ matrix.os }})
     needs: changes
@@ -486,7 +526,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: ${{ fromJSON(needs.changes.outputs.mac == 'true' && '["windows-latest","macos-latest"]' || '["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -513,7 +553,7 @@ jobs:
   ios:
     name: ios (simulator build and smoke)
     needs: changes
-    if: needs.changes.outputs.full == 'true' && needs.changes.outputs.mobile == 'true'
+    if: needs.changes.outputs.mac == 'true' && needs.changes.outputs.mobile == 'true'
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -622,6 +662,8 @@ jobs:
         with:
           name: tb-rp1210-bridge-i686
           if-no-files-found: error
+          # Only desktop (windows-latest) and the updater in this run read it.
+          retention-days: 1
           path: target/i686-pc-windows-msvc/release/tb-rp1210-bridge.exe
 
   # Desktop shell on Windows: MSI + NSIS with the 32-bit bridge sidecar from
@@ -704,6 +746,7 @@ jobs:
         with:
           name: techbench-Windows
           if-no-files-found: error
+          retention-days: 7
           path: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*.exe
