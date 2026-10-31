@@ -7,8 +7,8 @@
 name: Windows installer
 
 # Heavy Windows build: runs on push to main when its paths change, nightly
-# (3:xx AM Central during CDT) and on manual runs. Beta pushes skip it (the
-# Linux legs of the other workflows cover beta). PRs use the short gate in ci.yml.
+# (3:xx AM Central during CDT; skipped when the commit already passed) and on
+# manual runs. Beta pushes and PRs run test.bat in ci.yml's `windows` job.
 on:
   workflow_dispatch:
   push:
@@ -29,7 +29,43 @@ on:
     - cron: "5 8 * * *"
 
 jobs:
+  # A nightly on a commit whose `installer` job already passed in a push,
+  # nightly or manual run would only repeat it. If the lookup fails, the
+  # nightly runs.
+  nightly-guard:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    steps:
+      - name: Skip nightly if this commit already passed
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=false
+          if ids=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/windows-installer.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=50" \
+              --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch") | .id'); then
+            for id in $ids; do
+              ok=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name == "installer" and .conclusion == "success")] | length') || continue
+              if [ "$ok" != 0 ] && [ -n "$ok" ]; then
+                passed=true
+                echo "${GITHUB_SHA} already passed installer in run ${id}; skipping the nightly rerun."
+                break
+              fi
+            done
+          else
+            echo "Run lookup failed; running the nightly."
+          fi
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+
   installer:
+    needs: nightly-guard
+    if: ${{ !cancelled() && needs.nightly-guard.outputs.passed != 'true' }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -75,6 +111,8 @@ jobs:
         with:
           name: TechBench-${{ github.sha }}
           if-no-files-found: error
+          # Attach to the GitHub release within 7 days of the main build, or re-run it.
+          retention-days: 7
           path: |
             dist/TechBench-Setup-*.exe
             TechBench.exe
