@@ -32,22 +32,24 @@ Update this file in the same PR as any workflow change.
 
 ## Required checks
 
-The repository ruleset for `main` and `beta` sets these. Read the live set with `gh api repos/{owner}/{repo}/rules/branches/beta`.
+Two repository rulesets set these, and their rules add up. `main and beta: PRs only, CI green, no force-push or delete` covers both branches and requires `pii-guard`. `beta: CI checks required` covers `beta` and requires the `ci.yml` checks, pinned to GitHub Actions (app id 15368) so nothing else can post them. Read the live set with `gh api repos/{owner}/{repo}/rules/branches/beta`.
 
 | Branch | Required checks |
 |---|---|
-| `beta` | `format`, `linux`, `windows`, `pii-guard` |
-| `main` | `format`, `linux`, `windows`, `pii-guard`. Until `ci.yml` is on `main`, `pii-guard` only. |
+| `beta` | `changes`, `format`, `linux`, `windows`, `pii-guard` |
+| `main` | `changes`, `format`, `linux`, `windows`, `pii-guard`. Until `ci.yml` is on `main`, `pii-guard` only: add `refs/heads/main` to `beta: CI checks required` after the promotion that brings `ci.yml` to `main`. |
 
 Each of these checks reports on every pull request into `beta` and `main`:
 
 - `pii-guard` runs on every pull request, with no filter.
-- `format` runs on every `ci.yml` run, with no condition.
-- `linux` and `windows` skip with a job-level `if:` when their paths did not change. GitHub reports a job skipped by `if:` as a passing check, so a docs-only pull request still shows all four checks green.
+- `changes` and `format` run on every `ci.yml` run, with no condition.
+- `linux` and `windows` skip with a job-level `if:` when their paths did not change. GitHub reports a job skipped by `if:` as a passing check, so a docs-only pull request still shows all five checks green.
+
+Why `changes` is required: `linux` and `windows` need it. If `changes` fails or is cancelled, GitHub skips both, and a skipped job counts as passing, so a pull request could merge with nothing tested. Requiring `changes` makes that failure block the merge.
 
 Rules that keep this true:
 
 - Never put an `on.<event>.paths` filter, or a workflow-level `if`, on a workflow that holds a required check. A workflow that does not start leaves its checks at "Expected — waiting for status" forever. Gate jobs with `if:` on the `changes` outputs instead.
-- Never rename `format`, `linux`, `windows` or `pii-guard` without updating the ruleset in the same change.
+- Never rename `changes`, `format`, `linux`, `windows` or `pii-guard` without updating the ruleset in the same change.
 - Don't require a matrix job (its check name includes the matrix value), and don't require a job that runs only on push, such as `installer` or any heavy build. Pull requests never run those jobs, so a required one blocks every pull request.
 - `main` gets the `ci.yml` checks only after `ci.yml` is on `main`. Until then, a pull request from a branch cut from `main` has no `ci.yml` to run.
