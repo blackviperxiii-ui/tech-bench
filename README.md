@@ -1,143 +1,184 @@
 # Tech Bench
 
-Windows shop app for air compressor techs: **knowledge-base search** plus **Cummins INLINE 7 / J1939** in one window.
+[![Windows installer](https://github.com/blackviperxiii-ui/tech-bench/actions/workflows/windows-installer.yml/badge.svg?branch=main)](https://github.com/blackviperxiii-ui/tech-bench/actions/workflows/windows-installer.yml)
+[![pii-guard](https://github.com/blackviperxiii-ui/tech-bench/actions/workflows/pii-guard.yml/badge.svg?branch=main)](https://github.com/blackviperxiii-ui/tech-bench/actions/workflows/pii-guard.yml)
 
-Current stamp: **1.2.22** (Help → About). The field database ships with the app: fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dims. PDF manuals stay on their original paths.
+Windows WinForms shop tool for air-compressor knowledge-base search and Cummins INLINE 7 / SAE J1939 diagnostics.
 
-## What it does
+## Overview
 
-- Search fault codes, manuals, rental filters/oil, equipment dims, and (if present) iFix service passwords
-- Open PDFs from the USB/Doosan/IR index
-- INLINE 7 page: live RPM, DM1/DM2, code reset, bus monitor, snapshots
-- **Trend** strip chart of RPM / coolant / oil / battery / fuel rate, with the lamp-on periods shaded
-- **Timeline** of every code that came and went, with the RPM at the moment it latched
-- **Unit history** — what this model/serial has shown in past saved sessions
-- **Report** — printable one-page summary for a work order
-- Job strip (model/serial/customer + last work order) prefixes saved sessions and scopes the history
-- Remembers last model/serial/customer/WO and window size in `%LocalAppData%\TechBench\settings.json`; last RP1210 adapter and shell/INLINE page in `adapter-prefs.json`
-- Help → Check for updates: `latest.json` + SHA-256 of `TechBench.exe`, swapped in the **install folder** by a tiny `.cmd` after the window closes (never mid-session, never a GitHub token). The built-in feed is not published. A shop can point at a network share with `update-feed-path.txt` beside the exe (folder holding `latest.json`), or at a URL with `update-url.txt`
-- **Shop sync** — two-way share of tech notes, user codes, and shop files through the knowledge-base folder or a USB/network folder you pick in Shop → Sync
-- **Work orders** — pick a WO, fill customer/model/serial, notes, photos, attach the diagnostic report, share the packet with other techs, shop log on/off. IntelliDealer Azure API Gateway log on / log off / sign off / multimedia post-back only when dealer credentials are in Shop → IntelliDealer
+Tech Bench gives air-compressor technicians offline service reference lookup and live RP1210 / SAE J1939 diagnostics in a single 32-bit Windows desktop window. It runs per-user (`asInvoker`) without administrator rights, cloud sign-in, or an active network connection.
 
-A missing knowledge base does not block launch — the search status line says the index is empty.
+Current stamp: **1.2.22** (Help → About).
 
-## Install (shop PC)
+The bundled field database ships both inside the installer (`air-compressor-kb`) and embedded in `TechBench.exe`, covering fault codes, iFix service access, the USB manual index, rental filter/oil charts, and equipment dimensions. Indexed PDF manuals stay at their original paths on the shop PC, and a missing knowledge base never blocks launch.
 
-Run `TechBench-Setup-<version>.exe` from the private GitHub release, or from the Windows installer CI artifact. It does **not** need administrator. The shop PC does not need a GitHub login. See [docs/shop-rollout.md](docs/shop-rollout.md).
+## Table of Contents
 
-- Puts `TechBench.exe`, tab icons, and `air-compressor-kb` (the field database) in `%LocalAppData%\Programs\TechBench`
-- Start Menu shortcut (Uninstall is there too)
-- Desktop shortcut unless you untick it. An upgrade keeps the earlier choice
+- [Overview](#overview)
+- [Features](#features)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
-That folder is user-writable, so **Help → Check for updates** replaces the installed exe in place. Do not copy `TechBench.exe` onto the Desktop after that — you would update the wrong file.
+## Features
 
-INLINE 7 / other RP1210 adapters still need the **vendor** driver package (Cummins, Noregon, …). Those installers are usually machine-wide and often ask for admin. Tech Bench itself does not ship those DLLs and does not ask for elevation (`asInvoker`).
+- **Knowledge-base search**: Search 155 fault codes, 2,147 USB/Doosan/IR manual index entries, 63 rental filter/oil rows, 37 equipment dimension rows, and (if present) 1,424 iFix service-access entries (`kb\data\INDEX.json`), and open indexed PDFs safely via `SafeOpen`.
+- **INLINE 7 & RP1210 diagnostics**: Live RPM, per-module DM1/DM2 fault lists (engine SA 0, compressor controller SA 48, DEF/aftertreatment modules), PGN `FE56` DEF level/temp/SCR inducement readout, bus monitor, and session snapshots on a background worker thread.
+- **Trend, Timeline, and Unit History**: Live strip chart of RPM, coolant temperature, oil pressure, battery voltage, and fuel rate with lamp-on periods shaded; chronological fault timeline with latched RPM; and fleet history aggregated across saved `_dtcs.csv` sessions by model/serial.
+- **Confirmed J1939 code clearing**: Direct J1939-73 Request (PGN 59904) for DM11 (active) and DM3 (previously active) per module, waiting for ACK/NACK and re-reading DM1, DM2, and PGN `FE56` to report what cleared and what returned.
+- **Work orders & IntelliDealer**: Attach customer/model/serial metadata, tech notes, photos, INLINE 7 snapshots, and printable one-page job reports to a work order; share packets across benches; and post log on / log off / sign off / multimedia to the IntelliDealer Azure API Gateway when dealer credentials are configured.
+- **Two-way shop sync**: Share user-added fault codes, notes, and files across shop PCs via a shared folder, USB drive, or network share (`Shop → Sync`) with explicit conflict resolution (**Keep mine**, **Keep theirs**, **Keep both**).
+- **Verified per-user updates**: SHA-256 verified `latest.json` swap in `%LocalAppData%\Programs\TechBench` applied after exit via a shop share (`update-feed-path.txt`) or manifest URL (`update-url.txt`), never mid-session and never using a GitHub token.
 
-## Build (32-bit — required for INLINE 7)
+## Getting Started
 
-Windows, .NET Framework 4.x:
+### Prerequisites
+
+- **Shop PC (running the installer)**:
+  - Windows 7 SP1 or later
+  - 32-bit .NET Framework 4.x runtime (4.5 or later Full `Release` registry key checked by Setup)
+  - Vendor 32-bit RP1210 adapter drivers (Cummins, Noregon, etc.) for live bus traffic; Tech Bench does not bundle vendor DLLs
+- **Building from source**:
+  - Windows with the in-box `.NET Framework v4.0.30319` C# compiler (`%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe`) and PowerShell
+  - Inno Setup 6 (`ISCC.exe`) for building the installer ([installer/build.bat](installer/build.bat) fetches a local copy into gitignored `tools\innosetup` via [installer/fetch-iscc.ps1](installer/fetch-iscc.ps1) if not already installed)
+
+### Install on a Shop PC
+
+Download `TechBench-Setup-<version>.exe` from the private GitHub release `v<version>` or from the `Windows installer` GitHub Actions artifact, and run it on the shop PC. No administrator account or GitHub login is required. See [docs/shop-rollout.md](docs/shop-rollout.md) for upgrade and rollback steps.
+
+- Installs `TechBench.exe`, icons, and `air-compressor-kb` to `%LocalAppData%\Programs\TechBench`
+- Creates Start Menu shortcuts (including **Uninstall Tech Bench**) and an optional Desktop shortcut (preserved across upgrades)
+- Launch from the Start Menu or Desktop shortcut rather than copying `TechBench.exe` onto the Desktop, so upgrades and in-place updates target the active copy
+
+### Build from Source
+
+`/platform:x86` is mandatory because RP1210 adapter drivers are 32-bit only (the **Adapters** tab warns if the process bitness is wrong).
 
 ```bat
-cd Documents\TechBench
+git clone https://github.com/blackviperxiii-ui/tech-bench.git
+cd tech-bench
 build.bat
 ```
 
-That produces `TechBench.exe`. Prefer the Setup exe above for shop PCs.
+[build.bat](build.bat) runs [tools/gen-rsp.bat](tools/gen-rsp.bat) to generate gitignored `sources\*.rsp` response files from [sources/core.list](sources/core.list) and [sources/app.list](sources/app.list), then compiles `TechBench.exe` with embedded KB JSON and cheat-sheet resources.
 
-`build.bat` / `test.bat` call `tools\gen-rsp.bat`, which writes `sources\*.rsp` from `sources\core.list`, `sources\app.list`, and a `tests\*.cs` glob (gitignored; always regenerated). Edit the `.list` files (root names or `src\...` paths) or drop a new file under `tests\`; do not commit or hand-edit the generated `.rsp` files. `gen-rsp.sh` sorts the same way for Linux agents. Feature code is moving into `src\Features\`, `src\Core\`, and `src\Shell\` (one folder per PR).
-
-`TechBench.exe --smoke` checks the version stamp and the bundled knowledge base, then exits without a window. `--smoke-out <path>` writes the one-line report (the exe is a Windows program, so the CI gate reads that file). The Windows installer workflow runs this after a silent per-user install, then uninstalls.
-
-`/platform:x86` is not optional: RP1210 adapter drivers are 32-bit only. The Adapters page tells you if the running process is wrong.
-
-### Release (hash + latest.json + installer)
+### Build Release Artifacts
 
 ```bat
 release.bat
 ```
 
-Writes:
+[release.bat](release.bat) compiles `TechBench.exe`, verifies the PE32 `i386` / `32BITREQUIRED` headers with [tools/assert-pe-i386.ps1](tools/assert-pe-i386.ps1), writes `latest.json` (`version`, `sha256`, `url`), and builds `dist\TechBench-Setup-<version>.exe` via [installer/techbench.iss](installer/techbench.iss). Attach `dist\TechBench-Setup-<version>.exe`, `TechBench.exe`, and `latest.json` to the private GitHub release `v<version>` so technicians can install or upgrade via the shop Setup ([docs/shop-rollout.md](docs/shop-rollout.md)).
 
-- `TechBench.exe` and `latest.json` (`version`, `sha256`, `url`) for the in-app updater
-- `dist\TechBench-Setup-<version>.exe` — Inno Setup per-user installer (same version stamp as Help → About)
+## Usage
 
-Building the Setup exe needs the Inno Setup compiler (`ISCC.exe`). `installer\build.bat` looks in the usual install paths, then downloads a local copy into `tools\innosetup` (gitignored) if needed. Shop PCs never run that step — they only run the finished Setup exe.
+### Launch and Headless Smoke Check
 
-Attach `dist\TechBench-Setup-<version>.exe`, `TechBench.exe`, and `latest.json` to the private GitHub release `v<version>` on [blackviperxiii-ui/tech-bench](https://github.com/blackviperxiii-ui/tech-bench). Techs install or upgrade by running that shop Setup. See [docs/shop-rollout.md](docs/shop-rollout.md).
+```bat
+TechBench.exe
+TechBench.exe --smoke
+TechBench.exe --smoke --smoke-out smoke.txt
+```
 
-The in-app updater's built-in default feed URL (`https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`) is unchanged and not published, so Help → Check for updates reports the feed as unavailable unless a shop override is set. On a shop PC you can:
+`--smoke` verifies the stamped version and loads the bundled knowledge base without opening a window or touching user settings; `--smoke-out <path>` writes the one-line status report verified by [tools/install-smoke.ps1](tools/install-smoke.ps1) in CI.
 
-- Drop `update-url.txt` next to the **installed** exe (one URL, `#` comments allowed), or
-- Drop `update-feed-path.txt` with a UNC/drive folder that holds `latest.json` (and usually `TechBench.exe`); the hash in `latest.json` is checked before an update is offered
+### Knowledge Base, Notes, and Shop Sync
 
-Help → About names which feed source is active. The updater never sends credentials and the installer does not contain a GitHub token. If an INLINE 7 session is live, install is refused until you disconnect; a verified `TechBench.exe.new` applies on the next cold start, in the same folder the Setup exe used.
+- **Add code to KB** (`Ctrl+N`) writes `data\shop\{your-name}\user-codes.json`, and the index merges every technician's folder on load (legacy `data\user-codes.json` is still read and migrated on first sync).
+- **Add note** / **Add file** (`Shop` menu) stores `.txt` notes and copied PDFs/photos under your shop folder.
+- **Two-way sync**: If `air-compressor-kb` already lives in a shared OneDrive folder, each PC sets its tech name in `Shop → Sync` (defaults to the Windows username). Otherwise, open `Shop → Sync → Browse`, select a shared USB drive or network folder on each bench, and click **Sync now** to synchronize `data\shop`, `data\notes`, and `data\files` in both directions without overwriting conflicting edits.
 
-## Test
+### Work Orders
+
+Use the job strip (model, serial, customer, work order) and the **Work orders** page to manage field packets in-app:
+
+- Attach notes, photos, INLINE 7 snapshots, and the printable one-page diagnostic **Report** to the active work order.
+- **Share with shop** copies the packet to `data\shop\_shared\work-orders` and to any share folder configured in `Shop → IntelliDealer`.
+- **Log on / log off** record local packet timestamps and post to the IntelliDealer Azure API Gateway only when dealer credentials are saved in `Shop → IntelliDealer`.
+- **Sign off** requires a successful gateway response and refuses to fake payroll offline.
+
+### INLINE 7 and J1939 Code Clearing
+
+Close **USB-Link 3 Explorer**, Guidanz, and any other RP1210 tool before clicking **Connect** so the adapter is not locked. Adapters, device IDs, and baud rates are discovered automatically from `RP121032.INI`. On connect, the Log reports whether the adapter claimed tool address SA 249 (required to transmit clear requests). The **Module** selector picks whose DM1/DM2 fault list is displayed (engine SA 0 vs. compressor controller SA 48), and the status strip displays DEF level (SPN 1761), tank temp (SPN 3031), SCR inducement (SPN 5246), and the DEF low-level lamp (SPN 5245) once PGN `FE56` arrives (`no data` until received).
+
+Under the **Clear codes** menu, **Reset all codes** and **Clear codes after repair** clear active then previously active codes, while **Clear previous** clears previously active codes only:
+
+1. Addresses each module directly (engine SA 0 and detected engine SA, compressor controller SA 48, and any other module seen sending DM1/DM2 such as a DEF/aftertreatment controller) before broadcasting to SA 255.
+2. Sends a J1939-73 Request (PGN 59904) for DM11, then DM3 (never raw DM11/DM3 data frames), retrying once if an active bus module stays silent.
+3. Waits 1 second for modules to re-evaluate, re-reads DM1, DM2, and PGN `FE56`, and writes a per-module before/after report (including returned codes, lamp state, and DEF level/temp/SCR inducement) to the **Codes** tab, **Log**, saved session, and printed **Report**.
+
+Interpreting clear results:
+
+- **Refused / access denied**: Many ECMs require key ON with engine OFF.
+- **Came straight back**: The clear succeeded, and the underlying fault is still active.
+- **Did not answer**: The controller does not accept J1939 clears (some compressor controllers clear only from their front-panel keypad).
+- **SCR inducement (SPN 5246)**: Not cleared by DM11/DM3; the ECM clears inducement after valid DEF level/temperature/quality readings and a key cycle, or via OEM service routines. Tech Bench never disables DEF/SCR or Red Stop lamps.
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| F1 | shop cheat sheet (Help → Keyboard / shop cheat sheet) |
+| Ctrl+F or F3 | Jump to the search box |
+| Enter (search box) | Run search immediately |
+| Down (search box) | Move focus into search results |
+| Ctrl+N | Add a fault code to the knowledge base |
+| Shop → Sync | Select sync folder, run two-way sync, resolve conflicts |
+| Shop → IntelliDealer | Configure Azure API Gateway credentials for live WO / clock |
+
+### Testing
+
+Run the offline self-test and WinForms layout audit on Windows (no RP1210 adapter or live DMS required):
 
 ```bat
 test.bat
 ```
 
-Offline checks: J1939 decoding, BAM reassembly, DM11/DM3 code clear against simulated ECMs (ACK, refusal, silent controller, codes that come back, DEF from a separate module), RP1210 adapter discovery, trend log, fault timeline, unit history, KB load/search, the shipped field database (155 / 1,424 / 2,147 / 63 / 37), user-code round-trip, snapshot diff, report text, settings, updater, Inno Setup script (per-user, no token), two-way shop sync, work-order packets, shop share, and IntelliDealer gateway (no live DMS). No adapter needed. Sample rows are built in `%TEMP%`; the shipped database is the `kb\` folder. The `sources\` response files are checked for drift.
+[test.bat](test.bat) compiles and runs `SelfTest.exe` ([SelfTest.cs](SelfTest.cs) and [tests/](tests/)) followed by `LayoutAudit.exe` ([tools/LayoutAudit.cs](tools/LayoutAudit.cs)), covering J1939 decoding, BAM reassembly, simulated multi-ECM DM11/DM3 clears, RP1210 INI discovery, trend/timeline/history, KB search and shipped record counts, shop sync conflicts, work-order packets, updater SHA-256/redirect/origin rules, Inno Setup script checks, and response-file drift.
 
-On Linux agent boxes (no Windows csc), catch compile breaks with Mono before opening a PR:
+On Linux machines without Windows `csc.exe`, run the Mono C# 5 compile check (`mono-devel`) to catch syntax or source-list errors before opening a pull request (does not replace `test.bat` or the Windows CI `installer` job):
 
 ```bash
-# once: sudo apt-get install -y mono-devel
 tools/linux-compile-check.sh
 ```
 
-That compiles SelfTest and TechBench with `mcs` from the same `sources\*.rsp` lists. It does **not** replace `test.bat` or the Windows CI `installer` job.
+Run the personal-info guard locally before pushing:
 
-## Knowledge base
+```bash
+python3 scripts/pii-guard/pii_guard.py origin/main
+```
 
-A normal install already has the database. The Setup exe copies `air-compressor-kb` next to `TechBench.exe`, and the same JSON is embedded in the exe. Search reads that copy. No Google Drive or OneDrive folder is required.
+## Configuration
 
-Record counts from the 2026-08-11 field database (`kb\data\INDEX.json`): 155 fault codes, 1,424 service-access rows, 2,147 USB manual index entries, 63 filter/oil rows, 37 equipment rows.
+### Knowledge Base Resolution Order
 
-The app looks for `data\kb.json` in this order:
+Tech Bench locates `data\kb.json` in the following order (a malformed JSON file only skips that section and reports the filename in the search status bar):
 
-1. `TECHBENCH_KB`, or `kb-path.txt` next to `TechBench.exe` (one path per line, `#` comments allowed)
-2. `air-compressor-kb` next to the exe (what the installer writes)
-3. The old `Documents\air-compressor-kb` / OneDrive Documents location, if that folder is still there and the install copy is missing
-4. The copy embedded in the exe, written to `%LocalAppData%\TechBench\air-compressor-kb`
+1. `TECHBENCH_KB` environment variable, or paths listed in `kb-path.txt` beside `TechBench.exe` (one path per line, `#` comments allowed)
+2. `air-compressor-kb` beside `TechBench.exe` (installed by Setup)
+3. Legacy `Documents\air-compressor-kb` (including OneDrive `Documents`) when the install copy is absent
+4. Embedded resource copy extracted to `%LocalAppData%\TechBench\air-compressor-kb`
 
-A malformed file in `data\` only costs that section — the status line under the search box names the file that failed. Launch is not blocked if the folder is missing.
+### Optional Sidecar and Override Files
 
-Manual hits point at the original PDF paths from the shop PC that built the index. Those PDFs are not inside the installer.
+| File | Location | Purpose |
+|---|---|---|
+| `update-url.txt` | Beside `TechBench.exe` | Override manifest URL (`latest.json`) for `Help → Check for updates` (`#` comments allowed; built-in default URL is unpublished) |
+| `update-feed-path.txt` | Beside `TechBench.exe` | Point `Help → Check for updates` at a UNC or drive folder containing `latest.json` and `TechBench.exe` (SHA-256 verified before offer) |
+| `kb-path.txt` | Beside `TechBench.exe` | Custom knowledge-base root path(s), checked after `TECHBENCH_KB` |
+| `sync-path.txt` | Beside `TechBench.exe` | Default two-way shop sync folder without opening the `Shop → Sync` dialog |
+| `id-work-orders.json` / `.csv` | Beside `TechBench.exe` or in `data\` | File-backed assigned work-order list |
+| `id-api.json` | Beside `TechBench.exe` | Optional IntelliDealer API operation path overrides (no secrets) |
+| `data\j1939-names.json` | Inside active KB folder | Extend or override built-in SPN, PGN, and source-address labels without rebuilding |
 
-### Work orders (Mobile Tech in-app)
+`Help → About` displays which update feed source is active (default unpublished URL `https://github.com/blackviperxiii-ui/tech-bench-dist/releases/latest/download/latest.json`, `update-url.txt`, or `update-feed-path.txt`). Update installation is refused while an INLINE 7 session is live; a verified `TechBench.exe.new` swaps into the install folder after quit or on the next cold start.
 
-Stay in Tech Bench instead of ID Mobile Access:
-
-- **Work orders** page and the WO picker on the job strip
-- Notes, photos, INLINE 7 shots, and the diagnostic report attach to that WO number
-- **Share with shop** copies the packet to `data\shop\_shared\work-orders` (rides along if the knowledge base is already on OneDrive) and to a share folder you pick in Shop → IntelliDealer. Same `data\shop` tree the two-way sync branch uses — this does not overwrite that work.
-- **Log on / log off** write a shop timestamp on the packet. They post to IntelliDealer only when Azure API Gateway credentials are saved.
-- **Sign off** is refused until the gateway returns success. Tech Bench will not fake payroll.
-
-Drop `id-work-orders.json` (or `.csv`) next to `TechBench.exe` or in the KB `data` folder for a file-backed assigned list. Credentials live in `%LocalAppData%\TechBench\id-settings.json` (subscription key and OAuth secret are DPAPI-protected). Optional `id-api.json` next to the exe may overlay operation paths — not secrets.
-
-### Adding what you learn
-
-**Add code to KB** (or Ctrl+N) writes `data\shop\{your-name}\user-codes.json`. The index merges every tech's folder on load. Older `data\user-codes.json` is still read (and copied into your shop folder on the first sync).
-
-**Add note** / **Add file** (Shop menu) drop a `.txt` or a copy of a PDF/photo into that same shop folder.
-
-### Sharing with another tech
-
-Two-way, no GitHub token, no extra installer:
-
-1. If `air-compressor-kb` already lives in a shared OneDrive folder, you are done. Each PC uses a tech name (Shop → Sync, defaults to the Windows user). Status bar shows sync state.
-2. If each bench has its own copy, Shop → Sync → Browse and point both PCs at the same USB stick, network share, or extra folder. **Sync now** copies `data\shop`, `data\notes`, and `data\files` both ways.
-
-Same user-code (or the same file) edited on both sides is listed as a conflict. Pick **Keep mine**, **Keep theirs**, or **Keep both** — the app never last-write-wins a note.
-
-`sync-path.txt` next to `TechBench.exe` (one path, `#` comments allowed) sets the sync folder without opening the dialog.
-
-### Naming SPNs without a rebuild
-
-Optional `data\j1939-names.json` extends or overrides the built-in SPN / PGN / source-address labels:
+Example `data\j1939-names.json` (keys accept decimal or `0x` hex):
 
 ```json
 {
@@ -147,68 +188,44 @@ Optional `data\j1939-names.json` extends or overrides the built-in SPN / PGN / s
 }
 ```
 
-Keys may be decimal or `0x` hex.
+### Local Data and Session Paths
 
-## INLINE 7
+- **User state (`%LocalAppData%\TechBench\`)**:
+  - `settings.json`: Last model, serial, customer, work order, and window dimensions
+  - `adapter-prefs.json`: Last RP1210 adapter ID and active shell / INLINE 7 tab
+  - `id-settings.json`: IntelliDealer gateway configuration (subscription key and OAuth secret encrypted with Windows DPAPI)
+  - `sync.json`, `sync-state-*.json`, and `work-orders\`: Sync state and local work-order packets
+- **Saved sessions (`Desktop\TechBench-sessions`, falling back to `Documents` then `%LocalAppData%\TechBench-sessions`)**:
+  - `<job>_session_<stamp>.txt` plus `_readings.csv`, `_dtcs.csv` (read by **Unit history**), `_trend.csv`, and `_timeline.csv`
+  - `shot_<stamp>.png` screenshots and `techbench-errors.log` non-fatal error log
+- **Crash log**:
+  - `techbench-crash.log` beside `TechBench.exe` records unhandled fatal exceptions captured by `CrashForm`
 
-Close **USB-Link 3 Explorer** and Guidanz before Connect, or the adapter stays locked.
+## Architecture
 
-Adapters are discovered from `RP121032.INI`, so any installed RP1210 vendor DLL shows up in the **Adapter** box and on the **Adapters** page — not just the Cummins INLINE 7. Device IDs and baud rates come from the vendor's own INI rather than being guessed.
+- [src/Core/](src/Core/): J1939 PGN/SPN decoding and BAM transport reassembly ([src/Core/J1939/](src/Core/J1939/)), atomic settings persistence ([src/Core/Settings/](src/Core/Settings/)), and version/smoke metadata ([src/Core/Version/AppVersion.cs](src/Core/Version/AppVersion.cs))
+- [src/Features/](src/Features/): RP1210 DLL binding, background bus worker, trend/timeline/history, and job reports ([src/Features/Adapters/](src/Features/Adapters/)); INLINE 7 tab ([src/Features/Inline7/](src/Features/Inline7/)); KB index and user codes ([src/Features/Kb/](src/Features/Kb/)); search UI ([src/Features/Search/](src/Features/Search/)); two-way sync dialog ([src/Features/Sync/](src/Features/Sync/)); work orders and printing ([src/Features/WorkOrders/](src/Features/WorkOrders/)); cheat sheet and crash dialog
+- [src/Safety/](src/Safety/): J1939 DM11/DM3 clear orchestration, hardened `Updater` (`latest.json` caps, origin/redirect rules, SHA-256 staging), `SafeOpen` file-launch guard, `ShopSync` engine, and `IdGateway` / DPAPI `IdSettings`
+- [src/Shell/](src/Shell/): WinForms entry point ([src/Shell/Program.cs](src/Shell/Program.cs)), main shell window ([src/Shell/ShellForm.cs](src/Shell/ShellForm.cs)), layout helpers, and session export
+- [sources/](sources/): Tracked [sources/core.list](sources/core.list) and [sources/app.list](sources/app.list) manifests compiled into generated `.rsp` files by [tools/gen-rsp.bat](tools/gen-rsp.bat) and [tools/gen-rsp.sh](tools/gen-rsp.sh)
+- [kb/data/](kb/data/): Bundled JSON field database and [kb/data/INDEX.json](kb/data/INDEX.json) metadata
+- [tests/](tests/) and [SelfTest.cs](SelfTest.cs): Attribute-discovered `[SelfTestCase]` suite paired with [tools/LayoutAudit.cs](tools/LayoutAudit.cs)
+- [installer/](installer/): Per-user Inno Setup 6 installer script ([installer/techbench.iss](installer/techbench.iss)) and build helpers
 
-All adapter traffic runs on a background thread, so a code reset no longer freezes the window.
+## Documentation
 
-The **Module** box picks whose DM1/DM2 the code lists show. On a portable compressor the controller (usually SA 48) has its own faults, separate from the engine's.
+- [docs/shop-rollout.md](docs/shop-rollout.md): Shop PC installation, upgrades, feed overrides, data locations, and rollback guide
+- [CHANGELOG.md](CHANGELOG.md): Unreleased and historical release notes
+- [docs/specs/](docs/specs/): Versioned engineering specifications (`v1.2.7` through `v1.2.22`)
+- [docs/agent-playbook.md](docs/agent-playbook.md): Repository workflow, lockstep version stamps, CI gates, and ECU/updater safety rules
 
-### Clearing codes
+## Contributing
 
-Clear actions live under the **Clear codes** menu (not as peer toolbar buttons). **Reset all codes** and **Clear codes after repair** clear active then previously active codes; **Clear previous** clears previously active only. Each one:
-
-1. Asks every module directly — the engine (SA 0 and the detected engine SA), the compressor controller (SA 48), and any other module that has sent DM1/DM2 on this hookup, such as a separate DEF/aftertreatment module — then everyone (SA 255). Broadcast-only was not enough for SA 48.
-2. Uses the J1939-73 method: a Request (PGN 59904) for DM11 (clear active), then for DM3 (clear previously active). DM11/DM3 are not sent as data.
-3. Waits for each module's answer (ACK, NACK, or access denied). A module that is on the bus but stays quiet gets one retry. An address with no traffic is asked but not waited on.
-4. Gives the modules a second to re-check, then reads DM1/DM2 and the DEF/SCR tank message (PGN FE56) back.
-5. Shows a report on the **Codes** tab (and **Advanced**): per module what it answered, how many codes before and after, which codes came straight back (DEF/SCR ones are tagged), the engine lamps from the fresh DM1, and the DEF level / temp / SCR inducement before and after. The report is also in the Log, the saved session, and the printed Report.
-
-Reading the result:
-
-- **Refused / access denied**: many ECMs only clear with key ON, engine OFF.
-- **Came straight back**: the clear worked, the fault is still true. Fix it and clear again.
-- **Did not answer**: the module does not take J1939 clears; some compressor controllers only reset from their own keypad.
-- **SCR inducement (5246)** is not ended by a code clear. The ECM drops it once it sees the repair working (DEF level, temp, quality reading real values, then a key cycle and run). Guidanz aftertreatment reset may still be required.
-
-A clear takes about 2–5 seconds and runs on the bus thread, so the window stays live; Disconnect stops it. On Connect the Log says whether the adapter claimed the tool address (SA 249). If that claim fails, the adapter refuses to send the clear requests.
-
-The INLINE 7 strip shows DEF level (SPN 1761), tank temp (SPN 3031), SCR inducement (SPN 5246), and the DEF low-level lamp (SPN 5245) when PGN FE56 arrives. Until then each line says **no data**. FE56 from the engine is used first. If only another module (for example the tank header) sends it, that module's FE56 is shown and the strip names its address.
-
-This tool does not disable DEF/SCR or Red Stop. Those lamps follow active DTCs. There is no public SAE routine that resets DEF dosing without disabling SCR, so Tech Bench does not invent one.
-
-## Where files go
-
-`Desktop\TechBench-sessions` (falls back to Documents, then LocalAppData):
-
-- `<job>_session_<stamp>.txt` — readable summary
-- `..._readings.csv`, `..._dtcs.csv`, `..._trend.csv`, `..._timeline.csv`
-- `shot_<stamp>.png` — screenshots
-- `techbench-errors.log` — anything unexpected, worth sending along with a bug report
-
-Next to the installed exe:
-
-- `techbench-crash.log` — fatal crash records (CrashForm / unexpected close). Separate from the sessions `techbench-errors.log`.
-
-The `_dtcs.csv` files are what the Unit history tab reads back, so saving a session is what builds fleet history.
-
-## Keyboard
-
-| Key | Action |
-|---|---|
-| F1 | shop cheat sheet (Help → Keyboard / shop cheat sheet) |
-| Ctrl+F or F3 | jump to the search box |
-| Ctrl+N | add a code to the knowledge base |
-| Shop → Sync | pick a folder, run two-way sync, resolve conflicts |
-| Shop → IntelliDealer | Azure API Gateway credentials for live WO / clock |
-| Enter (search box) | search now |
-| Down (search box) | move into the results |
+1. Fetch `origin` and branch from the latest `main` (`main` is protected and gated by the `installer` and `pii-guard` status checks).
+2. Register any new `.cs` files in [sources/core.list](sources/core.list) or [sources/app.list](sources/app.list), or add test files under [tests/](tests/). Do not commit or hand-edit generated `sources/*.rsp` files.
+3. Follow the safety, testing, and 4-spot lockstep version-bump rules in [docs/agent-playbook.md](docs/agent-playbook.md). Never commit `.env*`, tokens, keys/certs, `id-settings*.json`, or personal information.
+4. Run `test.bat` on Windows (or `tools/linux-compile-check.sh` on Linux) and `python3 scripts/pii-guard/pii_guard.py origin/main` before opening a pull request.
 
 ## License
 
-Private shop tool. Keep the password DB off GitHub.
+No `LICENSE` file or open-source SPDX license is published in this repository. Private shop tool; all rights reserved. Keep the password DB off external mirrors and never commit credentials or dealer keys.
