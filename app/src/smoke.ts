@@ -1,6 +1,7 @@
 import {
   busCall,
   busCaps,
+  busExport,
   busReport,
   sessionSave,
   cheatsheet,
@@ -120,6 +121,17 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
     saveOk = /SMOKE_UNIT_session_\d{8}_\d{6}\.txt$/.test(saved.path) && hist.includes("SPN 1761");
     saveText = `saved "${saved.path.split(/[\\/]/).pop() ?? ""}"; history ${hist.includes("SPN 1761") ? "lists SPN 1761" : `"${hist.split("\n")[0]}"`}`;
   }
+  // Bus tab: Snapshot A then B, and the Diff; Export CSV only under a scratch home.
+  await busCall("snap", { which: "A", time: "10:00:00" });
+  const diff = await busCall<string>("snap", { which: "B", time: "10:05:00" });
+  const diffOk = diff.includes("RPM     800  →  800\r\n") && diff.includes("Unchanged active:\r\n  SPN 1761  FMI 9");
+  let exportText = "";
+  let exportOk = true;
+  if (scratchHome) {
+    const path = await busExport("bus", "SMOKE UNIT");
+    exportOk = /SMOKE_UNIT_session_\d{8}_\d{6}_bus\.csv$/.test(path);
+    exportText = `; bus CSV "${path.split(/[\\/]/).pop() ?? ""}"`;
+  }
   await busCall("disconnect");
   const code = s?.active[0]?.text ?? "(no active code)";
   const ok =
@@ -129,9 +141,11 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
     held === 0 &&
     reportOk &&
     saveOk &&
-    pageOk;
+    pageOk &&
+    diffOk &&
+    exportOk;
   return {
     ok,
-    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}; adapters page ${pageOk ? "lists FAKE" : "wrong"}`,
+    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}; adapters page ${pageOk ? "lists FAKE" : "wrong"}; bus diff ${diffOk ? "ok" : "wrong"}${exportText}`,
   };
 }

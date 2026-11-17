@@ -298,3 +298,10 @@ button { font: inherit; }
 /* Adapters page: the AdapterSummary text keeps its lines, as the WinForms box does. */
 .adapters { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .adapters .detail { flex: 1; white-space: pre; overflow: auto; font-family: ui-monospace, Consolas, monospace; }
+
+/* INLINE 7 inner tabs and the Bus tab */
+.tabs { display: flex; gap: 2px; margin: 10px 0 6px; border-bottom: 1px solid var(--line); }
+.tabs .tab { border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; background: transparent; padding: 6px 14px; }
+.tabs .tab.on { border-color: var(--line); background: var(--panel); font-weight: 600; margin-bottom: -1px; }
+.bus-list { height: 220px; overflow: auto; white-space: pre; }
+.bus-diff { min-height: 120px; white-space: pre-wrap; margin-top: 10px; }

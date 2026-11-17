@@ -17,6 +17,7 @@ use tb_core::j1939::code_clear::{ClearKind, ClearLink, CodeClearRun};
 use tb_core::j1939::guard::SendPolicy;
 use tb_core::j1939::monitor::{fmt_reading, BusMonitor, BusSnapshot};
 use tb_core::j1939::report::{self, session_files, LocalNow, ReportData};
+use tb_core::j1939::snap::{self, Snap};
 use tb_core::j1939::Dtc;
 use tb_core::rp1210::Rp1210Api;
 
@@ -56,6 +57,9 @@ struct Live {
     frames_this_window: u32,
     fps: u32,
     log: VecDeque<String>,
+    /// Snapshot A (before a repair) and B (after), for Diff on the Bus tab and the report.
+    snap_a: Option<Snap>,
+    snap_b: Option<Snap>,
 }
 
 impl Live {
@@ -290,6 +294,8 @@ impl Bus {
                 frames_this_window: 0,
                 fps: 0,
                 log: VecDeque::new(),
+                snap_a: None,
+                snap_b: None,
             },
         }
     }
@@ -535,6 +541,10 @@ impl Bus {
         s
     }
 
+    fn diff(&self) -> String {
+        snap::diff(self.live.snap_a.as_ref(), self.live.snap_b.as_ref())
+    }
+
     /// Whether the adapter link is up (a rescan waits until it is down).
     pub fn connected(&self) -> bool {
         self.rp.is_connected()
@@ -603,6 +613,8 @@ impl Bus {
                 "sas": self.mon.sa_rows().iter().map(|r| json!({
                     "sa": r.sa, "count": r.count, "claimed": r.claimed, "nameHex": r.name_hex,
                     "label": self.mon.names.sa_label(r.sa)})).collect::<Vec<_>>(),
+                "pgnLines": self.mon.pgn_lines(now_ms()),
+                "saLines": self.mon.sa_lines(now_ms()),
             })),
             "requestCodes" => {
                 self.request_codes(true);
@@ -717,7 +729,45 @@ impl Bus {
                 let recent = self.mon.module(s.view_sa).timeline.recent();
                 let mut d = ReportData::from_snapshot(&s, recent, &txt("job"), &txt("when"));
                 d.history_note = txt("history");
+                d.diff = self.diff();
                 Ok(json!(report::text(&d)))
+            }
+            // Bus tab: Snapshot A / B (TakeSnap) at the UI's local time, and Diff.
+            "snap" => {
+                let time = req.get("time").and_then(Value::as_str).unwrap_or("");
+                let s = self.snapshot();
+                match req.get("which").and_then(Value::as_str) {
+                    Some("A") => {
+                        self.live.snap_a = Some(Snap::take(&s, time, "A before"));
+                        self.live.log("Snapshot A saved");
+                    }
+                    Some("B") => {
+                        self.live.snap_b = Some(Snap::take(&s, time, "B after"));
+                        self.live.log("Snapshot B saved");
+                    }
+                    _ => return Err("snap needs which \"A\" or \"B\"".into()),
+                }
+                Ok(json!(self.diff()))
+            }
+            "diff" => Ok(json!(self.diff())),
+            // Export CSV: the Bus lists, the trend, or the timeline of the module in view.
+            "export" => {
+                let job = req.get("job").and_then(Value::as_str).unwrap_or("");
+                match req.get("kind").and_then(Value::as_str) {
+                    Some("bus") => Ok(json!(self.mon.bus_csv())),
+                    Some("trend") => {
+                        let data = self.mon.trend().copy();
+                        if data.is_empty() {
+                            return Err("No trend samples yet.".into());
+                        }
+                        Ok(json!(tb_core::j1939::trend::TrendLog::csv(&data)))
+                    }
+                    Some("timeline") => {
+                        let view = self.snapshot().view_sa;
+                        Ok(json!(self.mon.module(view).timeline.csv(job)))
+                    }
+                    _ => Err("export needs kind \"bus\", \"trend\" or \"timeline\"".into()),
+                }
             }
             "log" => Ok(json!(self.drain_log())),
             other => Err(format!("unknown command \"{other}\"")),

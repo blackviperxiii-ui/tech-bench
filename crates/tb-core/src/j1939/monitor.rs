@@ -497,6 +497,81 @@ impl BusMonitor {
         self.sas.values().cloned().collect()
     }
 
+    /// The Bus tab's PGN traffic list, worded as `Inline7Control.PgnItems` (first 200 rows).
+    pub fn pgn_lines(&self, now: i64) -> Vec<String> {
+        self.pgns
+            .values()
+            .take(200)
+            .map(|r| {
+                format!(
+                    "{:04X}  SA{:<3} {:<22} x{:<5} {:.1}s ago",
+                    r.pgn,
+                    r.sa,
+                    self.names.pgn(r.pgn),
+                    r.count,
+                    age_s(now, r.last)
+                )
+            })
+            .collect()
+    }
+
+    /// The Bus tab's address-claim list, worded as `Inline7Control.SaItems`: LIVE under 2 s,
+    /// quiet under 10 s, then gone.
+    pub fn sa_lines(&self, now: i64) -> Vec<String> {
+        self.sas
+            .values()
+            .map(|r| {
+                let age = age_s(now, r.last);
+                let live = if age < 2.0 {
+                    "LIVE"
+                } else if age < 10.0 {
+                    "quiet"
+                } else {
+                    "gone"
+                };
+                format!(
+                    "SA {:<3} {:<24} {:<5} x{}  {:.1}s {}",
+                    r.sa,
+                    self.names.sa(r.sa),
+                    live,
+                    r.count,
+                    age,
+                    if r.claimed { "CLAIM" } else { "" }
+                )
+            })
+            .collect()
+    }
+
+    /// Export CSV on the Bus tab: the PGN traffic list, then the address-claim list. The
+    /// WinForms Bus tab had no export; this is the two lists as they stand.
+    pub fn bus_csv(&self) -> String {
+        let q = |s: &str| format!("\"{}\"", s.replace('"', "\"\""));
+        let mut out = String::from("pgn,pgn_hex,name,sa,frames,last_len\r\n");
+        for r in self.pgns.values() {
+            out.push_str(&format!(
+                "{},{:04X},{},{},{},{}\r\n",
+                r.pgn,
+                r.pgn,
+                q(&self.names.pgn(r.pgn)),
+                r.sa,
+                r.count,
+                r.last_len
+            ));
+        }
+        out.push_str("\r\nsa,module,frames,claimed,name_hex\r\n");
+        for r in self.sas.values() {
+            out.push_str(&format!(
+                "{},{},{},{},{}\r\n",
+                r.sa,
+                q(&self.names.sa_label(r.sa)),
+                r.count,
+                if r.claimed { "yes" } else { "no" },
+                r.name_hex
+            ));
+        }
+        out
+    }
+
     pub fn def_text(&self) -> String {
         if self.def_silent {
             return "n/a (not talking)".to_string();
@@ -730,4 +805,9 @@ impl BusMonitor {
             ..BusSnapshot::default()
         }
     }
+}
+
+/// Seconds since `last` (milliseconds), as the WinForms lists print it.
+fn age_s(now: i64, last: i64) -> f64 {
+    (now - last) as f64 / 1000.0
 }
