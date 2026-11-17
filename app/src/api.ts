@@ -228,7 +228,12 @@ export interface BusSnap {
   resetSeq: number;
   active: LiveDtc[];
   prev: LiveDtc[];
-  faultModules: string[];
+  /** Source addresses with DM1/DM2 faults; the Module picker lists these. */
+  faultModules: number[];
+  /** "SA 48 Compressor controller", one per fault module. */
+  faultModuleLabels: string[];
+  /** The module the code lists show (the engine's SA when the picker says Engine (auto)). */
+  viewSa: number;
   /** HUD lines worded as the WinForms INLINE 7 page writes them. */
   hud: { status: string; rpm: string; lamps: string; def: string; mon: string };
 }

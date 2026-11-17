@@ -60,6 +60,9 @@ export function LiveBus({
   const [tab, setTab] = useState<Tab>("Codes");
   // The bridge starts with auto-reconnect on, as the WinForms checkbox does.
   const [autoRe, setAutoRe] = useState(true);
+  // Module picker: -1 is "Engine (auto)". The poll sends it with every snapshot.
+  const [view, setView] = useState(-1);
+  const viewRef = useRef(-1);
   const shownReset = useRef(0);
   const pollBusy = useRef(false);
 
@@ -97,7 +100,7 @@ export function LiveBus({
       if (pollBusy.current) return;
       pollBusy.current = true;
       try {
-        const s = await busCall<BusSnap>("snapshot");
+        const s = await busCall<BusSnap>("snapshot", { viewSa: viewRef.current });
         if (gone) return;
         setSnap(s);
         addLog(await busCall<string[]>("log"));
@@ -194,6 +197,18 @@ export function LiveBus({
     }
   }
 
+  function pickModule(sa: number) {
+    viewRef.current = sa;
+    setView(sa);
+  }
+
+  // RefreshModuleList: Engine (auto), then each module with faults; a module that left falls
+  // back to Engine (auto).
+  const modules = (snap?.faultModules ?? []).map((sa, i) => ({ sa, label: snap?.faultModuleLabels[i] ?? `SA ${sa}` }));
+  useEffect(() => {
+    if (view !== -1 && snap && !snap.faultModules.includes(view)) pickModule(-1);
+  }, [snap, view]);
+
   const hud = snap?.hud;
   const status = clearing ? `Working: ${clearing}…` : (hud?.status ?? "Starting the adapter bridge…");
 
@@ -209,6 +224,22 @@ export function LiveBus({
             </option>
           ))}
         </select>
+        <label className="check">
+          Module
+          <select
+            aria-label="Module"
+            title="Whose DM1/DM2 the code lists show. On a portable compressor the controller at SA 48 has its own faults."
+            value={view}
+            onChange={(e) => pickModule(Number(e.target.value))}
+          >
+            <option value={-1}>Engine (auto)</option>
+            {modules.map((m) => (
+              <option key={m.sa} value={m.sa}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" disabled={connected || busy} onClick={connect}>
           Connect
         </button>

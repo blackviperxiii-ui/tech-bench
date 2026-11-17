@@ -608,6 +608,12 @@ impl Bus {
                 let s = self.snapshot();
                 let mut v = snapshot_json(&s);
                 v["hud"] = hud_json(&s, self.live.want_connected);
+                // The Module picker rows (RefreshModuleList): Names.SaLabel for each.
+                v["faultModuleLabels"] = json!(s
+                    .fault_modules
+                    .iter()
+                    .map(|&sa| self.mon.names.sa_label(sa))
+                    .collect::<Vec<_>>());
                 Ok(v)
             }
             "busLists" => Ok(json!({
