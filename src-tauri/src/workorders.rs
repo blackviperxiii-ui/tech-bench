@@ -354,3 +354,44 @@ pub fn wo_attach_report(
         Ok(WoDto::from(&w))
     })
 }
+
+#[derive(Serialize)]
+pub struct Shot {
+    path: String,
+    /// The open work order with the shot attached; `None` when no order was open.
+    wo: Option<WoDto>,
+}
+
+/// Shot (`Inline7Control.TakeShot` + `WorkOrderControl.AttachShot`): the UI draws the INLINE 7
+/// picture; this saves it as `shot_<stamp>.png` in the session folder and, when a work order is
+/// open, attaches it there too. The path never comes from the UI.
+#[tauri::command]
+pub fn shot_save(
+    png: Vec<u8>,
+    stamp: String,
+    wo: Option<WoDto>,
+    app: AppHandle,
+    state: State<'_, WoState>,
+    kb: State<'_, Kb>,
+) -> Result<Shot, String> {
+    let dir = crate::shopsync::session_folder(&app);
+    let path =
+        tb_core::shot::save(&dir, &stamp, &png).map_err(|e| format!("Screenshot failed: {e}"))?;
+    let wo = match wo {
+        None => None,
+        Some(wo) => Some(with_store(&app, &state, &kb, |store, shop, kb_root| {
+            let mut w = WorkOrder::from(wo);
+            store
+                .attach_file(&mut w, &path, shop, kb_root)
+                .map_err(|e| format!("Could not attach shot: {e}"))?;
+            store
+                .save(&mut w, shop, kb_root)
+                .map_err(|e| e.to_string())?;
+            Ok(WoDto::from(&w))
+        })?),
+    };
+    Ok(Shot {
+        path: path.to_string_lossy().into_owned(),
+        wo,
+    })
+}

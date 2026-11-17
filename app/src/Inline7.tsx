@@ -13,6 +13,7 @@ export function Inline7({
   onSessionSaved,
   onAttachReport,
   onSearch,
+  onShot,
 }: {
   jobTag: string;
   syncTick: number;
@@ -20,6 +21,7 @@ export function Inline7({
   onAttachReport: (text: string) => Promise<string>;
   /** Search the KB for a code (the Timeline tab's double-click). */
   onSearch: (query: string) => void;
+  onShot: (png: Uint8Array, stamp: string) => Promise<string>;
 }) {
   const [savedTick, setSavedTick] = useState(0);
   const [spn, setSpn] = useState("");
@@ -100,6 +102,7 @@ export function Inline7({
           }}
           onAttach={onAttachReport}
           onSearch={onSearch}
+          onShot={onShot}
         />
       ) : (
         <p className="notice">
