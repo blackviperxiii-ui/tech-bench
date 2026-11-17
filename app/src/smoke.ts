@@ -13,14 +13,17 @@ import {
   kbCodeSeed,
   kbOpen,
   kbSearch,
+  localNow,
   shopSettingsGet,
   shopSettingsSave,
+  shotSave,
   smokeReport,
   woAttachReport,
   woList,
   woSave,
 } from "./api";
 import { blankWorkOrder } from "./WorkOrders";
+import { renderShot, shotLines } from "./live/shot";
 
 /** Known result from the shipped KB (same case as tb-core's shipped_field_database test). */
 export const SMOKE_QUERY = "1AVPT";
@@ -137,9 +140,13 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
   let exportText = "";
   let exportOk = true;
   if (scratchHome) {
+    // Shot: the canvas PNG lands as shot_<stamp>.png in the session folder.
+    const now = localNow();
+    const shot = await shotSave(await renderShot(shotLines(s, "SMOKE UNIT", now.local)), now.stamp, null);
+    const shotOk = shot.path.endsWith(`shot_${now.stamp}.png`) && shot.wo === null;
     const path = await busExport("bus", "SMOKE UNIT");
-    exportOk = /SMOKE_UNIT_session_\d{8}_\d{6}_bus\.csv$/.test(path);
-    exportText = `; bus CSV "${path.split(/[\\/]/).pop() ?? ""}"`;
+    exportOk = /SMOKE_UNIT_session_\d{8}_\d{6}_bus\.csv$/.test(path) && shotOk;
+    exportText = `; bus CSV "${path.split(/[\\/]/).pop() ?? ""}"; shot ${shotOk ? "saved" : `"${shot.path}"`}`;
   }
   await busCall("disconnect");
   const code = s?.active[0]?.text ?? "(no active code)";

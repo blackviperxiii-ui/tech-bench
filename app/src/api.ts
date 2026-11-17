@@ -304,3 +304,7 @@ export interface BusLists {
 /** Export CSV (Bus, Trend or Timeline): writes `<session name>_<kind>.csv` and returns its path. */
 export const busExport = (kind: "bus" | "trend" | "timeline", job: string, now = localNow()) =>
   invoke<string>("bus_export", { kind, job, now });
+
+/** Shot: saves the PNG as shot_<stamp>.png in the session folder, attached to `wo` when one is open. */
+export const shotSave = (png: Uint8Array, stamp: string, wo: WorkOrder | null) =>
+  invoke<{ path: string; wo: WorkOrder | null }>("shot_save", { png: Array.from(png), stamp, wo });

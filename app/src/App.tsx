@@ -21,6 +21,7 @@ import {
   smokeMode,
   syncRun,
   woAttachReport,
+  shotSave,
   woList,
   type SyncView,
   type Hit,
@@ -178,6 +179,17 @@ export function App() {
     return `Diagnostic report attached to WO ${wo.key}`;
   }
 
+  /** Shot: saved in the session folder, then attached to the open work order (AttachShot). */
+  async function saveShot(png: Uint8Array, stamp: string): Promise<string> {
+    const r = await shotSave(png, stamp, current);
+    if (r.wo) {
+      setCurrent(r.wo);
+      await reload(r.wo.key);
+      return `Screenshot ${r.path}  (attached to WO ${r.wo.key})`;
+    }
+    return `Screenshot ${r.path}`;
+  }
+
   async function clearJob() {
     await jobClear();
     setCurrent(null);
@@ -290,6 +302,7 @@ export function App() {
               onSessionSaved={quietSync}
               onAttachReport={attachReport}
               onSearch={searchFor}
+              onShot={saveShot}
             />
           )}
           {page === "Work orders" && (
