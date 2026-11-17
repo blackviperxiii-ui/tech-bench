@@ -219,6 +219,37 @@ impl Rp1210Api {
         apis
     }
 
+    /// The Adapters page text (`src/Features/Adapters/AdapterSummary.cs`), Windows line ends.
+    pub fn summary(ini_path: &str, host_is_32bit: bool, apis: &[Rp1210Api]) -> String {
+        let mut s = String::from("RP1210 adapters installed on this PC\r\n");
+        s.push_str(&format!("(read from {ini_path})\r\n\r\n"));
+        s.push_str(if host_is_32bit {
+            "Process: 32-bit — correct for RP1210\r\n\r\n"
+        } else {
+            "Process: 64-bit — RP1210 drivers will NOT load; rebuild with build.bat\r\n\r\n"
+        });
+        if apis.is_empty() {
+            s.push_str("None found.\r\n\r\n");
+            s.push_str(
+                "Install the adapter vendor's RP1210 drivers (for the INLINE 7 that is the\r\n",
+            );
+            s.push_str("Cummins CIL7 package), then press Rescan.\r\n");
+            return s;
+        }
+        for a in apis {
+            // AppendLine(Describe()) then AppendLine(): Describe already ends its last line.
+            s.push_str(&a.describe());
+            s.push_str("\r\n\r\n");
+        }
+        s.push_str(
+            "The INLINE 7 tab connects with whichever adapter is picked in its Adapter box.\r\n",
+        );
+        s.push_str(
+            "Sullair / IR Xe datalinks appear here automatically once their drivers are installed.\r\n",
+        );
+        s
+    }
+
     pub fn describe(&self) -> String {
         let devices = if self.devices.is_empty() {
             "(none declared)".to_string()

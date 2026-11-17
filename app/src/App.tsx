@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Adapters } from "./Adapters";
 import { CheatSheet } from "./CheatSheet";
 import { Inline7 } from "./Inline7";
 import { JobStrip, type Header } from "./JobStrip";
@@ -28,10 +29,10 @@ import {
 } from "./api";
 
 /** Same main pages as ShellForm; screens not ported yet say so. */
-const ALL_PAGES = ["Search", "Work orders", "INLINE 7", "Settings"] as const;
+const ALL_PAGES = ["Search", "Work orders", "INLINE 7", "Adapters", "Settings"] as const;
 type Page = (typeof ALL_PAGES)[number];
-/** The web build has no shop settings: nothing to share with and no folders to pick. */
-const PAGES = WEB ? ALL_PAGES.filter((p) => p !== "Settings") : ALL_PAGES;
+/** The web build has no shop settings (nothing to share with, no folders to pick) and no adapters. */
+const PAGES = WEB ? ALL_PAGES.filter((p) => p !== "Settings" && p !== "Adapters") : ALL_PAGES;
 
 const NO_HEADER: Header = { customer: "", model: "", serial: "" };
 
@@ -290,6 +291,7 @@ export function App() {
               onShopSettings={() => setPage("Settings")}
             />
           )}
+          {page === "Adapters" && <Adapters />}
           {page === "Settings" && <ShopSettings onSaved={() => void reload(current?.key)} />}
         </main>
       </div>

@@ -294,3 +294,7 @@ button { font: inherit; }
 }
 /* Phone notch and home bar. */
 .shell { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+/* Adapters page: the AdapterSummary text keeps its lines, as the WinForms box does. */
+.adapters { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.adapters .detail { flex: 1; white-space: pre; overflow: auto; font-family: ui-monospace, Consolas, monospace; }

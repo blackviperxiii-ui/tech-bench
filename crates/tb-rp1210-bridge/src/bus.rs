@@ -535,6 +535,11 @@ impl Bus {
         s
     }
 
+    /// Whether the adapter link is up (a rescan waits until it is down).
+    pub fn connected(&self) -> bool {
+        self.rp.is_connected()
+    }
+
     /// One JSON request. `adapters` is what this PC has (or the fake adapter in fake mode).
     pub fn handle(&mut self, req: &Value, adapters: &[Rp1210Api]) -> Result<Value, String> {
         let cmd = req.get("cmd").and_then(Value::as_str).unwrap_or("");
@@ -544,6 +549,16 @@ impl Bus {
             "hello" => Ok(json!({
                 "bridge": env!("CARGO_PKG_VERSION"),
                 "pointerBits": usize::BITS,
+            })),
+            // The Adapters page (AdapterSummary.cs). This process is the one that loads the
+            // vendor DLLs, so its pointer width is the one that matters.
+            "summary" => Ok(json!({
+                "text": Rp1210Api::summary(
+                    &tb_core::rp1210::windows_dir().join("RP121032.INI").to_string_lossy(),
+                    usize::BITS == 32,
+                    adapters,
+                ),
+                "count": adapters.len(),
             })),
             "adapters" => Ok(Value::Array(
                 adapters
