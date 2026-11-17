@@ -382,6 +382,7 @@ pub fn run() {
             livebus::session_save,
             livebus::bus_export,
             workorders::wo_attach_report,
+            workorders::shot_save,
             smoke_mode,
             smoke_report,
             crash::crash_report,

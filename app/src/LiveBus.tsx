@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { busCall, busReport, localNow, sessionSave, type BusAdapter, type BusCaps, type BusSnap } from "./api";
 import { BusTab } from "./live/BusTab";
+import { renderShot, shotLines } from "./live/shot";
 import { TimelineTab } from "./live/TimelineTab";
 import { TrendTab } from "./live/TrendTab";
 import { CodeList, Confirm, ReportSheet, type Ask } from "./live/parts";
@@ -40,6 +41,7 @@ export function LiveBus({
   onSaved,
   onAttach,
   onSearch,
+  onShot,
 }: {
   caps: BusCaps;
   jobTag: string;
@@ -50,6 +52,8 @@ export function LiveBus({
   onSaved: () => void;
   onAttach: (text: string) => Promise<string>;
   onSearch: (query: string) => void;
+  /** Saves the Shot PNG (and attaches it to the open work order); returns the log line. */
+  onShot: (png: Uint8Array, stamp: string) => Promise<string>;
 }) {
   const [report, setReport] = useState<string | null>(null);
   const [adapters, setAdapters] = useState<BusAdapter[]>([]);
@@ -213,6 +217,16 @@ export function LiveBus({
     if (view !== -1 && snap && !snap.faultModules.includes(view)) pickModule(-1);
   }, [snap, view]);
 
+  async function shot() {
+    try {
+      const now = localNow();
+      const png = await renderShot(shotLines(snap, jobTag, now.local));
+      addLog([await onShot(png, now.stamp)]);
+    } catch (e) {
+      addLog([String(e).replace(/^Error: /, "")]);
+    }
+  }
+
   const hud = snap?.hud;
   const status = clearing ? `Working: ${clearing}…` : (hud?.status ?? "Starting the adapter bridge…");
 
@@ -275,6 +289,13 @@ export function LiveBus({
         </button>
         <button type="button" disabled={busy} onClick={() => void openReport()}>
           Report
+        </button>
+        <button
+          type="button"
+          title="Save a picture of the readings and codes in the session folder, and attach it to the open work order."
+          onClick={() => void shot()}
+        >
+          Shot
         </button>
         {(["KEY-ON", "CRANK", "RELEASE"] as const).map((tag) => (
           <button
