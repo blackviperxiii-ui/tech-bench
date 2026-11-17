@@ -85,7 +85,7 @@ export function App() {
     smokeMode()
       .then((m) => {
         smokeOn.current = m.on;
-        if (m.on) void runSmoke(m.workOrders);
+        if (m.on) void runSmoke(m);
         else quietSync();
       })
       .catch(() => {
