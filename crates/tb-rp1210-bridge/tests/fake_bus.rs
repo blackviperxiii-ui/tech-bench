@@ -384,3 +384,44 @@ fn module_picker_views_the_controller_but_clear_still_targets_everyone() {
         "Engine (auto) follows the engine at SA 0"
     );
 }
+
+#[test]
+fn trend_tab_charts_one_sample_a_second() {
+    let (mut bus, _fake, apis) = connected();
+    call(&mut bus, json!({"cmd": "clearHistory"}), &apis);
+    let t0 = tb_rp1210_bridge::bus::now_ms();
+    for k in 1..=5 {
+        bus.cycle_at(t0 + k * 1000);
+    }
+    let t = call(&mut bus, json!({"cmd": "trend", "channel": 0}), &apis);
+    let n = t["count"].as_u64().unwrap();
+    assert!((4..=6).contains(&n), "one sample a second: {n}");
+    assert_eq!(
+        t["channels"],
+        json!(["RPM", "Coolant °C", "Oil kPa", "Battery V", "Fuel L/h"])
+    );
+    let c = &t["chart"];
+    assert_eq!(c["label"], json!("RPM"));
+    assert_eq!(c["notice"], json!(""));
+    // A flat 800 RPM gets a ±1 band, padded 10%.
+    assert_eq!(c["ticks"], json!(["801", "801", "800", "799", "799"]));
+    assert_eq!(c["heights"][0], json!(0.5));
+    assert_eq!(
+        c["lamps"][0],
+        json!(1),
+        "the fake engine shows amber, not red"
+    );
+    assert!(t["csv"]
+        .as_str()
+        .unwrap()
+        .starts_with("time,rpm,coolant_c,oil_kpa,battery_v,fuel_lph,red,amber,active_codes\r\n"));
+
+    let oil = call(&mut bus, json!({"cmd": "trend", "channel": 2}), &apis);
+    assert_eq!(
+        oil["chart"]["notice"],
+        json!("Oil kPa was never published on this hookup.")
+    );
+    assert!(bus
+        .handle(&json!({"cmd": "trend", "channel": 5}), &apis)
+        .is_err());
+}

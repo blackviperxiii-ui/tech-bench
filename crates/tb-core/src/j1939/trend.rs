@@ -200,3 +200,91 @@ fn num(v: f64, places: usize) -> String {
         String::new()
     }
 }
+
+/// The five channels in the Trend tab's Channel list, in its order.
+pub const CHANNELS: [TrendChannel; 5] = [
+    TrendChannel::Rpm,
+    TrendChannel::Coolant,
+    TrendChannel::Oil,
+    TrendChannel::Battery,
+    TrendChannel::Fuel,
+];
+
+/// What the Trend tab draws for one channel (`TrendChart.OnPaint`), with the drawing left to the
+/// UI. Heights are 0 at the bottom of the plot and 1 at the top.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrendChart {
+    /// The channel name drawn in the plot's top-left corner.
+    pub label: String,
+    /// Shown in the middle of an empty plot instead of a line; empty when there is a line.
+    pub notice: String,
+    /// Five axis labels, top to bottom.
+    pub ticks: Vec<String>,
+    /// One per sample; `None` is a gap (the ECM stopped publishing), never joined across.
+    pub heights: Vec<Option<f64>>,
+    /// One per sample: 2 where the red lamp was on, 1 for amber, 0 for neither.
+    pub lamps: Vec<u8>,
+    /// First and last sample time (ms), for the time axis.
+    pub first: i64,
+    pub last: i64,
+    /// "1800s  ·  1801 samples".
+    pub span: String,
+}
+
+impl TrendChart {
+    pub fn new(samples: &[TrendSample], ch: TrendChannel) -> Self {
+        let mut c = TrendChart {
+            label: TrendLog::label(ch).to_string(),
+            notice: String::new(),
+            ticks: Vec::new(),
+            heights: Vec::new(),
+            lamps: Vec::new(),
+            first: samples.first().map_or(0, |s| s.time),
+            last: samples.last().map_or(0, |s| s.time),
+            span: String::new(),
+        };
+        if samples.len() < 2 {
+            c.notice = "Connect and let it run — one sample a second.".into();
+            return c;
+        }
+        let Some((mut min, mut max)) = TrendLog::range(samples, ch) else {
+            c.notice = format!("{} was never published on this hookup.", c.label);
+            return c;
+        };
+        if max - min < 1e-9 {
+            max = min + 1.0;
+            min -= 1.0;
+        }
+        let pad = (max - min) * 0.1;
+        min -= pad;
+        max += pad;
+        c.ticks = (0..=4)
+            .map(|i| {
+                let v = max - (max - min) * f64::from(i) / 4.0;
+                fixed(v, if v.abs() >= 100.0 { 0 } else { 1 })
+            })
+            .collect();
+        c.heights = samples
+            .iter()
+            .map(|s| {
+                let v = TrendLog::value(s, ch);
+                has(v).then(|| ((v - min) / (max - min)).clamp(0.0, 1.0))
+            })
+            .collect();
+        c.lamps = samples
+            .iter()
+            .map(|s| {
+                if s.red {
+                    2
+                } else if s.amber {
+                    1
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let secs = ((c.last - c.first) as f64 / 1000.0).round() as i64;
+        c.span = format!("{secs}s  ·  {} samples", samples.len());
+        c
+    }
+}
