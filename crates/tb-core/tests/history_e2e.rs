@@ -5,7 +5,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tb_core::history::History;
 use tb_core::j1939::monitor::BusMonitor;
 use tb_core::j1939::report::{session_files, LocalNow};
@@ -16,7 +16,7 @@ use tb_core::kb::sync;
 const NOW: &str = "2026-10-26T00:00:00.0000000Z";
 const JOB: &str = "HP450 12345";
 
-fn dir(base: &PathBuf, name: &str) -> PathBuf {
+fn dir(base: &Path, name: &str) -> PathBuf {
     let d = base.join(name);
     fs::create_dir_all(&d).unwrap();
     d
