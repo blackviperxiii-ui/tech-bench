@@ -108,6 +108,21 @@ impl ReportData {
     }
 }
 
+/// The KEY-ON / CRANK / RELEASE marker line (`Inline7Control.Mark`); `time` is the local HH:mm:ss.
+pub fn marker_line(time: &str, tag: &str, s: &BusSnapshot) -> String {
+    let rpm = if s.rpm.is_nan() {
+        "—".to_string()
+    } else {
+        fixed(s.rpm, 0)
+    };
+    format!(
+        "{time}  {tag}  RPM={rpm}  Red={}  Amber={}  DEF={}",
+        on_off(s.red),
+        on_off(s.amber),
+        s.def_text
+    )
+}
+
 fn on_off(v: bool) -> &'static str {
     if v {
         "ON"
@@ -304,6 +319,7 @@ pub fn session_files(
     timeline: &[DtcEvent],
     trend_csv: String,
     timeline_csv: String,
+    markers: &[String],
     job_tag: &str,
     now: &LocalNow,
 ) -> SessionFiles {
@@ -356,9 +372,11 @@ pub fn session_files(
     }
     b.extend(timeline.iter().map(|e| format!("  {e}")));
     b.push(String::new());
-    // Markers are not offered in this app yet.
     b.push("Markers:".into());
-    b.push("  (none)".into());
+    if markers.is_empty() {
+        b.push("  (none)".into());
+    }
+    b.extend(markers.iter().map(|m| format!("  {m}")));
     if !s.last_reset_report.is_empty() {
         b.push(String::new());
         b.push("Last code clear:".into());

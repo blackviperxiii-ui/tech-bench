@@ -60,6 +60,8 @@ struct Live {
     /// Snapshot A (before a repair) and B (after), for Diff on the Bus tab and the report.
     snap_a: Option<Snap>,
     snap_b: Option<Snap>,
+    /// KEY-ON / CRANK / RELEASE lines for this run, kept like the WinForms page keeps them.
+    markers: Vec<String>,
 }
 
 impl Live {
@@ -296,6 +298,7 @@ impl Bus {
                 log: VecDeque::new(),
                 snap_a: None,
                 snap_b: None,
+                markers: Vec::new(),
             },
         }
     }
@@ -757,6 +760,7 @@ impl Bus {
                     &recent,
                     trend,
                     tl_csv,
+                    &self.live.markers,
                     &job,
                     &now,
                 );
@@ -772,6 +776,7 @@ impl Bus {
                 let mut d = ReportData::from_snapshot(&s, recent, &txt("job"), &txt("when"));
                 d.history_note = txt("history");
                 d.diff = self.diff();
+                d.markers = self.live.markers.clone();
                 Ok(json!(report::text(&d)))
             }
             // Bus tab: Snapshot A / B (TakeSnap) at the UI's local time, and Diff.
@@ -792,6 +797,19 @@ impl Bus {
                 Ok(json!(self.diff()))
             }
             "diff" => Ok(json!(self.diff())),
+            // KEY-ON / CRANK / RELEASE (Inline7Control.Mark): a note in the log, the saved
+            // session and the report. Nothing goes on the bus.
+            "mark" => {
+                let tag = req.get("tag").and_then(Value::as_str).unwrap_or("");
+                if !["KEY-ON", "CRANK", "RELEASE"].contains(&tag) {
+                    return Err("mark needs tag KEY-ON, CRANK or RELEASE".into());
+                }
+                let time = req.get("time").and_then(Value::as_str).unwrap_or("");
+                let line = report::marker_line(time, tag, &self.snapshot());
+                self.live.markers.push(line.clone());
+                self.live.log(line.clone());
+                Ok(json!(line))
+            }
             // Export CSV: the Bus lists, the trend, or the timeline of the module in view.
             "export" => {
                 let job = req.get("job").and_then(Value::as_str).unwrap_or("");

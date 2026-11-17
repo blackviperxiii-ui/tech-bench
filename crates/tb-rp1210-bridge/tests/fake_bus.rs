@@ -448,3 +448,53 @@ fn timeline_tab_lists_codes_with_their_kb_search() {
     let t = call(&mut bus, json!({"cmd": "timeline", "sa": -1}), &apis);
     assert_eq!(t["rows"][0]["spn"], json!(1761), "sa -1 is the engine");
 }
+
+#[test]
+fn markers_go_to_the_log_the_session_and_the_report() {
+    let (mut bus, fake, apis) = connected();
+    call(&mut bus, json!({"cmd": "log"}), &apis);
+    let before = fake.state().sent.len();
+    let line = call(
+        &mut bus,
+        json!({"cmd": "mark", "tag": "KEY-ON", "time": "07:15:02"}),
+        &apis,
+    );
+    assert_eq!(
+        line,
+        json!("07:15:02  KEY-ON  RPM=800  Red=off  Amber=ON  DEF=50.0%  temp 20 C")
+    );
+    call(
+        &mut bus,
+        json!({"cmd": "mark", "tag": "CRANK", "time": "07:15:09"}),
+        &apis,
+    );
+    assert_eq!(fake.state().sent.len(), before, "a marker sends nothing");
+    let log = call(&mut bus, json!({"cmd": "log"}), &apis);
+    assert_eq!(log[0], line);
+    assert!(bus
+        .handle(&json!({"cmd": "mark", "tag": "STOP"}), &apis)
+        .is_err());
+
+    let f = call(
+        &mut bus,
+        json!({"cmd": "session", "job": "", "local": "2026-05-01 07:16:00",
+               "stamp": "20260501_071600", "iso": "2026-05-01T07:16:00.0000000-05:00"}),
+        &apis,
+    );
+    let body = f["body"].as_str().unwrap();
+    assert!(
+        body.contains("Markers:\r\n  07:15:02  KEY-ON  RPM=800  Red=off  Amber=ON  DEF=50.0%  temp 20 C\r\n  07:15:09  CRANK  "),
+        "{body}"
+    );
+    let r = call(
+        &mut bus,
+        json!({"cmd": "report", "job": "", "when": "", "history": ""}),
+        &apis,
+    );
+    assert!(
+        r.as_str()
+            .unwrap()
+            .contains("MARKERS\r\n  07:15:02  KEY-ON  "),
+        "{r}"
+    );
+}

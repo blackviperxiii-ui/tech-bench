@@ -5,7 +5,9 @@
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
 use tb_core::j1939::monitor::{BusMonitor, SaRow};
-use tb_core::j1939::report::{base_name, lines, session_files, text, LocalNow, ReportData};
+use tb_core::j1939::report::{
+    base_name, lines, marker_line, session_files, text, LocalNow, ReportData,
+};
 use tb_core::j1939::{Dtc, Names};
 
 fn dtc(spn: i32, fmi: i32) -> Dtc {
@@ -196,6 +198,7 @@ fn session_files_match_save_session() {
         &[],
         "trend".into(),
         "timeline".into(),
+        &[],
         "WO 7-01",
         &now,
     );
@@ -242,4 +245,50 @@ fn session_files_match_save_session() {
         .contains(",previous,100,1,1,"));
     assert_eq!(f.trend_csv, "trend");
     assert_eq!(f.timeline_csv, "timeline");
+}
+
+#[test]
+fn marker_lines_read_like_mark_and_land_in_the_session() {
+    let mut s = BusMonitor::new().snapshot(-1);
+    assert_eq!(
+        marker_line("07:15:02", "KEY-ON", &s),
+        "07:15:02  KEY-ON  RPM=—  Red=off  Amber=off  DEF=n/a (not talking)"
+    );
+    s.rpm = 799.6;
+    s.red = true;
+    s.amber = true;
+    s.def_text = "50.0%  temp 20 C".into();
+    let crank = marker_line("07:15:09", "CRANK", &s);
+    assert_eq!(
+        crank,
+        "07:15:09  CRANK  RPM=800  Red=ON  Amber=ON  DEF=50.0%  temp 20 C"
+    );
+
+    let now = LocalNow {
+        local: "2026-05-01 07:16:00".into(),
+        stamp: "20260501_071600".into(),
+        iso: "2026-05-01T07:16:00.0000000-05:00".into(),
+    };
+    let marks = vec![
+        "07:15:02  KEY-ON  RPM=—  Red=off  Amber=off  DEF=n/a (not talking)".to_string(),
+        crank,
+    ];
+    let f = session_files(
+        &s,
+        &[],
+        &Names::new(),
+        &[],
+        String::new(),
+        String::new(),
+        &marks,
+        "",
+        &now,
+    );
+    assert!(
+        f.body.contains(
+            "Markers:\r\n  07:15:02  KEY-ON  RPM=—  Red=off  Amber=off  DEF=n/a (not talking)\r\n  07:15:09  CRANK  RPM=800  Red=ON  Amber=ON  DEF=50.0%  temp 20 C\r\n"
+        ),
+        "{}",
+        f.body
+    );
 }
