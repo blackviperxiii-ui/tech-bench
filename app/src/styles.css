@@ -318,3 +318,8 @@ button { font: inherit; }
 .trend-tick { fill: #696969; }
 .trend-muted { fill: #808080; }
 .trend-help { white-space: pre-wrap; margin-top: 8px; }
+
+/* INLINE 7 Timeline tab */
+.bar .bar-note { align-self: center; margin-right: 10px; font-size: 14px; }
+.timeline-list { max-height: 360px; overflow: auto; }
+.timeline-list .title { font-family: ui-monospace, Consolas, monospace; white-space: pre; }

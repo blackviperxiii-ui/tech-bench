@@ -127,6 +127,8 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
   const diffOk = diff.includes("RPM     800  →  800\r\n") && diff.includes("Unchanged active:\r\n  SPN 1761  FMI 9");
   const trend = await busCall<{ count: number; chart: { label: string } }>("trend", { channel: 0 });
   const trendOk = trend.count >= 1 && trend.chart.label === "RPM";
+  const timeline = await busCall<{ rows: { spn: number; query: string }[] }>("timeline", { job: "SMOKE UNIT" });
+  const timelineOk = timeline.rows[0]?.spn === 1761 && timeline.rows[0]?.query === "DEF tank level";
   let exportText = "";
   let exportOk = true;
   if (scratchHome) {
@@ -146,9 +148,10 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
     pageOk &&
     diffOk &&
     trendOk &&
+    timelineOk &&
     exportOk;
   return {
     ok,
-    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}; adapters page ${pageOk ? "lists FAKE" : "wrong"}; bus diff ${diffOk ? "ok" : "wrong"}; trend ${trend.count} sample(s)${exportText}`,
+    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}; adapters page ${pageOk ? "lists FAKE" : "wrong"}; bus diff ${diffOk ? "ok" : "wrong"}; trend ${trend.count} sample(s); timeline ${timelineOk ? "lists SPN 1761" : JSON.stringify(timeline.rows[0] ?? null)}${exportText}`,
   };
 }

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { busCall, busReport, sessionSave, type BusAdapter, type BusCaps, type BusSnap } from "./api";
 import { BusTab } from "./live/BusTab";
+import { TimelineTab } from "./live/TimelineTab";
 import { TrendTab } from "./live/TrendTab";
 import { CodeList, Confirm, ReportSheet, type Ask } from "./live/parts";
 
 /** Inner tabs, in the WinForms INLINE 7 order; the rest arrive with their own pages. */
-const TABS = ["Codes", "Bus", "Trend"] as const;
+const TABS = ["Codes", "Bus", "Trend", "Timeline"] as const;
 type Tab = (typeof TABS)[number];
 
 /** How often the HUD asks the bridge for a snapshot (the WinForms UI timer is 250 ms). */
@@ -38,6 +39,7 @@ export function LiveBus({
   onReport,
   onSaved,
   onAttach,
+  onSearch,
 }: {
   caps: BusCaps;
   jobTag: string;
@@ -47,6 +49,7 @@ export function LiveBus({
   onReport: (text: string) => void;
   onSaved: () => void;
   onAttach: (text: string) => Promise<string>;
+  onSearch: (query: string) => void;
 }) {
   const [report, setReport] = useState<string | null>(null);
   const [adapters, setAdapters] = useState<BusAdapter[]>([]);
@@ -346,6 +349,11 @@ export function LiveBus({
       {tab === "Trend" && (
         <div role="tabpanel" aria-label="Trend">
           <TrendTab jobTag={jobTag} run={run} addLog={addLog} />
+        </div>
+      )}
+      {tab === "Timeline" && (
+        <div role="tabpanel" aria-label="Timeline">
+          <TimelineTab jobTag={jobTag} addLog={addLog} onSearch={onSearch} />
         </div>
       )}
 
