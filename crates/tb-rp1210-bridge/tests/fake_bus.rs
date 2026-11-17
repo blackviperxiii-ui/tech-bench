@@ -302,3 +302,43 @@ fn bus_tab_snapshots_diff_and_exports() {
         .handle(&json!({"cmd": "export", "kind": "nope"}), &apis)
         .is_err());
 }
+
+#[test]
+fn auto_reconnect_follows_the_bus_tab_toggle() {
+    let (mut bus, fake, apis) = connected();
+    call(&mut bus, json!({"cmd": "log"}), &apis);
+    let t0 = tb_rp1210_bridge::bus::now_ms();
+    fake.state().silent = true;
+
+    // Off: a silent adapter stays connected and nothing reconnects.
+    assert_eq!(
+        call(
+            &mut bus,
+            json!({"cmd": "autoReconnect", "on": false}),
+            &apis
+        ),
+        json!(false)
+    );
+    bus.cycle_at(t0 + 7_000);
+    bus.cycle_at(t0 + 13_000);
+    assert!(bus.connected(), "turning it off does not drop the link");
+    let log = call(&mut bus, json!({"cmd": "log"}), &apis);
+    assert!(
+        !log.to_string().contains("Auto-reconnect"),
+        "no reconnect while off: {log}"
+    );
+
+    // On: past 6 s of silence it drops the link, then connects again.
+    assert_eq!(
+        call(&mut bus, json!({"cmd": "autoReconnect", "on": true}), &apis),
+        json!(true)
+    );
+    bus.cycle_at(t0 + 14_000);
+    assert!(!bus.connected(), "a silent adapter is dropped");
+    fake.state().silent = false;
+    bus.cycle_at(t0 + 20_000);
+    assert!(bus.connected(), "and connected again");
+    let log = call(&mut bus, json!({"cmd": "log"}), &apis);
+    assert_eq!(log[0], json!("Auto-reconnect…"));
+    assert_eq!(log[1], json!("Connected  device 1  J1939:Baud=250"));
+}

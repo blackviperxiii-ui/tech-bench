@@ -58,6 +58,8 @@ export function LiveBus({
   const [clearing, setClearing] = useState("");
   const [ask, setAsk] = useState<Ask | null>(null);
   const [tab, setTab] = useState<Tab>("Codes");
+  // The bridge starts with auto-reconnect on, as the WinForms checkbox does.
+  const [autoRe, setAutoRe] = useState(true);
   const shownReset = useRef(0);
   const pollBusy = useRef(false);
 
@@ -297,7 +299,16 @@ export function LiveBus({
       )}
       {tab === "Bus" && (
         <div role="tabpanel" aria-label="Bus">
-          <BusTab jobTag={jobTag} run={run} addLog={addLog} />
+          <BusTab
+            jobTag={jobTag}
+            run={run}
+            addLog={addLog}
+            autoReconnect={autoRe}
+            onAutoReconnect={(on) => {
+              setAutoRe(on);
+              void run("autoReconnect", { on });
+            }}
+          />
         </div>
       )}
 
