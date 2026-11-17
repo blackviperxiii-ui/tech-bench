@@ -295,6 +295,10 @@ button { font: inherit; }
 /* Phone notch and home bar. */
 .shell { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 
+/* Adapters page: the AdapterSummary text keeps its lines, as the WinForms box does. */
+.adapters { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.adapters .detail { flex: 1; white-space: pre; overflow: auto; font-family: ui-monospace, Consolas, monospace; }
+
 /* INLINE 7 inner tabs and the Bus tab */
 .tabs { display: flex; gap: 2px; margin: 10px 0 6px; border-bottom: 1px solid var(--line); }
 .tabs .tab { border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; background: transparent; padding: 6px 14px; }

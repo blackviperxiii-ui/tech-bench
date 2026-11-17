@@ -98,6 +98,9 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
   if (!caps.available) return { ok: false, text: `live bus: ${caps.reason}` };
   const hello = await busCall<{ bridge: string; pointerBits: number }>("hello");
   const adapters = await busCall<BusAdapter[]>("adapters");
+  // The Adapters page reads the same list.
+  const page = await busCall<{ text: string; count: number }>("summary");
+  const pageOk = page.count === 1 && page.text.includes("Fake adapter (scripted ECMs, no hardware)  (FAKE)");
   await busCall("connect", { adapter: "FAKE" });
   let s: BusSnap | null = null;
   for (let i = 0; i < 100; i++) {
@@ -138,10 +141,11 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
     held === 0 &&
     reportOk &&
     saveOk &&
+    pageOk &&
     diffOk &&
     exportOk;
   return {
     ok,
-    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}; bus diff ${diffOk ? "ok" : "wrong"}${exportText}`,
+    text: `live bus: bridge ${hello.bridge} pointerBits ${hello.pointerBits}; ${s?.hud.rpm ?? "(no snapshot)"}; active "${code}"; TSC1 with Safety off held ${held}; report ${reportOk ? "ok" : "wrong"}; ${saveText}; adapters page ${pageOk ? "lists FAKE" : "wrong"}; bus diff ${diffOk ? "ok" : "wrong"}${exportText}`,
   };
 }

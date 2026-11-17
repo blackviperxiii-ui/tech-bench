@@ -17,23 +17,27 @@ use tb_rp1210_bridge::fake::FakeBus;
 
 fn main() {
     let fake = std::env::args().any(|a| a == "--fake");
-    let (adapters, bus): (Vec<Rp1210Api>, Bus) = if fake {
-        let api = Rp1210Api {
-            id: "FAKE".into(),
-            name: "Fake adapter (scripted ECMs, no hardware)".into(),
-            dll_path: "(built in)".into(),
-            devices: Vec::new(),
-            j1939_protocols: vec!["J1939:Baud=250".into()],
-            supports_iso15765: false,
-        };
-        (vec![api], Bus::new(Box::new(FakeBus::default())))
+    let bus = if fake {
+        Bus::new(Box::new(FakeBus::default()))
     } else {
-        (
-            Rp1210Api::adapters(&windows_dir()),
-            Bus::with_loader(Box::new(load_vendor_dll)),
-        )
+        Bus::with_loader(Box::new(load_vendor_dll))
     };
-    run(adapters, bus);
+    run(fake, bus);
+}
+
+/// What this PC has, read from the RP1210 INI files (the fake adapter in fake mode).
+fn scan(fake: bool) -> Vec<Rp1210Api> {
+    if !fake {
+        return Rp1210Api::adapters(&windows_dir());
+    }
+    vec![Rp1210Api {
+        id: "FAKE".into(),
+        name: "Fake adapter (scripted ECMs, no hardware)".into(),
+        dll_path: "(built in)".into(),
+        devices: Vec::new(),
+        j1939_protocols: vec!["J1939:Baud=250".into()],
+        supports_iso15765: false,
+    }]
 }
 
 #[cfg(windows)]
@@ -46,7 +50,8 @@ fn load_vendor_dll(_api: &Rp1210Api) -> Result<Box<dyn Driver>, String> {
     Err("RP1210 adapters need the Windows build of Tech Bench.".into())
 }
 
-fn run(adapters: Vec<Rp1210Api>, mut bus: Bus) {
+fn run(fake: bool, mut bus: Bus) {
+    let mut adapters = scan(fake);
     let (tx, rx) = mpsc::channel::<String>();
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
@@ -71,8 +76,22 @@ fn run(adapters: Vec<Rp1210Api>, mut bus: Bus) {
                 Err(e) => (Value::Null, Err(format!("bad JSON: {e}")), false),
                 Ok(req) => {
                     let id = req.get("id").cloned().unwrap_or(Value::Null);
-                    if req.get("cmd").and_then(Value::as_str) == Some("quit") {
+                    let cmd = req.get("cmd").and_then(Value::as_str);
+                    if cmd == Some("quit") {
                         (id, Ok(json!(true)), true)
+                    } else if cmd == Some("rescan") {
+                        // The Adapters page's Rescan: re-read the INI files, then answer as
+                        // `summary` does. Not while a link is up on one of them.
+                        if bus.connected() {
+                            (
+                                id,
+                                Err("Disconnect the adapter first, then rescan.".into()),
+                                false,
+                            )
+                        } else {
+                            adapters = scan(fake);
+                            (id, bus.handle(&json!({"cmd": "summary"}), &adapters), false)
+                        }
                     } else {
                         (id, bus.handle(&req, &adapters), false)
                     }

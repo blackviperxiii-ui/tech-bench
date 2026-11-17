@@ -20,6 +20,8 @@ pub struct Bridge(pub Mutex<Option<BridgeClient>>);
 const ALLOWED: &[&str] = &[
     "hello",
     "adapters",
+    "summary",
+    "rescan",
     "connect",
     "disconnect",
     "snapshot",
