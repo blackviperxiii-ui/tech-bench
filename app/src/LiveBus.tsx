@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { busCall, busReport, sessionSave, type BusAdapter, type BusCaps, type BusSnap } from "./api";
+import { busCall, busReport, localNow, sessionSave, type BusAdapter, type BusCaps, type BusSnap } from "./api";
 import { BusTab } from "./live/BusTab";
 import { TimelineTab } from "./live/TimelineTab";
 import { TrendTab } from "./live/TrendTab";
@@ -276,6 +276,16 @@ export function LiveBus({
         <button type="button" disabled={busy} onClick={() => void openReport()}>
           Report
         </button>
+        {(["KEY-ON", "CRANK", "RELEASE"] as const).map((tag) => (
+          <button
+            key={tag}
+            type="button"
+            title="Note this moment in the log, the saved session and the report. Sends nothing to the bus."
+            onClick={() => void run("mark", { tag, time: localNow().local.slice(11) })}
+          >
+            {tag}
+          </button>
+        ))}
       </div>
 
       <p className="status" role="status">

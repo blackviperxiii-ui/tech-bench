@@ -44,6 +44,7 @@ const ALLOWED: &[&str] = &[
     "snap",
     "diff",
     "export",
+    "mark",
 ];
 
 const BRIDGE_NAME: &str = "tb-rp1210-bridge";

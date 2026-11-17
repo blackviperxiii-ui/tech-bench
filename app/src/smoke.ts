@@ -109,8 +109,13 @@ async function smokeBus(scratchHome: boolean): Promise<{ ok: boolean; text: stri
     await new Promise((r) => setTimeout(r, 100));
   }
   const held = await busCall<number>("tsc1", { rpm: 800 });
+  // KEY-ON marker: in the report's MARKERS section (and the saved session's Markers:).
+  await busCall("mark", { tag: "KEY-ON", time: "10:00:00" });
   const report = await busReport("SMOKE UNIT", "");
-  const reportOk = report.includes("Job:      SMOKE UNIT\r\n") && report.includes("  RPM:      800\r\n");
+  const reportOk =
+    report.includes("Job:      SMOKE UNIT\r\n") &&
+    report.includes("  RPM:      800\r\n") &&
+    report.includes("MARKERS\r\n  10:00:00  KEY-ON  RPM=800  ");
   // Save writes into the session folder, so only under a scratch TECHBENCH_HOME. The saved
   // DTCs then show up as unit history for the same job.
   let saveText = "save: skipped (no TECHBENCH_HOME)";
