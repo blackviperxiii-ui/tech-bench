@@ -342,3 +342,45 @@ fn auto_reconnect_follows_the_bus_tab_toggle() {
     assert_eq!(log[0], json!("Auto-reconnect…"));
     assert_eq!(log[1], json!("Connected  device 1  J1939:Baud=250"));
 }
+
+#[test]
+fn module_picker_views_the_controller_but_clear_still_targets_everyone() {
+    let (mut bus, fake, apis) = connected();
+    run_until(&mut bus, 5, "controller DM1", |s| {
+        s["faultModules"] == json!([0, 48])
+    });
+    let s = call(&mut bus, json!({"cmd": "snapshot", "viewSa": 48}), &apis);
+    assert_eq!(s["viewSa"], json!(48));
+    assert_eq!(
+        s["active"][0]["spn"],
+        json!(520_200),
+        "the controller's own code"
+    );
+    assert_eq!(s["active"][0]["fmi"], json!(3));
+    // The view sticks until the UI changes it.
+    let s = call(&mut bus, json!({"cmd": "snapshot"}), &apis);
+    assert_eq!(s["viewSa"], json!(48));
+
+    let before = fake.state().sent.len();
+    call(&mut bus, json!({"cmd": "clear", "kind": "all"}), &apis);
+    let sent: Vec<Vec<u8>> = fake.state().sent[before..].to_vec();
+    let asked = |pgn: i32, dest: u8| {
+        sent.iter()
+            .filter(|m| m[5] == dest && m.len() == 9 && pgn_of(&m[6..9]) == pgn)
+            .count()
+    };
+    assert_eq!(
+        asked(0xFED3, 0),
+        1,
+        "DM11 to the engine, whatever is in view"
+    );
+    assert_eq!(asked(0xFED3, 48), 1, "DM11 to the controller once");
+    assert_eq!(asked(0xFED3, 255), 1, "DM11 to everyone once");
+
+    let s = call(&mut bus, json!({"cmd": "snapshot", "viewSa": -1}), &apis);
+    assert_eq!(
+        s["viewSa"],
+        json!(0),
+        "Engine (auto) follows the engine at SA 0"
+    );
+}
