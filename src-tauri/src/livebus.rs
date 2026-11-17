@@ -39,6 +39,9 @@ const ALLOWED: &[&str] = &[
     "log",
     "report",
     "session",
+    "snap",
+    "diff",
+    "export",
 ];
 
 const BRIDGE_NAME: &str = "tb-rp1210-bridge";
@@ -160,6 +163,31 @@ fn write_if(dir: &Path, name: String, text: &Value) -> std::io::Result<()> {
         Some(t) if !t.is_empty() => write_bom(&dir.join(name), t),
         _ => Ok(()),
     }
+}
+
+/// Export CSV on the Bus tab (and the Trend and Timeline tabs): the bridge builds the text, this
+/// writes `<session name>_<kind>.csv` in the session folder and returns its path.
+#[tauri::command(async)]
+pub fn bus_export(
+    kind: String,
+    job: String,
+    now: LocalNow,
+    app: AppHandle,
+    bridge: State<'_, Bridge>,
+) -> Result<String, String> {
+    let text = bus_call(
+        "export".into(),
+        Some(serde_json::json!({"kind": kind, "job": job})),
+        bridge,
+    )?;
+    let text = text.as_str().ok_or("The bridge sent no CSV.")?;
+    let dir = crate::shopsync::session_folder(&app);
+    let base = tb_core::j1939::report::base_name(&job, &now.stamp);
+    let path = dir.join(format!("{base}_{kind}.csv"));
+    std::fs::create_dir_all(&dir)
+        .and_then(|()| write_bom(&path, text))
+        .map_err(|e| format!("Could not write the CSV.\n\n{e}"))?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Save (`SaveSessionCore` + `SessionIo.SaveSession`): the session text and its four CSVs in the

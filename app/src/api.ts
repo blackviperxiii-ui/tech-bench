@@ -289,3 +289,13 @@ export interface CrashReport {
 export const crashReport = (place: string, details: string) =>
   invoke<CrashReport>("crash_report", { place, details });
 export const crashOpenFolder = () => invoke<void>("crash_open_folder");
+
+/** The Bus tab's two live lists, worded as the WinForms Bus tab lists them. */
+export interface BusLists {
+  pgnLines: string[];
+  saLines: string[];
+}
+
+/** Export CSV (Bus, Trend or Timeline): writes `<session name>_<kind>.csv` and returns its path. */
+export const busExport = (kind: "bus" | "trend" | "timeline", job: string, now = localNow()) =>
+  invoke<string>("bus_export", { kind, job, now });

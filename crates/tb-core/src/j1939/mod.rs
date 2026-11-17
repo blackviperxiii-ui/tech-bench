@@ -9,6 +9,7 @@ pub mod guard;
 pub mod monitor;
 pub mod names;
 pub mod report;
+pub mod snap;
 pub mod timeline;
 pub mod trend;
 

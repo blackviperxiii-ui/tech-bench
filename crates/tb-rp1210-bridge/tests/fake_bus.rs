@@ -4,7 +4,7 @@
 mod common;
 
 use common::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use tb_core::j1939::clear::{tx, REQUEST, TSC1};
 use tb_core::j1939::guard::SendPolicy;
 use tb_rp1210_bridge::bus::Bus;
@@ -246,4 +246,59 @@ fn the_protocol_has_no_raw_send() {
         bus.handle(&json!({"cmd": "clear", "kind": "def"}), &[]),
         Err("clear needs kind \"all\" or \"previous\"".to_string())
     );
+}
+
+#[test]
+fn bus_tab_snapshots_diff_and_exports() {
+    let (mut bus, _fake, apis) = connected();
+    assert_eq!(
+        call(&mut bus, json!({"cmd": "diff"}), &apis),
+        json!("Need Snapshot A and Snapshot B first.")
+    );
+    let half = call(
+        &mut bus,
+        json!({"cmd": "snap", "which": "A", "time": "10:00:00"}),
+        &apis,
+    );
+    assert_eq!(half, json!("Need Snapshot A and Snapshot B first."));
+    let d = call(
+        &mut bus,
+        json!({"cmd": "snap", "which": "B", "time": "10:05:00"}),
+        &apis,
+    );
+    let d = d.as_str().unwrap();
+    assert!(
+        d.starts_with("BEFORE  10:00:00  (A before)\r\nAFTER   10:05:00  (B after)\r\n\r\nRPM     800  →  800\r\n"),
+        "{d}"
+    );
+    assert!(d.contains("Unchanged active:\r\n  SPN 1761  FMI 9  occ 1  abnormal update rate (not talking)  DEF tank level\r\n"), "{d}");
+    assert_eq!(call(&mut bus, json!({"cmd": "diff"}), &apis), json!(d));
+    let log = call(&mut bus, json!({"cmd": "log"}), &apis);
+    let log: Vec<&str> = log
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(
+        log.contains(&"Snapshot A saved") && log.contains(&"Snapshot B saved"),
+        "{log:?}"
+    );
+    assert!(bus
+        .handle(&json!({"cmd": "snap", "which": "C"}), &apis)
+        .is_err());
+
+    let csv = call(&mut bus, json!({"cmd": "export", "kind": "bus"}), &apis);
+    let csv = csv.as_str().unwrap();
+    assert!(
+        csv.starts_with("pgn,pgn_hex,name,sa,frames,last_len\r\n"),
+        "{csv}"
+    );
+    assert!(
+        csv.contains("\r\n\r\nsa,module,frames,claimed,name_hex\r\n"),
+        "{csv}"
+    );
+    assert!(bus
+        .handle(&json!({"cmd": "export", "kind": "nope"}), &apis)
+        .is_err());
 }
