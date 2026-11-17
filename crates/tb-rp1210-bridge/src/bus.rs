@@ -713,13 +713,29 @@ impl Bus {
                 }))
             }
             "timeline" => {
-                let sa = int("sa").unwrap_or(-1);
+                // No `sa`: the module picked in the Module list (Engine (auto) is -1).
+                let sa = int("sa").unwrap_or(self.live.view_sa);
                 let view = if sa < 0 { self.mon.engine_sa() } else { sa };
                 let job = req.get("job").and_then(Value::as_str).unwrap_or("");
-                let tl = &self.mon.module(view).timeline;
+                let (recent, csv) = {
+                    let tl = &self.mon.module(view).timeline;
+                    (tl.recent(), tl.csv(job))
+                };
+                let names = &self.mon.names;
                 Ok(json!({
-                    "lines": tl.recent().iter().map(ToString::to_string).collect::<Vec<_>>(),
-                    "csv": tl.csv(job),
+                    "lines": recent.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                    // Rows for the Timeline tab; `query` is the KB search a double-click runs
+                    // (Inline7Control.KbQuery: the SPN name, else "SPN n FMI n").
+                    "rows": recent.iter().map(|e| {
+                        let name = names.spn(e.spn);
+                        let query = if name.is_empty() {
+                            format!("SPN {} FMI {}", e.spn, e.fmi)
+                        } else {
+                            name
+                        };
+                        json!({"spn": e.spn, "fmi": e.fmi, "text": e.to_string(), "query": query})
+                    }).collect::<Vec<_>>(),
+                    "csv": csv,
                 }))
             }
             "session" => {

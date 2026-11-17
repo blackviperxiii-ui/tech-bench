@@ -425,3 +425,26 @@ fn trend_tab_charts_one_sample_a_second() {
         .handle(&json!({"cmd": "trend", "channel": 5}), &apis)
         .is_err());
 }
+
+#[test]
+fn timeline_tab_lists_codes_with_their_kb_search() {
+    let (mut bus, _fake, apis) = connected();
+    let t = call(&mut bus, json!({"cmd": "timeline", "job": "UNIT 7"}), &apis);
+    let rows = t["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{t}");
+    assert_eq!(rows[0]["spn"], json!(1761));
+    assert_eq!(rows[0]["fmi"], json!(9));
+    assert_eq!(rows[0]["query"], json!("DEF tank level"));
+    assert_eq!(rows[0]["text"], t["lines"][0]);
+    let csv = t["csv"].as_str().unwrap();
+    assert_eq!(csv.lines().count(), 2, "{csv}");
+
+    // The controller's own timeline once it is in the Module list's view; an unnamed SPN
+    // searches by number.
+    call(&mut bus, json!({"cmd": "snapshot", "viewSa": 48}), &apis);
+    let t = call(&mut bus, json!({"cmd": "timeline"}), &apis);
+    assert_eq!(t["rows"][0]["spn"], json!(520_200));
+    assert_eq!(t["rows"][0]["query"], json!("SPN 520200 FMI 3"));
+    let t = call(&mut bus, json!({"cmd": "timeline", "sa": -1}), &apis);
+    assert_eq!(t["rows"][0]["spn"], json!(1761), "sa -1 is the engine");
+}

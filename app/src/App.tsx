@@ -205,6 +205,12 @@ export function App() {
     }
   }
 
+  /** Timeline double-click (OpenInSearch): run a KB search for that code. */
+  function searchFor(query: string) {
+    setPrefill((p) => ({ text: query, tick: p.tick + 1 }));
+    setPage("Search");
+  }
+
   function searchJob() {
     // JobStrip.SearchQuery: the typed model and serial.
     setPrefill((p) => ({ text: `${header.model} ${header.serial}`.trim(), tick: p.tick + 1 }));
@@ -278,7 +284,13 @@ export function App() {
             />
           )}
           {page === "INLINE 7" && (
-            <Inline7 jobTag={jobTag} syncTick={syncCount} onSessionSaved={quietSync} onAttachReport={attachReport} />
+            <Inline7
+              jobTag={jobTag}
+              syncTick={syncCount}
+              onSessionSaved={quietSync}
+              onAttachReport={attachReport}
+              onSearch={searchFor}
+            />
           )}
           {page === "Work orders" && (
             <WorkOrders
