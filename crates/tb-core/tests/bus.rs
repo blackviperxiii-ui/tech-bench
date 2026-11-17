@@ -633,3 +633,54 @@ mod fs_tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+/// Ported from tests/SelfTest.Adapter.cs (AdapterSummaryTests).
+#[test]
+fn adapters_page_summary() {
+    let none = Rp1210Api::summary(r"C:\Windows\RP121032.INI", true, &[]);
+    assert_eq!(
+        none,
+        [
+            "RP1210 adapters installed on this PC",
+            r"(read from C:\Windows\RP121032.INI)",
+            "",
+            "Process: 32-bit — correct for RP1210",
+            "",
+            "None found.",
+            "",
+            "Install the adapter vendor's RP1210 drivers (for the INLINE 7 that is the",
+            "Cummins CIL7 package), then press Rescan.",
+            "",
+        ]
+        .join("\r\n")
+    );
+    assert!(Rp1210Api::summary("x", false, &[])
+        .contains("Process: 64-bit — RP1210 drivers will NOT load; rebuild with build.bat\r\n"));
+
+    let api = Rp1210Api::from_ini(
+        "CMNSI7",
+        &Ini::parse(Some(VENDOR_INI)),
+        r"C:\Windows\SysWOW64\CMNSI7.DLL",
+    );
+    assert_eq!(
+        Rp1210Api::summary(r"C:\Windows\RP121032.INI", true, &[api]),
+        [
+            "RP1210 adapters installed on this PC",
+            r"(read from C:\Windows\RP121032.INI)",
+            "",
+            "Process: 32-bit — correct for RP1210",
+            "",
+            "Cummins Inc. INLINE 7  (CMNSI7)",
+            r"DLL: C:\Windows\SysWOW64\CMNSI7.DLL",
+            "Devices: 1 — INLINE 7 over USB, 2 — INLINE 7 Bluetooth",
+            "J1939: J1939:Baud=250, J1939:Baud=500, J1939",
+            "ISO15765: yes",
+            "",
+            "",
+            "The INLINE 7 tab connects with whichever adapter is picked in its Adapter box.",
+            "Sullair / IR Xe datalinks appear here automatically once their drivers are installed.",
+            "",
+        ]
+        .join("\r\n")
+    );
+}

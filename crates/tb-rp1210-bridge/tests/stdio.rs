@@ -34,9 +34,30 @@ fn json_lines_over_stdio() {
     assert_eq!(hello["data"]["pointerBits"], json!(usize::BITS));
     let adapters = ask(json!({"cmd": "adapters"}));
     assert_eq!(adapters["data"][0]["id"], json!("FAKE"));
+    // The Adapters page: summary, and Rescan while no link is up.
+    let summary = ask(json!({"cmd": "summary"}));
+    assert_eq!(summary["data"]["count"], json!(1));
+    let text = summary["data"]["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("RP1210 adapters installed on this PC\r\n(read from "),
+        "{text}"
+    );
+    assert!(
+        text.contains("Fake adapter (scripted ECMs, no hardware)  (FAKE)\r\nDLL: (built in)\r\n"),
+        "{text}"
+    );
+    let rescan = ask(json!({"cmd": "rescan"}));
+    assert_eq!(rescan["ok"], json!(true));
+    assert_eq!(rescan["data"]["text"], summary["data"]["text"]);
     assert_eq!(
         ask(json!({"cmd": "connect", "adapter": "fake"}))["data"],
         json!(true)
+    );
+    let busy = ask(json!({"cmd": "rescan"}));
+    assert_eq!(busy["ok"], json!(false));
+    assert_eq!(
+        busy["error"],
+        json!("Disconnect the adapter first, then rescan.")
     );
 
     let end = Instant::now() + Duration::from_secs(5);

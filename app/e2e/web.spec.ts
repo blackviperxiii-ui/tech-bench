@@ -60,6 +60,7 @@ test("the adapter and shop-folder parts are hidden", async ({ page }) => {
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Pages" });
   await expect(nav.getByRole("button", { name: "Settings" })).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: "Adapters" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add code to KB" })).toHaveCount(0);
   await expect(page.getByTitle("Shop sync")).toHaveCount(0);
 
