@@ -7,6 +7,7 @@ import {
   cheatsheet,
   type BusAdapter,
   type BusSnap,
+  type SmokeMode,
   explainCode,
   historySummary,
   jobTitle,
@@ -37,7 +38,13 @@ export const SMOKE_EXPECT = "Sensor Failure 1AVPT";
  * and the unit history for it. With the bridge on its fake adapter, it also connects over the
  * sidecar, reads the engine's RPM and codes, and checks a TSC1 hold is refused while Safety is off.
  */
-export async function runSmoke(workOrders: boolean) {
+export async function runSmoke(mode: SmokeMode) {
+  const workOrders = mode.workOrders;
+  // The installed app, its binary and this UI build carry one version (tauri.conf.json).
+  const versionOk = mode.version === __APP_VERSION__ && mode.crateVersion === __APP_VERSION__;
+  const versionText = versionOk
+    ? `version ${__APP_VERSION__}`
+    : `version mismatch: app ${mode.version ?? "?"}, binary ${mode.crateVersion ?? "?"}, UI ${__APP_VERSION__}`;
   try {
     const r = await kbSearch(SMOKE_QUERY, SMOKE_KIND);
     const first = r.hits[0]?.title ?? "(no hits)";
@@ -84,8 +91,8 @@ export async function runSmoke(workOrders: boolean) {
     }
     const bus = await smokeBus(workOrders);
     await smokeReport(
-      searchOk && sheetOk && codeOk && guardOk && seedOk && woOk && bus.ok,
-      `search ${SMOKE_KIND} "${SMOKE_QUERY}": ${r.total} hit(s), first "${first}"; ` +
+      versionOk && searchOk && sheetOk && codeOk && guardOk && seedOk && woOk && bus.ok,
+      `${versionText}; search ${SMOKE_KIND} "${SMOKE_QUERY}": ${r.total} hit(s), first "${first}"; ` +
         `cheat sheet: "${sheet[0]?.text ?? ""}"; explain: "${codeLine}"; ` +
         `open guard: ${guardOk ? "refused .exe" : `"${guard}"`}; code seed: "${seed.title}"; ${woText}; ${bus.text}`,
     );

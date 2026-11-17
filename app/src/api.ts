@@ -28,7 +28,14 @@ export const KINDS = ["ALL", "CODE", "PASSWORD", "MANUAL", "FILTER", "EQUIP", "N
 export const kbInfo = () => invoke<KbInfo>("kb_info");
 export const kbSearch = (query: string, kind: string) =>
   invoke<SearchResult>("kb_search", { query, kind });
-export const smokeMode = () => invoke<{ on: boolean; workOrders: boolean }>("smoke_mode");
+/** Smoke mode, plus the running app's version and the binary's own (desktop and mobile only). */
+export interface SmokeMode {
+  on: boolean;
+  workOrders: boolean;
+  version?: string;
+  crateVersion?: string;
+}
+export const smokeMode = () => invoke<SmokeMode>("smoke_mode");
 export const smokeReport = (ok: boolean, detail: string) =>
   invoke<void>("smoke_report", { ok, detail });
 

@@ -153,12 +153,18 @@ struct SmokeInfo {
     /// Also round-trip a work order: only when TECHBENCH_HOME points the store at a scratch
     /// folder, so a smoke run never writes into a real shop's work orders.
     work_orders: bool,
+    /// The running app's version (tauri.conf.json, as the installer stamped it) and the
+    /// binary's own (src-tauri/Cargo.toml); the smoke checks they match the UI's build.
+    version: String,
+    crate_version: String,
 }
 
 #[tauri::command]
-fn smoke_mode(smoke: State<'_, Smoke>) -> SmokeInfo {
+fn smoke_mode(smoke: State<'_, Smoke>, app: AppHandle) -> SmokeInfo {
     let on = smoke.0.load(Ordering::SeqCst);
     SmokeInfo {
+        version: app.package_info().version.to_string(),
+        crate_version: env!("CARGO_PKG_VERSION").to_string(),
         on,
         // A phone or simulator smoke runs in a fresh install, so its data folder is scratch.
         work_orders: on && (cfg!(mobile) || std::env::var_os("TECHBENCH_HOME").is_some()),
