@@ -11,17 +11,22 @@ export const DIFF_HELP =
   "If the tank header talks you will see DEF PGN FE56 from the engine.";
 
 /**
- * Bus tab (Inline7Control.BuildBusTab): who is talking on the bus, Snapshot A / B with a Diff,
- * Clear stats, and Export CSV of the two lists.
+ * Bus tab (Inline7Control.BuildBusTab): the auto-reconnect toggle, who is talking on the bus,
+ * Snapshot A / B with a Diff, Clear stats, and Export CSV of the two lists.
  */
 export function BusTab({
   jobTag,
   run,
   addLog,
+  autoReconnect,
+  onAutoReconnect,
 }: {
   jobTag: string;
   run: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T | null>;
   addLog: (lines: string[]) => void;
+  /** "Auto-reconnect if the adapter drops": kept by the live page so it survives a tab switch. */
+  autoReconnect: boolean;
+  onAutoReconnect: (on: boolean) => void;
 }) {
   const [lists, setLists] = useState<BusLists>({ pgnLines: [], saLines: [] });
   const [diff, setDiff] = useState(DIFF_HELP);
@@ -65,6 +70,10 @@ export function BusTab({
   return (
     <div className="bus-tab">
       <div className="bar">
+        <label className="check">
+          <input type="checkbox" checked={autoReconnect} onChange={(e) => onAutoReconnect(e.target.checked)} />
+          Auto-reconnect if the adapter drops
+        </label>
         <button type="button" onClick={() => void snap("A")}>
           Snapshot A
         </button>

@@ -328,7 +328,11 @@ impl Bus {
 
     /// One pass of the worker loop.
     pub fn cycle(&mut self) {
-        let now = now_ms();
+        self.cycle_at(now_ms());
+    }
+
+    /// One pass at a given clock (milliseconds), so a test can step past the silence timeout.
+    pub fn cycle_at(&mut self, now: i64) {
         if !self.live.want_connected {
             if self.rp.is_connected() {
                 if self.live.tsc_rpm > 0 {

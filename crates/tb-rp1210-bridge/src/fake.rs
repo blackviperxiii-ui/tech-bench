@@ -87,6 +87,8 @@ pub struct FakeState {
     pub connected: bool,
     /// Send calls left to fail with error 140 (bus off), for tests.
     pub fail_sends: usize,
+    /// The adapter stays "connected" but nothing arrives (a dropped cable), for tests.
+    pub silent: bool,
     rx: VecDeque<Vec<u8>>,
     started: Instant,
     last_fast: Option<Instant>,
@@ -119,6 +121,7 @@ impl FakeBus {
                 commands: Vec::new(),
                 connected: false,
                 fail_sends: 0,
+                silent: false,
                 rx: VecDeque::new(),
                 started: Instant::now(),
                 last_fast: None,
@@ -329,6 +332,9 @@ impl Driver for FakeBus {
         let mut s = self.state();
         if !s.connected {
             return -ERR_NOT_CONNECTED;
+        }
+        if s.silent {
+            return 0;
         }
         if s.rx.is_empty() {
             s.broadcast();
