@@ -15,6 +15,7 @@ use tauri::{AppHandle, Manager, RunEvent, State};
 use tb_core::kb::{KbIndex, MAX_RESULTS};
 use tb_core::search::{codebook, featurebook};
 
+mod crash;
 mod job;
 mod livebus;
 mod shopadd;
@@ -286,19 +287,9 @@ fn kb_root(app: &AppHandle) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("kb")
 }
 
-fn install_panic_hook() {
-    let default = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let log = std::env::temp_dir().join("techbench-crash.log");
-        let _ = std::fs::write(&log, format!("{info}\n"));
-        eprintln!("Tech Bench crashed: {info} (written to {})", log.display());
-        default(info);
-    }));
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    install_panic_hook();
+    crash::install_panic_hook();
     let smoke = smoke_requested();
     #[cfg_attr(mobile, allow(unused_variables))]
     let update_smoke = std::env::args().any(|a| a == "--update-smoke");
@@ -386,6 +377,8 @@ pub fn run() {
             workorders::wo_attach_report,
             smoke_mode,
             smoke_report,
+            crash::crash_report,
+            crash::crash_open_folder,
             update::update_check,
             update::update_install
         ])

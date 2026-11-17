@@ -189,6 +189,16 @@ fn no_bus_and_bad_requests_answer_with_an_error() {
 }
 
 #[test]
+fn crash_report_has_no_log_line_in_the_browser() {
+    let d = data(r#"{"cmd":"crash_report","args":{"place":"UI","details":"TypeError: boom"}}"#);
+    assert_eq!(json::s(&d, "logPath"), "");
+    assert_eq!(
+        json::s(&d, "clipboard"),
+        "Tech Bench crash\nWhere: UI\n\nTypeError: boom\n"
+    );
+}
+
+#[test]
 fn raw_exports_round_trip() {
     let req = br#"{"cmd":"kb_info"}"#;
     let reply = unsafe {
