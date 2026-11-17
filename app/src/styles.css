@@ -306,3 +306,15 @@ button { font: inherit; }
 .bus-list { height: 220px; overflow: auto; white-space: pre; }
 .bus-diff { min-height: 120px; white-space: pre-wrap; margin-top: 10px; }
 .bar label.check { display: flex; gap: 6px; align-items: center; font-size: 14px; margin-right: 10px; }
+
+/* INLINE 7 Trend tab: TrendChart.cs colors */
+.trend-chart { width: 100%; height: auto; background: var(--panel); border-radius: 6px; font-size: 12px; white-space: pre; }
+.trend-frame { fill: none; stroke: #c8c8c8; }
+.trend-grid { stroke: #e8e8e8; }
+.trend-red { fill: rgba(200, 40, 40, 0.16); }
+.trend-amber { fill: rgba(230, 170, 30, 0.14); }
+.trend-line { fill: none; stroke: #145aaa; stroke-width: 1.6; stroke-linejoin: round; }
+.trend-dot { fill: #145aaa; }
+.trend-tick { fill: #696969; }
+.trend-muted { fill: #808080; }
+.trend-help { white-space: pre-wrap; margin-top: 8px; }

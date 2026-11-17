@@ -692,10 +692,26 @@ impl Bus {
                 self.live.log("Trend and timeline cleared");
                 Ok(json!(true))
             }
-            "trend" => Ok(json!({
-                "csv": tb_core::j1939::trend::TrendLog::csv(&self.mon.trend().copy()),
-                "count": self.mon.trend().len(),
-            })),
+            // The Trend tab: the chart for one channel (0 RPM .. 4 Fuel) and the CSV.
+            "trend" => {
+                use tb_core::j1939::trend::{TrendChart, TrendLog, CHANNELS};
+                let data = self.mon.trend().copy();
+                let ch = usize::try_from(int("channel").unwrap_or(0))
+                    .ok()
+                    .and_then(|i| CHANNELS.get(i).copied())
+                    .ok_or("trend channel is 0 to 4")?;
+                let c = TrendChart::new(&data, ch);
+                Ok(json!({
+                    "csv": TrendLog::csv(&data),
+                    "count": data.len(),
+                    "channels": CHANNELS.iter().map(|&c| TrendLog::label(c)).collect::<Vec<_>>(),
+                    "chart": {
+                        "label": c.label, "notice": c.notice, "ticks": c.ticks,
+                        "heights": c.heights, "lamps": c.lamps,
+                        "first": c.first, "last": c.last, "span": c.span,
+                    },
+                }))
+            }
             "timeline" => {
                 let sa = int("sa").unwrap_or(-1);
                 let view = if sa < 0 { self.mon.engine_sa() } else { sa };
