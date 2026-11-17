@@ -326,6 +326,18 @@ fn run(cmd: &str, args: &Value) -> Result<Value, String> {
                 ("tag", st(&tag)),
             ]))
         }
+        // The crash screen: the browser has no log file, so there is no Log line.
+        "crash_report" => Ok(obj(vec![
+            ("logPath", st("")),
+            (
+                "clipboard",
+                st(&tb_core::crash::clipboard_text(
+                    &json::s(args, "place"),
+                    &json::s(args, "details"),
+                    "",
+                )),
+            ),
+        ])),
         _ => Err(format!("Not in the web build: {cmd}")),
     }
 }

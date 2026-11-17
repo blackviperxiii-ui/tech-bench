@@ -4,6 +4,7 @@
 //! mobile shell and a wasm web build. The C# WinForms app stays the shipping build; its SelfTest
 //! literal expected values are ported under `tests/` and must keep matching.
 
+pub mod crash;
 pub mod fmt;
 pub mod history;
 pub mod ini;

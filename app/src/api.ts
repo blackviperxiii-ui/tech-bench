@@ -278,3 +278,14 @@ export interface UpdateInfo {
 export const updateCheck = () => invoke<UpdateInfo>("update_check");
 /** Downloads, verifies and installs, then restarts; refused while the live bus is running. */
 export const updateInstall = () => invoke<void>("update_install");
+
+/** The crash screen's log record and Copy details text (CrashForm.cs). */
+export interface CrashReport {
+  /** Empty when nothing was written (the web build has no log file). */
+  logPath: string;
+  clipboard: string;
+}
+
+export const crashReport = (place: string, details: string) =>
+  invoke<CrashReport>("crash_report", { place, details });
+export const crashOpenFolder = () => invoke<void>("crash_open_folder");
