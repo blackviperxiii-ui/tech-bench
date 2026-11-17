@@ -78,3 +78,27 @@ test("the adapter and shop-folder parts are hidden", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Share with shop" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add photo" })).toHaveCount(0);
 });
+
+test("the crash screen copies its details", async ({ page }) => {
+  // Catch what Copy details writes, the same way on every engine.
+  await page.addInitScript(() => {
+    const w = window as unknown as { copied: string[] };
+    w.copied = [];
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async (t: string) => void w.copied.push(t) },
+    });
+  });
+  await page.goto("/?crash-test");
+  const crash = page.getByRole("alert");
+  await expect(crash.getByRole("heading")).toHaveText("Tech Bench hit a problem");
+  await expect(crash.locator("pre")).toContainText("crash-test marker");
+  // The browser keeps no log file, so there is no folder to open.
+  await expect(crash.getByRole("button", { name: "Open log folder" })).toHaveCount(0);
+
+  await crash.getByRole("button", { name: "Copy details" }).click();
+  await expect(crash.getByRole("status")).toHaveText("Details copied.");
+  const copied = await page.evaluate(() => (window as unknown as { copied: string[] }).copied);
+  expect(copied).toHaveLength(1);
+  expect(copied[0].startsWith("Tech Bench crash\nWhere: UI\n\nError: crash-test marker\n")).toBe(true);
+  expect(copied[0]).toContain("Component stack:");
+});
