@@ -24,7 +24,7 @@ The 32-bit bridge sidecar is built once per run, in `bridge i686 + mock DLL (win
 Update this file in the same PR as any workflow change.
 
 - Every job sets `timeout-minutes`, a few times its usual run time.
-- Every `actions/upload-artifact` step sets `retention-days: 7` or less. The bridge hand-off keeps 1 day. The `installer` artifact keeps 7 days, so attach it to the GitHub release within a week of the `main` build, or re-run the build.
+- Every `actions/upload-artifact` step sets `retention-days: 7` or less. Debug-only artifacts (the Playwright failure report and the Android debug APK) and the bridge hand-off keep 1 day. Release packages (desktop installers and the `installer` artifact) keep 7 days, so attach them to the GitHub release within a week of the build, or re-run the build.
 - Heavy builds never run on pull requests.
 - macOS runs only on nightly and manual runs.
 - Path gating is a job-level `if:` on the `changes` outputs, never a workflow-level path filter on a workflow that holds a required check.

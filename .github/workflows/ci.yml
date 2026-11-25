@@ -339,7 +339,7 @@ jobs:
           path: |
             playwright-report/
             test-results/
-          retention-days: 7
+          retention-days: 1
 
   # Android build of the recode. The native project is generated here
   # (`tauri android init`; src-tauri/gen/ is not committed), then a smoke build
@@ -422,7 +422,7 @@ jobs:
           name: techbench-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
 
   # Tauri 2 + React desktop shell (app/ + src-tauri/) on Linux and macOS
   # (Windows is `desktop-windows`). Builds installers and uploads them. Linux
