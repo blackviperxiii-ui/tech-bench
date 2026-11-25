@@ -904,3 +904,18 @@ jobs:
           if ($after -notlike '0.1.1*') { Write-Host "ERROR: expected 0.1.1 installed, got $after"; $fail = $true }
           if ($fail) { exit 1 }
           Write-Host 'UPDATE PASS: 0.1.0 updated itself to 0.1.1 from a signed local feed'
+
+  # Last step for PRs into beta: once the gate finished green, merge the PR
+  # if it is ready (auto-merge.yml's rules: not a draft, no hold label, no
+  # requested changes). Covers PRs that left draft after CI was already green,
+  # where GitHub refuses to turn on auto-merge.
+  auto-merge:
+    needs: [changes, format, linux, windows, wasm, web, android, desktop, tb-core, ios, bridge-i686, desktop-windows, updater]
+    if: >-
+      !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'beta' &&
+      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/auto-merge.yml
+    secrets: inherit
